@@ -513,7 +513,8 @@ func TestCell_FormulaCapCountsCharacters(t *testing.T) {
 // Calibri; a row of h points h in
 // screen pixels times the standard row's printer pixels over its screen
 // ones, truncated: 116.56 for 14.45 points of Calibri, 102.85 for 12.75,
-// 103 for 12.75 points of Arial.
+// 103 for 12.75 points of Arial 10; Arial 11, Times New Roman 12 and
+// Courier New 10 at the standard rows Excel measures from those faces.
 func TestRead_StandardRowHeights(t *testing.T) {
 	t.Parallel()
 	fonts := pinnedFonts(t)
@@ -527,6 +528,10 @@ func TestRead_StandardRowHeights(t *testing.T) {
 		{"Carlito", "11", "14.4", 121, []float64{14.45, 12.75, 15}, []float64{116, 102, 121}},
 		{"Carlito", "11", "12.75", 102, nil, nil},
 		{"Liberation Sans", "10", "14.4", 103, []float64{12.75, 15}, []float64{103, 121}},
+		// Faces whose pixel extents decide ([deviceStandardRows]).
+		{"Arial", "11", "15", 114, []float64{12.75, 20}, []float64{102, 160}},
+		{"Times New Roman", "12", "15.75", 126, []float64{15, 20}, []float64{120, 160}},
+		{"Courier New", "10", "13.2", 96, []float64{12.75, 15}, []float64{90, 106}},
 	} {
 		styles := strings.Replace(strings.Replace(minimalStyles, "Test Sans", tc.family, 1), `<sz val="11"/>`, `<sz val="`+tc.size+`"/>`, 1)
 		var rows strings.Builder

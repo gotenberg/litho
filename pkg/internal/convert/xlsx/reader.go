@@ -308,6 +308,11 @@ func (r *reader) measureNormalFont() {
 	if face := r.fonts.Match(style); face != nil {
 		r.standardPrinted, r.standardScreen = standardRow(face.Metrics(1), f.Size)
 	}
+	if len(f.Families) > 0 && !f.Bold && !f.Italic {
+		if row, ok := deviceStandardRows[deviceFace{strings.ToLower(f.Families[0]), f.Size}]; ok {
+			r.standardPrinted, r.standardScreen = row[0], row[1]
+		}
+	}
 	p, _, err := r.fonts.Shape(r.ctx, []text.ParagraphRun{{Text: "0123456789 ", Style: style}}, text.ParagraphOptions{})
 	if err != nil || p.Len() != 11 {
 		return
@@ -334,6 +339,36 @@ const (
 	calibriStandardPrinted = 121
 	calibriStandardScreen  = 20
 )
+
+// deviceFace names a Normal font by its family, lower case, and its size
+// in points.
+type deviceFace struct {
+	family string
+	size   float64
+}
+
+// deviceStandardRows are the standard rows, in printer and screen pixels,
+// Excel prints for Normal fonts whose faces carry their own pixel extents
+// (the OpenType VDMX table, which GDI reads for a font's height at each
+// size), measured: the faces litho draws them with, metric-compatible,
+// carry none, and [standardRow] from their metrics falls short. Liberation
+// Sans prints as Arial.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel for the web prints the default rows of a book whose
+//     Normal font is Arial 11 114 printer pixels apart, Times New Roman 12
+//     126 and Courier New 10 96; rows of 12.75, 15, 20 and 46.8 points 102,
+//     120, 160 and 375 pixels for the first two, 90, 106, 142 and 333 for
+//     Courier New: 19, 21 and 18 screen pixels a standard row.
+//   - libreoffice/xlsx, poi/xlsx: Arial 11 and Liberation Sans 11 print 114
+//     (sc/tdf145054.xlsx, 49325.xlsx), Times New Roman 12 126 (56315.xlsx).
+var deviceStandardRows = map[deviceFace][2]float64{
+	{"arial", 11}:           {114, 19},
+	{"liberation sans", 11}: {114, 19},
+	{"times new roman", 12}: {126, 21},
+	{"courier new", 10}:     {96, 18},
+}
 
 // screenPixelsPerPoint is the screen Excel lays a sheet out on: 96 pixels
 // an inch.
@@ -364,8 +399,8 @@ const screenPixelsPerPoint = 96.0 / 72
 //     the rule gives.
 //   - libreoffice/xlsx: Arial 11 and Liberation Sans 11 print 114
 //     (sc/tdf145054.xlsx, poi/xlsx 49325.xlsx), Times New Roman 12 126
-//     (poi/xlsx 56315.xlsx), where the rule gives 113 and 123: a face with
-//     a line gap is not measured as Excel measures it.
+//     (poi/xlsx 56315.xlsx), where the rule gives 113 and 123: those faces'
+//     pixel extents decide ([deviceStandardRows]).
 func standardRow(m text.Metrics, size float64) (float64, float64) {
 	em := math.Round(size / printerPixel)
 	printed := 8 + math.Round(float64(m.Ascent*em)) + math.Round(float64(m.Descent*em)) + math.Floor(float64(m.LineGap*em)+1e-9)
