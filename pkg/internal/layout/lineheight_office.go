@@ -47,6 +47,10 @@ func (s *inlineState) officeLine(l *lineBox) {
 	case css.LineRuleExact:
 		h = s.e.lineHeight(st, s.root.lang)
 		base = exactAscent * h
+	case css.LineRuleCentred:
+		h = s.e.lineHeight(st, s.root.lang)
+		above, below, _ := s.naturalExtent(l)
+		base = above + float64((h-above-below)/2)
 	case css.LineRuleMultiple:
 		f := 1.0
 		if st.LineHeight.Kind == css.Number && st.LineHeight.Value > 0 {
@@ -74,7 +78,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 			h, base = above+below, above
 		}
 	}
-	if st.WordRules > 0 && st.LineRule != css.LineRuleExact {
+	if st.WordRules > 0 && st.LineRule != css.LineRuleExact && st.LineRule != css.LineRuleCentred {
 		// Word lays lines out in twentieths of a point.
 		h = math.Round(h*twips) / twips
 	}

@@ -8,7 +8,9 @@ import (
 )
 
 // TestLineRule_Office lays line boxes out under the Office line rules and
-// the minimum line height as LibreOffice prints them.
+// the minimum line height as LibreOffice prints them, and under
+// css.LineRuleCentred with the glyphs centred, as Word lays the lines of
+// a document grid.
 //
 // # Corpus evidence
 //
@@ -33,6 +35,9 @@ func TestLineRule_Office(t *testing.T) {
 		}
 	}
 	least := func(v float64) func(*css.Style) { return func(s *css.Style) { s.MinLineHeight = px(v) } }
+	centred := func(v float64) func(*css.Style) {
+		return func(s *css.Style) { s.LineRule = css.LineRuleCentred; s.LineHeight = css.Pts(px(v)) }
+	}
 	tests := []struct {
 		name string
 		mods []func(*css.Style)
@@ -53,6 +58,8 @@ func TestLineRule_Office(t *testing.T) {
 		{"multiple mixed sizes", []func(*css.Style){multiple(1.5)}, true, [2]float64{16, 46}, 60},
 		{"at least mixed sizes", []func(*css.Style){least(30)}, true, [2]float64{26, 56}, 60},
 		{"exact mixed sizes", []func(*css.Style){exact(30)}, true, [2]float64{24, 54}, 60},
+		{"centred", []func(*css.Style){centred(30)}, false, [2]float64{18, 48}, 60},
+		{"centred mixed sizes", []func(*css.Style){centred(30)}, true, [2]float64{21, 51}, 60},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

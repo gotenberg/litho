@@ -113,6 +113,12 @@ const (
 	// such a line. Below 1 the whole natural height shrinks and the
 	// baseline sits four fifths of it below the line top.
 	LineRuleMultiple
+	// LineRuleCentred makes every line box exactly LineHeight tall, a
+	// length, as LineRuleExact does, with the glyphs centred in it: the
+	// room the line's natural height (as LineRuleMultiple measures it)
+	// leaves is split equally above and below, as Word places the lines
+	// of a document grid (ECMA-376 Part 1, 17.6.5 docGrid).
+	LineRuleCentred
 )
 
 // DecorationCloneAll gives each fragment of a box its own borders,

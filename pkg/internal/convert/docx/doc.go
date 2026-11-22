@@ -52,8 +52,8 @@
 // # Sections and pages
 //
 // A document without a styles part prints in Calibri 11, as LibreOffice
-// imports it. The lines of a section with a document grid of lines take
-// whole pitches of the grid.
+// imports it. The lines of a section with a document grid of lines are
+// counted in pitches of the grid, the glyphs centred, as Word lays them out.
 //
 // Each section is a named page with its size, orientation, margins,
 // gutter (at the left, the top or the right, on the inside of mirrored

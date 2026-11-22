@@ -813,28 +813,38 @@ func (d *document) number(n *layout.Node, pst *css.Style, rp resolvedPara, st *c
 }
 
 // snapLines lays the lines of the paragraph style st on a document grid
-// whose line pitch is pitch (17.6.5 docGrid, type lines): each line takes
-// the whole pitches its natural height, times the proportional spacing
-// mult when not 0, needs, as LibreOffice spaces the lines of a page with
-// a text grid. The line keeps the baseline of an exact line of that
-// height, an approximation: Writer centres the glyphs in it.
+// whose line pitch is pitch (17.6.5 docGrid, type lines), as Word does: a
+// line of the grid is the pitch, so a proportional spacing mult (not 0)
+// counts pitches (17.3.1.33 line, in 240ths of a line), and a line takes
+// the larger of that and the whole pitches its natural height needs. The
+// glyphs are centred in the line.
 //
 // # Corpus evidence
 //
-//   - libreoffice/docx: ooxmlexport/cjklist34.docx, a grid of 18 points, prints 12
-//     point lines 18 points apart, each baseline 14.2 points below its
-//     line's top.
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx,
+//     a grid of 15.6 points, prints Calibri 10.5 single lines 15.6 points
+//     apart, each baseline 11.53 below its line's top, and lines of
+//     spacing 600 (2.5 lines) 39 points apart, the baseline 23.35 below
+//     the top: centred glyphs give 11.39 and 23.09.
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/ParaPr/parabidi.docx
+//     prints a Cambria Bold 16 heading of spacing 416 on the same grid on
+//     a line of two pitches, 31.2 points, its baseline 21.4 below the
+//     top, where centred glyphs give 21.43; 1.733 pitches would not hold
+//     its 18.75 points.
+//   - libreoffice/docx: ooxmlexport/cjklist34.docx, a grid of 18 points,
+//     prints 12 point lines 18 points apart.
+//   - probe, docx: on a grid of 15.6 points, Calibri 10.5 lines of spacing
+//     276 print 18.0 apart, of 360 23.5 apart, of 180 one pitch apart, and
+//     exact lines of 20 points 20 apart; a line holding a 26-point run is
+//     three pitches tall, the run's baseline where centring puts it.
 func (d *document) snapLines(st *css.Style, pitch, mult float64) {
 	h := d.naturalLine(st)
 	if h <= 0 {
 		return
 	}
-	if mult > 0 {
-		h *= mult
-	}
 	n := max(math.Ceil(h/pitch-1e-6), 1)
-	st.LineRule = css.LineRuleExact
-	st.LineHeight = css.Pts(n * pitch)
+	st.LineRule = css.LineRuleCentred
+	st.LineHeight = css.Pts(max(n, mult) * pitch)
 }
 
 // naturalLine returns the height of a line of text in the style st, its
