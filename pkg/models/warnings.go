@@ -132,8 +132,8 @@ const (
 	// a SmartArt diagram, a chart drawn as its replacement picture.
 	WarningPartMalformed ConvertWarningCode = "part-malformed"
 	// WarningFormWidgetOmitted is a form control that prints without its
-	// widget: as its text, as its empty frame, or not at all. HTML,
-	// Markdown, ODT, ODS and ODP report it.
+	// widget: as its text, as its empty frame, or not at all. ODT, ODS and
+	// ODP report it; HTML and Markdown draw every control's widget.
 	//
 	// Its effect is [EffectApproximated] for a control printed as its text,
 	// and [EffectOmitted] for one printed as its empty frame or not at all.

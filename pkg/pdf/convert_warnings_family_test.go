@@ -60,7 +60,7 @@ func TestConvertWarnings_Families(t *testing.T) {
 		{"pictures", odt(frame(`<draw:image><office:binary-data>!!!</office:binary-data></draw:image>`)), models.WarningPictureUnreadable, "base64"},
 		{"charts", func() *Conversion { return FromODS(strings.NewReader(chartODS), fonts) }, models.WarningChartNoCache, "no values"},
 		{"packages", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, models.WarningPartMalformed, "does not parse"},
-		{"forms", html(`<p><input value=x>`), models.WarningFormWidgetOmitted, "form controls"},
+		{"forms", odt(`<text:p><draw:control text:anchor-type="as-char" svg:width="1cm" svg:height="1cm" draw:control="nowhere"/></text:p>`), models.WarningFormWidgetOmitted, "form control"},
 		{"links", html(`<p><a href="#nowhere">x</a>`), models.WarningLinkUnresolved, "nowhere"},
 		{"value formats", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, models.WarningValueFormatUnsupported, "[Bogus]"},
 		{"page setup", html(`<style>@page { size: 20000in }</style><p>x`), models.WarningPageSetupUnsupported, "@page size"},

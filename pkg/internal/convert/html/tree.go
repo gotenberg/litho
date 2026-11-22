@@ -368,10 +368,17 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 				return nil, nil
 			}
 			return b.frame(n, st), nil
-		case atom.Input, atom.Select, atom.Textarea:
+		case atom.Input:
+			if inputType(n) == "image" {
+				// An image button shows its picture, or its alternative
+				// text, as an img does (HTML Standard, 4.10.5.1.20).
+				return b.image(ctx, n, st, parent), nil
+			}
 			return b.control(n, st), nil
-		case atom.Button:
-			b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
+		case atom.Select, atom.Textarea:
+			return b.control(n, st), nil
+		case atom.Progress, atom.Meter:
+			return b.gauge(n, st), nil
 		case atom.Object:
 			if doc := b.embeddedDocument(ctx, n, st, "data"); doc != nil {
 				return doc, nil
@@ -397,6 +404,12 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	}
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	b.semantics(node, n)
+	if n.DataAtom == atom.Button && n.Namespace == "" {
+		// A button lays its content out in its face (HTML Standard,
+		// 15.5.2).
+		node.Control = &layout.Control{Kind: layout.ControlButton, Disabled: formDisabled(n)}
+		formRole(node, n, typeset.PrintPushButton, false)
+	}
 	b.container(node, n)
 	b.positioned(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
@@ -858,14 +871,42 @@ func sizedByStyle(st *css.Style) bool {
 // ([layout.Control]): a text field its size, 20 without one, a textarea
 // its cols and rows, 20 and 2 without them, a select its options; under
 // field-sizing: content its text sizes it (CSS Form Control Styling 1,
-// 7.1).
+// 7.1). The layout draws the control's widget ([layout.Control]); the
+// control is a Form element whose PrintField attributes say what it is
+// and, for a check box or a radio button, its state (ISO 32000-1,
+// 14.8.5.6), its text read inside it.
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
-	b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 	var s string
 	var ctl *layout.Control
+	disabled := formDisabled(n)
 	textSt := st
+	role := typeset.PrintText
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
+		typ := inputType(n)
+		switch typ {
+		case "checkbox", "radio":
+			_, checked := attr(n, "checked")
+			node := &layout.Node{Kind: layout.Element, Style: st, Control: &layout.Control{Kind: layout.ControlCheckBox, Checked: checked, Disabled: disabled}}
+			role = typeset.PrintCheckBox
+			if typ == "radio" {
+				node.Control.Kind, role = layout.ControlRadio, typeset.PrintRadio
+			}
+			node.ID, _ = attr(n, "id")
+			formRole(node, n, role, checked)
+			return []*layout.Node{node}
+		case "range", "color":
+			node := &layout.Node{Kind: layout.Element, Style: st, Control: &layout.Control{Kind: layout.ControlRange, Value: rangeValue(n), Disabled: disabled}}
+			if typ == "color" {
+				node.Control = &layout.Control{Kind: layout.ControlColor, Swatch: colorValue(n), Disabled: disabled}
+			}
+			node.ID, _ = attr(n, "id")
+			return []*layout.Node{node}
+		case "file":
+			return b.fileControl(n, st, disabled)
+		case "hidden":
+			return nil
+		}
 		s = inputText(n)
 		if st.WhiteSpace != css.Pre {
 			// The computed style is shared: the text takes a copy.
@@ -873,12 +914,20 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 			c.WhiteSpace = css.Pre
 			textSt = &c
 		}
-		if textEntry(n) {
+		switch typ {
+		case "submit", "reset", "button":
+			ctl, role = &layout.Control{Kind: layout.ControlButton}, typeset.PrintPushButton
+		case "date", "month", "week", "datetime-local", "time":
+			return b.dateControl(n, typ, st, textSt, disabled)
+		default:
 			ctl = &layout.Control{Kind: layout.ControlTextField, Chars: positiveAttr(n, "size", defaultInputSize)}
+			if v, _ := attr(n, "value"); v == "" && s != "" {
+				textSt = placeholderStyle(textSt)
+			}
 		}
 	case atom.Select:
 		if rows := displaySize(n); rows > 1 {
-			return b.listBox(n, st, rows)
+			return b.listBox(n, st, rows, disabled)
 		}
 		s = selectText(n)
 		ctl = &layout.Control{Kind: layout.ControlDropDown}
@@ -890,17 +939,114 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	default:
 		s = textContent(n)
 		if s == "" {
-			s, _ = attr(n, "placeholder")
+			if s, _ = attr(n, "placeholder"); s != "" {
+				textSt = placeholderStyle(st)
+			}
 		}
 		ctl = &layout.Control{Kind: layout.ControlTextArea, Chars: positiveAttr(n, "cols", defaultTextAreaCols), Rows: positiveAttr(n, "rows", defaultTextAreaRows)}
 	}
+	ctl.Disabled = disabled
 	node := &layout.Node{Kind: layout.Element, Style: st, Control: ctl}
 	node.ID, _ = attr(n, "id")
+	formRole(node, n, role, false)
 	if s != "" {
 		node.Children = []*layout.Node{{Kind: layout.Text, Style: textSt, Text: s}}
+	} else if ctl.Kind != layout.ControlButton {
+		// An empty field keeps its line, whose baseline is the field's
+		// (CSS 2.1, 10.8.1), as its empty editor's line is in Chromium.
+		node.Children = []*layout.Node{{Kind: layout.LineBreak, Style: textSt}}
 	}
 	return []*layout.Node{node}
 }
+
+// dateControl builds the date or time input n of type typ styled st, its
+// text in textSt: its fields, each with a pixel of padding either side,
+// and the literal text between them, as Chromium lays them out
+// ([dateText]); the layout draws its calendar or its clock.
+func (b *builder) dateControl(n *dom.Node, typ string, st, textSt *css.Style, disabled bool) []*layout.Node {
+	shown, widest := dateText(n, typ)
+	ctl := &layout.Control{Kind: layout.ControlDate, Labels: []layout.ControlLabel{{Text: widest}}, Fields: countFields(dateSegments(widest)), Disabled: disabled}
+	if typ == "time" {
+		ctl.Kind = layout.ControlTime
+	}
+	fs := *partStyle(textSt)
+	fs.Padding[css.Left], fs.Padding[css.Right] = css.Pts(css.Pt), css.Pts(css.Pt)
+	node := &layout.Node{Kind: layout.Element, Style: st, Control: ctl}
+	node.ID, _ = attr(n, "id")
+	formRole(node, n, typeset.PrintText, false)
+	for _, seg := range dateSegments(shown) {
+		t := &layout.Node{Kind: layout.Text, Style: textSt, Text: seg.text}
+		if seg.field {
+			t = &layout.Node{Kind: layout.Element, Style: &fs, Children: []*layout.Node{{Kind: layout.Text, Style: &fs, Text: seg.text}}}
+		}
+		node.Children = append(node.Children, t)
+	}
+	return []*layout.Node{node}
+}
+
+// gauge builds a progress or a meter element styled st as the control
+// the layout draws (HTML Standard, 15.5.18 and 15.5.19): an inline-block
+// of the user agent's size showing its value, its content never shown.
+func (b *builder) gauge(n *dom.Node, st *css.Style) []*layout.Node {
+	ctl := &layout.Control{Kind: layout.ControlProgress, Value: progressValue(n)}
+	if n.DataAtom == atom.Meter {
+		ctl.Kind = layout.ControlMeter
+		ctl.Value, ctl.Level = meterValue(n)
+	}
+	node := &layout.Node{Kind: layout.Element, Style: st, Control: ctl}
+	node.ID, _ = attr(n, "id")
+	return []*layout.Node{node}
+}
+
+// fileControl builds the file input n styled st (HTML Standard,
+// 15.5.13): a button labelled "Choose File", "Choose Files" when it takes
+// several, 4 pixels before the text "No file chosen", as Chromium shows
+// an input no file was chosen for, the control as wide as 34 zeros.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a file
+//     input as a button "Choose File" (multiple: "Choose Files") with 1
+//     by 6 pixels of padding inside a 2 pixel border, then 4 pixels, then
+//     "No file chosen", the control 253 pixels wide at 13.333 pixels and
+//     379 at 20, 34 times the width of 0 rounded up.
+func (b *builder) fileControl(n *dom.Node, st *css.Style, disabled bool) []*layout.Node {
+	label := "Choose File"
+	if _, ok := attr(n, "multiple"); ok {
+		label = "Choose Files"
+	}
+	bs := *partStyle(st)
+	bs.Display = css.InlineBlock
+	bs.BoxSizing = css.BorderBox
+	bs.WhiteSpace = css.Pre
+	bs.Margin = [4]css.Dimension{css.Pts(0), css.Pts(fileButtonGap * css.Pt), css.Pts(0), css.Pts(0)}
+	bs.Padding = [4]css.Dimension{css.Pts(css.Pt), css.Pts(6 * css.Pt), css.Pts(css.Pt), css.Pts(6 * css.Pt)}
+	face, text := css.Color{R: 0xef / 255.0, G: 0xef / 255.0, B: 0xef / 255.0, A: 1}, css.Color{A: 1}
+	if st.DarkScheme {
+		face, text = css.Color{R: 0x6b / 255.0, G: 0x6b / 255.0, B: 0x6b / 255.0, A: 1}, css.Color{R: 1, G: 1, B: 1, A: 1}
+	}
+	if disabled {
+		text.A = 0.3
+	}
+	bs.BackgroundColor, bs.Color = face, text
+	for side := range bs.Border {
+		bs.Border[side] = css.Border{Width: 2 * css.Pt, Style: css.Outset, Color: css.Color{A: 1}}
+	}
+	bs.TextAlign = css.AlignCenter
+	bs.Appearance = css.AppearanceAuto
+	button := &layout.Node{Kind: layout.Element, Style: &bs, Control: &layout.Control{Kind: layout.ControlButton, Disabled: disabled}}
+	button.Children = []*layout.Node{{Kind: layout.Text, Style: &bs, Text: label}}
+	formRole(button, n, typeset.PrintPushButton, false)
+	ts := *st
+	ts.WhiteSpace = css.Pre
+	node := &layout.Node{Kind: layout.Element, Style: st, Control: &layout.Control{Kind: layout.ControlFile, Disabled: disabled}}
+	node.Children = []*layout.Node{button, {Kind: layout.Text, Style: &ts, Text: "No file chosen"}}
+	node.ID, _ = attr(n, "id")
+	return []*layout.Node{node}
+}
+
+// fileButtonGap is the room after a file input's button, in CSS pixels.
+const fileButtonGap = 4
 
 // The default sizes of the text entry widgets: an input's size, a
 // textarea's cols and rows (HTML Standard, 4.10.5.3.2 and 4.10.11).
@@ -930,21 +1076,6 @@ func positiveAttr(n *dom.Node, key string, def int) int {
 		return def
 	}
 	return min(i, maxControlChars)
-}
-
-// textEntry reports an input shown as a single-line text entry widget:
-// of type text, search, tel, url, email or password, or of a type litho
-// does not know, which is text (HTML Standard, 15.5.15 and 4.10.5).
-func textEntry(n *dom.Node) bool {
-	typ, _ := attr(n, "type")
-	switch strings.ToLower(strings.TrimSpace(typ)) {
-	case "", "text", "search", "tel", "url", "email", "password":
-		return true
-	case "hidden", "checkbox", "radio", "file", "submit", "image", "reset", "button", "range", "color",
-		"number", "date", "month", "week", "time", "datetime-local":
-		return false
-	}
-	return true
 }
 
 // displaySize returns the display size of the select n (HTML Standard,
@@ -1032,12 +1163,15 @@ func optionLabel(o *dom.Node) string {
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints the rows
 //     of a list box with 2 pixels of padding either side and 1 below,
 //     each at least 1.2 em tall, an option of an optgroup 20 pixels further
-//     in, its optgroup's label bold, a selected option on #cecece, and the
-//     box on the text's bottom.
+//     in, its optgroup's label bold, a selected option on #cecece (#545454
+//     under color-scheme: dark), and the box on the text's bottom.
 var (
 	listRowPadding  = [4]css.Dimension{css.Pts(0), css.Pts(2 * css.Pt), css.Pts(1 * css.Pt), css.Pts(2 * css.Pt)}
 	listGroupIndent = 20 * css.Pt
 	listSelected    = css.Color{R: 0xce / 255.0, G: 0xce / 255.0, B: 0xce / 255.0, A: 1}
+	// listSelectedDark marks a selected option under a dark colour
+	// scheme.
+	listSelectedDark = css.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}
 )
 
 // listBox builds a select styled st shown as a list box whose display
@@ -1054,9 +1188,9 @@ var (
 //     of size 3 whose fifth option is selected as its third to fifth
 //     options; a multiple select of two options as two rows and two empty
 //     ones.
-func (b *builder) listBox(n *dom.Node, st *css.Style, rows int) []*layout.Node {
+func (b *builder) listBox(n *dom.Node, st *css.Style, rows int, disabled bool) []*layout.Node {
 	all := selectRows(n)
-	ctl := &layout.Control{Kind: layout.ControlListBox, Rows: rows}
+	ctl := &layout.Control{Kind: layout.ControlListBox, Rows: rows, Disabled: disabled}
 	first, last := 0, -1
 	for i, r := range all {
 		l := layout.ControlLabel{Text: r.label, Bold: r.heading}
@@ -1079,6 +1213,7 @@ func (b *builder) listBox(n *dom.Node, st *css.Style, rows int) []*layout.Node {
 	}
 	node := &layout.Node{Kind: layout.Element, Style: box, Control: ctl}
 	node.ID, _ = attr(n, "id")
+	formRole(node, n, typeset.PrintList, false)
 	for i := first; i < len(all) && i < first+rows; i++ {
 		r := all[i]
 		rs := b.listRowStyle(r, st)
@@ -1132,6 +1267,9 @@ func (b *builder) listRowStyle(r selectRow, st *css.Style) *css.Style {
 	}
 	if r.selected && c.BackgroundColor.A == 0 {
 		c.BackgroundColor = listSelected
+		if st.DarkScheme {
+			c.BackgroundColor = listSelectedDark
+		}
 	}
 	return &c
 }

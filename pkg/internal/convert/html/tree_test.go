@@ -405,8 +405,8 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 			t.Errorf("%s: display %v, want inline-block", id, n.Style.Display)
 		}
 	}
-	if got := codes(p.warnings); len(got) != 1 || got[0] != warn.FormWidgetOmitted.String() {
-		t.Errorf("warnings %v, want one form-control", got)
+	if got := codes(p.warnings); len(got) != 0 {
+		t.Errorf("warnings %v, want none: every control is drawn", got)
 	}
 }
 
@@ -432,7 +432,7 @@ func TestPrepare_SizesFormControlsByTheirText(t *testing.T) {
 // attributes its default size comes from (HTML Standard, 15.5.15 to
 // 15.5.17): a text field its size, 20 when absent, zero or invalid, a
 // textarea its cols and rows, a select its option labels; a button and a
-// checkbox none.
+// checkbox their kind alone.
 func TestPrepare_FormControlsSayTheirDefaultSize(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<input id=a><input id=b size=5><input id=c size=0><input id=d size=x type=email><input id=e type=checkbox>`+
@@ -441,7 +441,7 @@ func TestPrepare_FormControlsSayTheirDefaultSize(t *testing.T) {
 	for id, want := range map[string]*layout.Control{
 		"a": {Kind: layout.ControlTextField, Chars: 20}, "b": {Kind: layout.ControlTextField, Chars: 5},
 		"c": {Kind: layout.ControlTextField, Chars: 20}, "d": {Kind: layout.ControlTextField, Chars: 20},
-		"e": nil, "f": nil,
+		"e": {Kind: layout.ControlCheckBox}, "f": {Kind: layout.ControlButton},
 		"g": {Kind: layout.ControlTextArea, Chars: 7, Rows: 4}, "h": {Kind: layout.ControlTextArea, Chars: 20, Rows: 2},
 		"i": {Kind: layout.ControlDropDown, Labels: []layout.ControlLabel{{Text: "one"}, {Text: "Two"}}},
 		"j": {Kind: layout.ControlDropDown, Labels: []layout.ControlLabel{{Text: "x"}}},
