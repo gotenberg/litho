@@ -114,6 +114,12 @@ var (
 // keeps no more.
 const maxRuleFormulas = 3
 
+// maxStdDev caps the standard deviations an aboveAverage rule moves its
+// bound by (ECMA-376 Part 1, 18.3.1.10 stdDev). Anti-DoS guard, not
+// spec-mandated: Excel offers 1 to 3, and a bound past a thousand
+// deviations holds for no value.
+const maxStdDev = 1000
+
 // pendingOperand is an operand of a rule that refers to a cell, read once
 // the workbook is: the rule (its sheet, format and index), the operand's
 // index among its values, the sheet the reference names ("" for the
@@ -182,6 +188,10 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 		rule.Kind = sheet.RuleBlanks
 	case "notContainsBlanks":
 		rule.Kind = sheet.RuleNoBlanks
+	case "containsErrors":
+		rule.Kind = sheet.RuleErrors
+	case "notContainsErrors":
+		rule.Kind = sheet.RuleNoErrors
 	case "duplicateValues":
 		rule.Kind = sheet.RuleDuplicates
 	case "uniqueValues":
@@ -205,7 +215,7 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 			rule.Kind = sheet.RuleBelowAverage
 		}
 		if _, ok := e.Attr("stdDev"); ok {
-			rule.Kind, rule.Formula = sheet.RuleExpression, "stdDev"
+			rule.Values = []sheet.Value{{Kind: sheet.Number, Number: float64(min(max(intAttr(e, "stdDev", 0), 0), maxStdDev))}}
 		}
 	case "colorScale":
 		cs := e.Child(ns.rule, "colorScale")

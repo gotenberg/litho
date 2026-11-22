@@ -80,8 +80,10 @@ type condFormat struct {
 // condStats are the values of a conditional format's range: the numbers,
 // sorted, their mean, and how many cells hold each value.
 type condStats struct {
-	nums  []float64
-	mean  float64
+	nums []float64
+	mean float64
+	// sd is the population standard deviation of nums.
+	sd    float64
 	count map[string]int
 	// formula computes a threshold given as a formula, nil for none.
 	formula func(string) (float64, bool)
@@ -193,7 +195,7 @@ func evaluable(r *Rule) bool {
 		return r.Formula == "" && (len(r.Values) == 0 || len(r.Values) == 2)
 	case RuleTop, RuleBottom:
 		return len(r.Values) > 0 && r.Values[0].Kind == Number
-	case RuleDuplicates, RuleUniques, RuleBlanks, RuleNoBlanks, RuleAboveAverage, RuleBelowAverage:
+	case RuleDuplicates, RuleUniques, RuleBlanks, RuleNoBlanks, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors:
 		return true
 	}
 	return false
@@ -315,6 +317,12 @@ func (f *condFormat) statistics(g *grid) *condStats {
 	}
 	if len(st.nums) > 0 {
 		st.mean = sum / float64(len(st.nums))
+		v := 0.0
+		for _, x := range st.nums {
+			d := x - st.mean
+			v += float64(d * d)
+		}
+		st.sd = math.Sqrt(v / float64(len(st.nums)))
 	}
 	if g.cond != nil && len(f.ranges) > 0 {
 		cs, index, first := g.cond, f.index, f.ranges[0]
@@ -362,7 +370,10 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 		holds := false
 		switch rule.Kind {
 		case RuleColorScale:
-			if res.hasScale {
+			// Excel paints a fill a rule of a higher priority holds with
+			// over the colour scale ([conditions.overlayStyle] paints the
+			// scale over a later rule's).
+			if res.hasScale || (g.doc.ExcelRules && res.style != nil && res.style.Fill.Color.A > 0) {
 				continue
 			}
 			if col, ok := colorScale(rule, cr.f.statistics(g), cell); ok {
@@ -390,7 +401,7 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 				res.icon, res.iconF, holds = rule, cr.f, true
 			}
 		case RuleCellIs, RuleText, RuleBlanks, RuleNoBlanks, RuleDuplicates, RuleUniques,
-			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage:
+			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors:
 			if res.style != nil {
 				continue
 			}
@@ -436,6 +447,9 @@ func cellHolds(rule *Rule, f *condFormat, g *grid, cell *Cell) bool {
 	case RuleBlanks, RuleNoBlanks:
 		blank := !hasContent(cell) || (cell.Value.Kind == Text && strings.TrimSpace(cell.Value.Text) == "")
 		return blank == (rule.Kind == RuleBlanks)
+	case RuleErrors, RuleNoErrors:
+		failed := hasContent(cell) && cell.Value.Kind == Error
+		return failed == (rule.Kind == RuleErrors)
 	case RuleCellIs:
 		return cellIs(rule, cell)
 	case RuleText:
@@ -466,10 +480,18 @@ func cellHolds(rule *Rule, f *condFormat, g *grid, cell *Cell) bool {
 		if !ok || !isNum || len(st.nums) == 0 {
 			return false
 		}
-		if rule.Kind == RuleAboveAverage {
-			return num > st.mean
+		bound := st.mean
+		if len(rule.Values) > 0 && rule.Values[0].Kind == Number {
+			sd := float64(rule.Values[0].Number * st.sd)
+			if rule.Kind == RuleBelowAverage {
+				sd = -sd
+			}
+			bound += sd
 		}
-		return num < st.mean
+		if rule.Kind == RuleAboveAverage {
+			return num > bound
+		}
+		return num < bound
 	case RuleExpression, RuleIconSet, RuleColorScale, RuleDataBar:
 	}
 	return false

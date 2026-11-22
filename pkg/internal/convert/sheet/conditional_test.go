@@ -133,6 +133,72 @@ func TestConditional_Order(t *testing.T) {
 	}
 }
 
+// TestConditional_ExcelRules locks the rules measured on Excel's prints:
+// an aboveAverage rule's bound moved by population standard deviations,
+// the error rules, and a colour scale that gives way under Excel's rules
+// to the fill of a rule of a higher priority.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: cf_rule_types highlights 99 and 60 of 3, 18, 7, 42, 7,
+//     25, 99, 1, 42, 60 one standard deviation above their mean (30.4 +
+//     29.57, the population's; the sample's 31.17 leaves 60 out); #N/A
+//     alone under containsErrors and every other cell, the empty one
+//     included, under notContainsErrors; and, under rules of priority 60
+//     and 61 filling values above 10 and 5, the colour scale of priority
+//     62 on 3 and 1 alone.
+func TestConditional_ExcelRules(t *testing.T) {
+	fill := &Style{Fill: Fill{Color: green}}
+	vals := []float64{3, 18, 7, 42, 7, 25, 99, 1, 42, 60}
+	var cells []Cell
+	for _, v := range vals {
+		cells = append(cells, numCell(0, v, nil))
+	}
+	errs := []Cell{textCell(0, "apple", nil), {}, {Value: Value{Kind: Error, Text: "#N/A"}}}
+	tests := []struct {
+		name  string
+		cells []Cell
+		rule  Rule
+		want  []bool
+	}{
+		{"one deviation above", cells, Rule{Kind: RuleAboveAverage, Values: []Value{num(1)}}, []bool{false, false, false, false, false, false, true, false, false, true}},
+		{"one deviation below", cells, Rule{Kind: RuleBelowAverage, Values: []Value{num(1)}}, []bool{false, false, false, false, false, false, false, false, false, false}},
+		{"errors", errs, Rule{Kind: RuleErrors}, []bool{false, false, true}},
+		{"no errors, an empty cell too", errs, Rule{Kind: RuleNoErrors}, []bool{true, true, false}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := column(tc.cells...)
+			rule := tc.rule
+			rule.Style = fill
+			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: len(tc.cells) - 1}}, Rules: []Rule{rule}}}
+			g := newGrid(t.Context(), newDoc(sh), sh)
+			for i, want := range tc.want {
+				if got := g.style(i, 0, g.cell(i, 0)).Fill.Color == green; got != want {
+					t.Errorf("A%d: restyled %v, want %v", i+1, got, want)
+				}
+			}
+		})
+	}
+	for _, excel := range []bool{false, true} {
+		sh := column(numCell(0, 18, nil))
+		sh.Conditional = []Conditional{{Ranges: []Range{{}}, Rules: []Rule{
+			{Kind: RuleCellIs, Operator: "greaterThan", Values: []Value{num(10)}, Priority: 1, Style: fill},
+			{Kind: RuleColorScale, Priority: 2, Scale: []css.Color{red, red}},
+		}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		g := newGrid(t.Context(), doc, sh)
+		want := red
+		if excel {
+			want = green
+		}
+		if got := g.style(0, 0, g.cell(0, 0)).Fill.Color; got != want {
+			t.Errorf("Excel's rules %v: fill %v, want %v", excel, got, want)
+		}
+	}
+}
+
 // TestConditional_ColorScale locks the colour scale's interpolation and
 // thresholds against what Calc prints for sc/colorscale.xlsx.
 func TestConditional_ColorScale(t *testing.T) {

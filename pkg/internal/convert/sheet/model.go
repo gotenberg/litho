@@ -223,9 +223,15 @@ const (
 	// count.
 	RuleTop
 	RuleBottom
-	// RuleAboveAverage and RuleBelowAverage compare to the range's mean.
+	// RuleAboveAverage and RuleBelowAverage compare to the range's mean,
+	// moved up or down by Values[0] times the population standard
+	// deviation of the range's numbers when Values holds a number.
 	RuleAboveAverage
 	RuleBelowAverage
+	// RuleErrors and RuleNoErrors hold for a cell showing an error value,
+	// or any other one, an empty cell included.
+	RuleErrors
+	RuleNoErrors
 )
 
 // Column is a range of columns sharing a width, a style or a hidden flag

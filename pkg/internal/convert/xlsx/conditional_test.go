@@ -148,6 +148,31 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	}
 }
 
+// TestRead_ErrorAndDeviationRules reads the error rules and an
+// aboveAverage rule's standard deviations (ECMA-376 Part 1, 18.18.12
+// ST_CfType containsErrors and notContainsErrors, 18.3.1.10 stdDev),
+// capped.
+func TestRead_ErrorAndDeviationRules(t *testing.T) {
+	ws := `<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>` +
+		`<conditionalFormatting sqref="A1:A4"><cfRule type="containsErrors" priority="1"><formula>ISERROR(A1)</formula></cfRule>` +
+		`<cfRule type="notContainsErrors" priority="2"><formula>NOT(ISERROR(A1))</formula></cfRule>` +
+		`<cfRule type="aboveAverage" priority="3" stdDev="2"/><cfRule type="aboveAverage" priority="4" aboveAverage="0" stdDev="4000000000"/></conditionalFormatting>`
+	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, "", "", "", nil)))
+	rules := doc.Sheets[0].Conditional[0].Rules
+	if len(rules) != 4 {
+		t.Fatalf("%d rules, want 4", len(rules))
+	}
+	if rules[0].Kind != sheet.RuleErrors || rules[1].Kind != sheet.RuleNoErrors {
+		t.Errorf("error rules %v, %v", rules[0].Kind, rules[1].Kind)
+	}
+	if r := rules[2]; r.Kind != sheet.RuleAboveAverage || len(r.Values) != 1 || r.Values[0].Number != 2 {
+		t.Errorf("two deviations above %+v", r)
+	}
+	if r := rules[3]; r.Kind != sheet.RuleBelowAverage || len(r.Values) != 1 || r.Values[0].Number != maxStdDev {
+		t.Errorf("deviations below, capped %+v", r)
+	}
+}
+
 // TestRead_IconSets locks the reading of an icon set rule and of its
 // Excel 2010 extension: the set, the thresholds over the range, the gte
 // flags, reverse, showValue and the custom icons.
