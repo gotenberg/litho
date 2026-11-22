@@ -100,7 +100,7 @@ func TestParity_GotenbergWorkbooks(t *testing.T) {
 			if len(h) != 1 || h[0].Field != sheet.FieldSheet || h[0].Font.Families[0] != "Times New Roman" || h[0].Font.Size != 12 {
 				t.Errorf("header %+v", h)
 			}
-			if math.Abs(rev.DefaultColumnWidth-63.72) > 1e-9 {
+			if math.Abs(rev.DefaultColumnWidth-63.84) > 1e-9 {
 				t.Errorf("column width %v", rev.DefaultColumnWidth)
 			}
 		}},

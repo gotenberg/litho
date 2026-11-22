@@ -158,13 +158,24 @@ func (r *reader) defaultSetup(sh *sheet.Sheet) {
 
 // columnWidth converts a width in characters of the Normal font's widest
 // digit (ECMA-376 Part 1, 18.3.1.13 width, which counts the cell's
-// padding in) to points as Excel prints it: the characters times the
-// digit's printer pixels, rounded to a pixel.
+// padding in) to points as Excel prints it: the width in whole screen
+// pixels, as the clause turns it into pixels at run time
+// (Truncate(((256 * width + Truncate(128 / digit)) / 256) * digit)), read
+// back in digits, times the digit's printer pixels, rounded to a pixel.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel for the web prints Calibri 11 columns of 9.5
+//     characters 443 printer pixels wide at 100% (66 screen pixels, 9.43
+//     digits of 47), of 11 and 24 characters 517 and 1,128.
 func (r *reader) columnWidth(chars float64) float64 {
 	if !numeric.Positive(chars) {
 		return 0
 	}
-	return printerPixels(min(chars, maxColumnChars) * r.digitWidth)
+	d := max(r.screenDigit, 1)
+	chars = min(chars, maxColumnChars)
+	px := math.Floor(float64((float64(256*chars)+math.Floor(128/d))/256*d) + 1e-9)
+	return printerPixels(px / d * r.digitWidth)
 }
 
 // baseColumnWidth returns the width in points of a column of a sheet whose

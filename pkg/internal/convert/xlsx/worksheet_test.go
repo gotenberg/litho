@@ -31,17 +31,18 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 		defWidth, defHeigh float64
 	}{
 		// 8 digits of 7 screen pixels and 5 of padding, 64 pixels, 9.140625
-		// characters of 46 printer pixels; the standard row of 100 printer
+		// characters stored, back to 64 pixels, 9.14 digits of 46 printer
+		// pixels, 420.57 rounded to 421; the standard row of 100 printer
 		// pixels for a default within 2 screen pixels of its 17 without
 		// customHeight, 13.5 points being 18.
-		{"no format properties", `<sheetData/>`, 50.4, 12},
-		{"default near the standard", `<sheetFormatPr defaultRowHeight="13.5"/><sheetData/>`, 50.4, 12},
+		{"no format properties", `<sheetData/>`, 50.52, 12},
+		{"default near the standard", `<sheetFormatPr defaultRowHeight="13.5"/><sheetData/>`, 50.52, 12},
 		// 20 screen pixels times 100 over 17, 117.6 printer pixels.
 		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 14.04},
 		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 19.2},
-		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.4, 12},
+		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.52, 12},
 		// 27.33 screen pixels times 100 over 17, 160.78 printer pixels.
-		{"custom default", `<sheetFormatPr defaultRowHeight="20.5" customHeight="1"/><sheetData/>`, 50.4, 19.2},
+		{"custom default", `<sheetFormatPr defaultRowHeight="20.5" customHeight="1"/><sheetData/>`, 50.52, 19.2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -579,6 +580,31 @@ func TestRead_KnownFonts(t *testing.T) {
 		}
 		if rows := doc.Sheets[0].Rows; !rows[0].CustomHeight || rows[1].CustomHeight {
 			t.Errorf("knownFonts %v: custom rows %v and %v, want the row without a height custom", !tc.fit, rows[0].CustomHeight, rows[1].CustomHeight)
+		}
+	}
+}
+
+// TestRead_ColumnScreenPixels checks a column's width as Excel prints it:
+// whole screen pixels at run time (ECMA-376 Part 1, 18.3.1.13), read back
+// in digits, Calibri 11 columns of 9.5 characters 443 printer pixels wide
+// (66 pixels), of 11 and 24 characters 517 and 1,128.
+func TestRead_ColumnScreenPixels(t *testing.T) {
+	t.Parallel()
+	styles := strings.Replace(minimalStyles, "Test Sans", "Carlito", 1)
+	xml := `<cols><col min="1" max="1" width="9.5" customWidth="1"/><col min="2" max="2" width="11" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/></cols><sheetData/>`
+	data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: xml}}, styles, "", "", nil))
+	doc, _, err := load(context.Background(), bytes.NewReader(data), pinnedFonts(t), office.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []float64{443, 517, 1128}
+	cols := doc.Sheets[0].Columns
+	if len(cols) != len(want) {
+		t.Fatalf("columns %+v", cols)
+	}
+	for i, c := range cols {
+		if got := math.Round(c.Width / printerPixel); got != want[i] {
+			t.Errorf("column %d: %v printer pixels, want %v", i, got, want[i])
 		}
 	}
 }
