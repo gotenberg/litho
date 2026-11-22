@@ -109,6 +109,8 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 		{Index: 5, Cells: []Cell{textCell(2, "unformatted", nil)}},
 		// A row storing a height is measured by its fonts, not its lines.
 		{Index: 6, Height: 116 * excelPixel, Cells: []Cell{textCell(0, "small words that wrap over several lines", &Style{Font: Font{Families: []string{"Carlito"}, Size: 8}, Align: Alignment{Wrap: true}})}},
+		// A face no font serves is measured as the Default font.
+		{Index: 7, Cells: []Cell{textCell(0, "unserved", &Style{Font: Font{Families: []string{"No Such Face"}, Size: 14}})}},
 	}, Columns: []Column{{First: 2, Last: 2, Style: c14}}}
 	for _, fit := range []bool{false, true} {
 		doc := excelDoc(sh)
@@ -116,9 +118,9 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 		g := newGrid(t.Context(), doc, sh)
 		b.heightsOf(t, g)
-		want := []float64{121, 116, 121, 116, 121, 121, 116}
+		want := []float64{121, 116, 121, 116, 121, 121, 116, 121}
 		if fit {
-			want = []float64{151, 121, 151, 116, 121, 121, 116}
+			want = []float64{151, 121, 151, 116, 121, 121, 116, 121}
 		}
 		for r, w := range want {
 			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {

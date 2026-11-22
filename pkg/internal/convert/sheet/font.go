@@ -469,6 +469,15 @@ func (m *measurer) screenLine(f font) float64 {
 	return h
 }
 
+// served reports a font a face serves: one drawn in [substituteFamily]
+// that does not ask for it is not, and its measures are not the ones of
+// the face the book names.
+func (m *measurer) served(f font) bool {
+	ts := f.textStyle(m.lang, m.fallback)
+	fc := m.fonts.Match(ts)
+	return fc != nil && (fc.Family() != substituteFamily || (len(f.families) > 0 && strings.EqualFold(strings.TrimSpace(f.families[0]), substituteFamily)))
+}
+
 // lineGap returns the line gap of f's face at f's size: the external
 // leading GDI adds above a line's ascent, which Excel sets above the text
 // of a cell and of a header part ([pageBuilder.excelShift]).

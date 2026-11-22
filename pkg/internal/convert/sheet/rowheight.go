@@ -200,6 +200,8 @@ func (b *builder) measuredFont(g *grid, ri int, c *Cell) font {
 //     pixels), a Cambria 16 bold cell 163 (27), a Calibri 10 cell beside
 //     a Calibri 11 one 121, in a Calibri 11 book without knownFonts; rows
 //     stored 14.45 points tall print 121.
+//   - libreoffice/xlsx: sc/invalid_ext_data_validation.xlsx prints its rows
+//     of GE Inspira Sans 11, a face no font serves, at the standard row.
 //   - openxmlsdk/xlsx: VendorRatingCriteriaWorkbook_TP10192758.xltx, without
 //     knownFonts, prints its rows stored 12.75 points tall, of wrapped Arial
 //     10 text, as stored.
@@ -209,7 +211,9 @@ func (b *builder) measuredFont(g *grid, ri int, c *Cell) font {
 func (b *builder) screenFit(f font) float64 {
 	std, screen := b.doc.StandardRowHeight, b.doc.StandardScreenRow
 	def := resolveFont(Font{}, b.doc.Default.Font)
-	if !numeric.Positive(std) || !numeric.Positive(screen) || b.m.key(f) == b.m.key(def) {
+	// A face no font serves is measured as the Default font: its
+	// substitute's line is not the one Excel measures.
+	if !numeric.Positive(std) || !numeric.Positive(screen) || b.m.key(f) == b.m.key(def) || !b.m.served(f) {
 		return std
 	}
 	px := b.m.screenLine(f)
@@ -252,12 +256,17 @@ func (b *builder) excelDrops(g *grid) {
 			// set from ([pageBuilder.excelScriptShift]).
 			f := b.measuredFont(g, ri, c)
 			f.excel, f.script = true, Baseline
+			if !b.m.served(f) {
+				continue
+			}
 			deep = max(deep, b.m.descent(f)+b.m.lineGap(f))
 			for _, r := range c.Runs {
 				if r.Font != nil {
 					rf := overlay(f, r.Font)
 					rf.script = Baseline
-					deep = max(deep, b.m.descent(rf)+b.m.lineGap(rf))
+					if b.m.served(rf) {
+						deep = max(deep, b.m.descent(rf)+b.m.lineGap(rf))
+					}
 				}
 			}
 		}
