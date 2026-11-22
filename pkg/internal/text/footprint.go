@@ -379,6 +379,10 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 	hhea, _, hheaErr := tables.ParseHhea(rawHhea)
 	_, hasHmtx := findRecord(records, "hmtx")
 	fc.setMetrics(hasOS2, os2, rawHhea != nil && hheaErr == nil && hasHmtx, hhea)
+	if hasOS2 {
+		fc.avgWidth = float64(os2.XAvgCharWidth)
+	}
+	fc.maxWidth = max(float64(headTable.XMax)-float64(headTable.XMin), 0)
 	return fc, nil
 }
 

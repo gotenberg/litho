@@ -188,6 +188,14 @@ func TestFace_MetricsMatchHhea(t *testing.T) {
 	if !near(m.XHeight, want) {
 		t.Errorf("x-height %v, want %v", m.XHeight, want)
 	}
+	// The average character width is OS/2 xAvgCharWidth, the maximum the
+	// width of head's bounding box (xMin at 36, xMax at 40).
+	os2 := sfntTable(t, data, "OS/2")
+	avg := float64(int16(binary.BigEndian.Uint16(os2[2:])))
+	bbox := float64(int16(binary.BigEndian.Uint16(head[40:]))) - float64(int16(binary.BigEndian.Uint16(head[36:])))
+	if !near(m.AvgCharWidth, avg*20/upem) || !near(m.MaxCharWidth, bbox*20/upem) || m.AvgCharWidth <= 0 || m.MaxCharWidth <= m.AvgCharWidth {
+		t.Errorf("character widths %v and %v, want %v and %v", m.AvgCharWidth, m.MaxCharWidth, avg*20/upem, bbox*20/upem)
+	}
 }
 
 // sfntTable returns the table tag of the sfnt program data.

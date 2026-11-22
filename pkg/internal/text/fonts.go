@@ -240,6 +240,10 @@ type Face struct {
 	// xHeight and capHeight are the OS/2 x-height and cap height in
 	// font units, 0 when the face records none.
 	xHeight, capHeight float64
+	// avgWidth and maxWidth are the OS/2 average character width and the
+	// width of the head table's bounding box, in font units, 0 when the
+	// face records none.
+	avgWidth, maxWidth float64
 	// typoAscent and typoDescent are the OS/2 typographic ascender and
 	// descender in font units, descent positive below the baseline, 0
 	// when the face has no OS/2 table.
@@ -324,6 +328,12 @@ type Metrics struct {
 	// CapHeight is the height of a capital letter above the baseline,
 	// from the OS/2 table, 0 when the face records none.
 	CapHeight float64
+	// AvgCharWidth is the average width of the face's characters, the
+	// OS/2 xAvgCharWidth, and MaxCharWidth the width of the bounding box
+	// of all its glyphs, the head table's xMax less xMin; 0 when the face
+	// records none. They size a form control by characters (HTML Standard,
+	// 15.5.15, converting a character width to pixels).
+	AvgCharWidth, MaxCharWidth float64
 	// EmAscent and EmDescent split the em box, the font size, at the
 	// baseline in the proportions of the OS/2 typographic ascender and
 	// descender, else of Ascent and Descent: the box a ruby annotation
@@ -722,11 +732,13 @@ func (fc *Face) Metrics(size float64) Metrics {
 	size = float64(size * fc.doc.sizeAdjust())
 	scale := size / fc.upem
 	m := Metrics{
-		Ascent:    fc.ascent * scale,
-		Descent:   fc.descent * scale,
-		LineGap:   fc.lineGap * scale,
-		XHeight:   fc.xHeight * scale,
-		CapHeight: fc.capHeight * scale,
+		Ascent:       fc.ascent * scale,
+		Descent:      fc.descent * scale,
+		LineGap:      fc.lineGap * scale,
+		XHeight:      fc.xHeight * scale,
+		CapHeight:    fc.capHeight * scale,
+		AvgCharWidth: fc.avgWidth * scale,
+		MaxCharWidth: fc.maxWidth * scale,
 	}
 	if m.XHeight <= 0 {
 		m.XHeight = size / 2

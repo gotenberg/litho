@@ -114,7 +114,7 @@ func (fc *Face) namedFaces() []*Face {
 			family: fc.family, keys: fc.keys,
 			weight: fc.weight, slant: fc.slant, width: fc.width,
 			ascent: fc.ascent, descent: fc.descent, lineGap: fc.lineGap,
-			xHeight: fc.xHeight, capHeight: fc.capHeight, typoAscent: fc.typoAscent, typoDescent: fc.typoDescent,
+			xHeight: fc.xHeight, capHeight: fc.capHeight, avgWidth: fc.avgWidth, maxWidth: fc.maxWidth, typoAscent: fc.typoAscent, typoDescent: fc.typoDescent,
 			upem: fc.upem, revision: fc.revision, coverage: fc.coverage, size: fc.size,
 			axes: fc.axes, named: in.coords, varBase: fc,
 		}
