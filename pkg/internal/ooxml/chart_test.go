@@ -259,6 +259,14 @@ func TestChartFromElement_View3D(t *testing.T) {
 	if !g.ThreeD || !g.Rows || g.Shape != chart.ShapeCylinder || g.GapDepth != 80 || g.ZAxis != 2 {
 		t.Errorf("group = %+v", g)
 	}
+	// Out of range values are held to the schema's ranges: hPercent 5
+	// to 500, perspective 0 to 240, depthPercent 20 to 2000, rotX -90 to
+	// 90, rotY 0 to 360.
+	wild := readChart(t, chartXML("", `<c:view3D><c:rotX val="-200"/><c:rotY val="900"/><c:depthPercent val="9999"/><c:hPercent val="1"/><c:perspective val="255"/></c:view3D>`, plot), false)
+	want = chart.View3D{RotX: -90, RotY: 360, Depth: 2000, Perspective: 240, Height: 5}
+	if wild.View3D == nil || *wild.View3D != want {
+		t.Errorf("view = %+v, want %+v", wild.View3D, want)
+	}
 	// A pie without rotY keeps its first slice where it is.
 	pie := `<c:pie3DChart>` + ser(0, "A", "", "1", "2") + `</c:pie3DChart>`
 	if v := readChart(t, chartXML("", "", pie), false).View3D; v == nil || v.RotX != 15 || v.RotY != 0 {
@@ -279,10 +287,14 @@ func TestChartFromElement_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"perspective", "equation", "surface"} {
+	for _, want := range []string{"equation", "surface"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
+	}
+	// Office's perspective is drawn: no warning says otherwise.
+	if strings.Contains(got, "perspective") {
+		t.Errorf("warnings %q speak of the perspective, which is drawn", got)
 	}
 	if _, err := ChartFromElement(&Element{Space: NSChart, Local: "chart"}, nil, ChartOptions{}); !errors.Is(err, office.ErrMalformed) {
 		t.Errorf("a part that is not a chart space: %v, want office.ErrMalformed", err)

@@ -89,9 +89,19 @@ func (rd *renderer) office() bool { return rd.c.Rules == OfficeRules }
 
 // officeLayout reports a chart whose title, legend and plot area Office's
 // rules place: a two-dimensional cartesian chart under [OfficeRules]
-// whose file does not place its plot area, or a flat pie or doughnut
-// without data labels (officePie). Labelled and three-dimensional pies,
-// radar charts and three-dimensional plots keep LibreOffice's layout.
+// whose file does not place its plot area, a three-dimensional one in the
+// turned view, whose plot area Office lays out as a flat one's, or a flat
+// pie or doughnut without data labels (officePie). Labelled and
+// three-dimensional pies, radar charts and three-dimensional plots in the
+// oblique view keep LibreOffice's layout.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/Chart_3D_Column_.pptx,
+//     turned view: PowerPoint's plot area stands 31.7 pt from the chart's
+//     left edge, 15.8 pt from its top and 39.9 pt from its bottom, the
+//     room of a flat chart's 18 pt value and category labels by Office's
+//     distances (32.3, 15.8 and 39.8 pt).
 func (rd *renderer) officeLayout() bool {
 	c := rd.c
 	if !rd.office() || len(c.Groups) == 0 || c.PlotLayout != nil {
@@ -104,7 +114,8 @@ func (rd *renderer) officeLayout() bool {
 	if g0.Kind == Radar {
 		return false
 	}
-	return rd.threeD(g0) == nil
+	p := rd.threeD(g0)
+	return p == nil || p.turned
 }
 
 // pieLabelled reports a pie or doughnut group g that labels a point.

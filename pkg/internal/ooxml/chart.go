@@ -406,6 +406,9 @@ func (p *chartReader) readView3D(ch *Element) {
 	if d := floatVal(e, "perspective"); !math.IsNaN(d) {
 		v.Perspective = math.Max(0, math.Min(d, 240))
 	}
+	if h := floatVal(e, "hPercent"); !math.IsNaN(h) {
+		v.Height = math.Max(5, math.Min(h, 500))
+	}
 	v.RightAngle = boolVal(e, "rAngAx", false)
 	p.c.View3D = v
 	p.c.Floor = p.frame(ch.Child(NSChart, "floor").Child(NSChart, "spPr"), chart.Frame{})
@@ -417,10 +420,9 @@ func (p *chartReader) readView3D(ch *Element) {
 		}
 		switch g.Kind {
 		case chart.Bar, chart.Line, chart.Area:
-			if !v.RightAngle && v.Perspective > 0 {
-				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's perspective is drawn as a parallel projection")
-			}
-			if detmath.Cos(v.RotY*math.Pi/180) < 0 {
+			// Right-angled axes are drawn as an oblique projection, which
+			// keeps the front plane facing the viewer.
+			if v.RightAngle && detmath.Cos(v.RotY*math.Pi/180) < 0 {
 				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart seen from behind is drawn seen from the front")
 			}
 		case chart.Pie:
@@ -428,7 +430,7 @@ func (p *chartReader) readView3D(ch *Element) {
 			p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D "+g.Kind.String()+" chart is drawn flat")
 		}
 		p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's faces are shaded flat, without its lighting")
-		if e.Child(NSChart, "hPercent") != nil {
+		if v.RightAngle && e.Child(NSChart, "hPercent") != nil {
 			p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's height percentage is not applied")
 		}
 	}

@@ -46,19 +46,21 @@
 // with a capped line.
 //
 // A three-dimensional bar, line, area or pie group with a [View3D] is
-// drawn as a parallel projection, as Office draws a plot with right-angled
-// axes: the front plane keeps its scale and the depth axis runs up and to
-// the side by the sines of the view's angles. Bars are boxes, cylinders,
-// cones or pyramids, lines ribbons and areas slabs, each in its row along
-// the depth axis, painted back to front with their faces shaded by fixed
-// factors; walls, floor and gridlines are projected, axis labels stay on
-// the front plane. A pie is a tilted ellipse on a rim.
+// drawn as a projection of a box. Under [OfficeRules] without right-angled
+// axes the box is turned by the view's angles and seen in perspective, as
+// Office draws it: its plot area is laid out as a flat plot's, the box is
+// fitted in it, and the axis labels stand upright beside its projected
+// edges. With right-angled axes, or under LibreOffice's rules, it is an
+// oblique parallel projection: the front plane keeps its scale and the
+// depth axis runs up and to the side by the sines of the view's angles.
+// Bars are boxes, cylinders, cones or pyramids, lines ribbons and areas
+// slabs, each in its row along the depth axis, painted back to front with
+// their faces shaded by fixed factors; walls, floor and gridlines are
+// projected. A pie is a tilted ellipse on a rim.
 //
-// Not drawn: perspective (a perspective view is drawn as a parallel
-// projection), lighting, surface charts, a 3D chart's height percentage,
-// trendlines and error bars of a 3D group, the equations of trendlines,
-// high-low lines and up-down bars, leader lines, multi-level categories
-// (their levels join on one label).
+// Not drawn: lighting, surface charts, trendlines and error bars of a 3D
+// group, the equations of trendlines, high-low lines and up-down bars,
+// leader lines, multi-level categories (their levels join on one label).
 //
 // # The description
 //

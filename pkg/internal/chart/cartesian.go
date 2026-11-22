@@ -270,11 +270,14 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 	avail = rd.reserveTitles(avail, all...)
 	inner := avail
 	pj := rd.threeD(g0)
-	fit := func() {
+	// fit lays the plot out in inner. A three-dimensional plot puts its
+	// axes, labels and series on its front plane: in the oblique view the
+	// rest of inner is taken by its depth; the turned view sizes its plot
+	// area as a flat plot's and fits its box in it on the last pass, which
+	// carries the labels into the view.
+	fit := func(last bool) {
 		front := inner
-		if pj != nil {
-			// A three-dimensional plot puts its axes, labels and series
-			// on its front plane, the rest of inner taken by its depth.
+		if pj != nil && (last || !pj.turned) {
 			front = pj.layout(rd, g0, x, inner)
 		}
 		for _, d := range all {
@@ -285,6 +288,9 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 		}
 		for _, d := range all {
 			rd.placeLabels(d)
+			if pj != nil && last {
+				pj.moveLabels(d)
+			}
 		}
 	}
 	passes := layoutPasses
@@ -292,7 +298,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 		inner, passes = *rd.fixed, 0
 	}
 	for pass := 0; pass < passes; pass++ {
-		fit()
+		fit(false)
 		bb := rd.officeRoom(labelBounds(inner, all), inner, all)
 		next := typeset.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
 		next.Width = avail.X + avail.Width - (bb.X + bb.Width - (inner.X + inner.Width)) - next.X
@@ -305,7 +311,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 		}
 		inner = next
 	}
-	fit()
+	fit(true)
 	if rd.ctx.Err() != nil {
 		return
 	}
@@ -314,7 +320,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 	if pj != nil {
 		rd.walls(pj, x.inner, all)
 		for _, d := range all {
-			rd.axisLine(d)
+			rd.axisLine(d, pj)
 		}
 		labels = rd.series3D(pj, x, yOf)
 		rd.rowLabels(pj, g0, x.inner)
@@ -323,7 +329,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 			rd.grids(d, inner)
 		}
 		for _, d := range all {
-			rd.axisLine(d)
+			rd.axisLine(d, nil)
 		}
 		for _, g := range c.Groups {
 			if rd.ctx.Err() != nil {
@@ -1227,17 +1233,33 @@ func (rd *renderer) grids(d *dim, inner typeset.Rect) {
 	}
 }
 
-// axisLine draws d's axis line and tick marks.
-func (rd *renderer) axisLine(d *dim) {
+// axisLine draws d's axis line and tick marks. Under the projection pj of
+// a three-dimensional plot, nil for a flat one, the line runs along the
+// projected edge of the front plane and each tick mark keeps its length
+// and direction on the page from the point it marks.
+func (rd *renderer) axisLine(d *dim, pj *projection) {
 	if !d.visible() || d.ax == nil {
 		return
 	}
 	at := d.lineAt
-	if d.vertical {
-		rd.add(line(at, d.inner.Y, at, d.inner.Y+d.inner.Height, d.ax.Line))
-	} else {
-		rd.add(line(d.inner.X, at, d.inner.X+d.inner.Width, at, d.ax.Line))
+	// mark returns the page point of the axis line at position p along d.
+	mark := func(p float64) typeset.Point {
+		x, y := p, at
+		if d.vertical {
+			x, y = at, p
+		}
+		if pj == nil {
+			return typeset.Point{X: x, Y: y}
+		}
+		return pj.at(x, y, 0)
 	}
+	var a, b typeset.Point
+	if d.vertical {
+		a, b = mark(d.inner.Y), mark(d.inner.Y+d.inner.Height)
+	} else {
+		a, b = mark(d.inner.X), mark(d.inner.X+d.inner.Width)
+	}
+	rd.add(line(a.X, a.Y, b.X, b.Y, d.ax.Line))
 	if d.ax.Line == nil {
 		return
 	}
@@ -1254,12 +1276,11 @@ func (rd *renderer) axisLine(d *dim) {
 			return
 		}
 		for _, f := range fs {
-			p := d.pixel(f)
-			a, b := at-float64(d.outside*in), at+float64(d.outside*out)
+			m := mark(d.pixel(f))
 			if d.vertical {
-				rd.add(line(a, p, b, p, d.ax.Line))
+				rd.add(line(m.X-float64(d.outside*in), m.Y, m.X+float64(d.outside*out), m.Y, d.ax.Line))
 			} else {
-				rd.add(line(p, at+float64(d.outside*in), p, at-float64(d.outside*out), d.ax.Line))
+				rd.add(line(m.X, m.Y+float64(d.outside*in), m.X, m.Y-float64(d.outside*out), d.ax.Line))
 			}
 		}
 	}

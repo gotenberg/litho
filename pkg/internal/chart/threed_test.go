@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -197,5 +198,105 @@ func TestTrimScale_DropsTheIntervalNoValueReaches(t *testing.T) {
 		if got.min != tc.wantMin || math.Abs(got.max-tc.wantMax) > 1e-12 || got.major != tc.sc.major {
 			t.Errorf("%s: from %v to %v by %v, want from %v to %v by %v", tc.name, got.min, got.max, got.major, tc.wantMin, tc.wantMax, tc.sc.major)
 		}
+	}
+}
+
+// turned3D returns a 3-D column chart of one series over three categories
+// in Office's default view, rotX 15, rotY 20 and perspective 30, axes not
+// at right angles, as openxmlsdk/xlsx Axis_Title-O12's first chart.
+func turned3D() *Chart {
+	g := &Group{Kind: Bar, ThreeD: true, Rows: true, GapWidth: 150, GapDepth: 150, XAxis: 0, YAxis: 1, ZAxis: -1}
+	g.Series = append(g.Series, &Series{Values: Data{Values: nums(1, 2, 3), Cached: true}, Fill: &Paint{Color: red}})
+	return &Chart{
+		Rules:  OfficeRules,
+		Axes:   plainAxes(),
+		Groups: []*Group{g},
+		View3D: &View3D{RotX: 15, RotY: 20, Depth: 100, Perspective: 30},
+	}
+}
+
+// TestProjection_TurnedMatchesExcel holds the turned view to the box
+// fitted to Excel's tick marks of openxmlsdk/xlsx Axis_Title-O12's first
+// chart: in its plot area, 221.94 by 151.62 pt, the box's eight corners
+// stand where Excel's projection puts them.
+func TestProjection_TurnedMatchesExcel(t *testing.T) {
+	c := turned3D()
+	rd := &renderer{ctx: context.Background(), c: c}
+	p := rd.threeD(c.Groups[0])
+	if p == nil || !p.turned {
+		t.Fatalf("projection %+v, want the turned view", p)
+	}
+	x := &dim{category: true, n: 3, between: true}
+	inner := typeset.Rect{X: 203.16, Y: 94.08, Width: 221.94, Height: 151.62}
+	f := p.layout(rd, c.Groups[0], x, inner)
+	// Excel's corners, front then back, left to right, bottom then top.
+	want := map[[3]int]typeset.Point{
+		{0, 0, 0}: {X: 210.68, Y: 205.64}, {1, 0, 0}: {X: 404.58, Y: 229.69},
+		{1, 0, 1}: {X: 417.70, Y: 207.48}, {0, 0, 1}: {X: 240.50, Y: 187.93},
+		{0, 1, 0}: {X: 206.36, Y: 117.50}, {1, 1, 0}: {X: 408.85, Y: 131.02},
+		{1, 1, 1}: {X: 422.06, Y: 118.53}, {0, 1, 1}: {X: 237.73, Y: 107.63},
+	}
+	for k, w := range want {
+		x := f.X + float64(k[0])*f.Width
+		y := f.Y + f.Height - float64(k[1])*f.Height
+		z := float64(k[2]) * p.depth
+		got := p.at(x, y, z)
+		if math.Hypot(got.X-w.X, got.Y-w.Y) > 2.5 {
+			t.Errorf("corner %v at %.2f, %.2f, want %.2f, %.2f within 2.5 pt", k, got.X, got.Y, w.X, w.Y)
+		}
+	}
+}
+
+// TestRender_TurnedSeesTheRightSide draws a turned column chart seen from
+// the right and from above: each bar shows its front, its right side and
+// its top, and the side faces stand right of their fronts.
+func TestRender_TurnedSeesTheRightSide(t *testing.T) {
+	c := turned3D()
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	fronts, sides, tops := paths(frags, red), paths(frags, shade(red, faceSide)), paths(frags, shade(red, faceUp))
+	if len(fronts) != 3 || len(sides) != 3 || len(tops) != 3 {
+		t.Fatalf("%d fronts, %d sides, %d tops, want 3 each", len(fronts), len(sides), len(tops))
+	}
+	for i := range fronts {
+		f, s, top := bounds(fronts[i]), bounds(sides[i]), bounds(tops[i])
+		if s.X+s.Width <= f.X+f.Width || top.Y >= f.Y {
+			t.Errorf("bar %d: front %+v, side %+v, top %+v: the side and top do not stand right of and above the front", i, f, s, top)
+		}
+	}
+}
+
+// TestRender_TurnedHoldsExtremeViews draws the turned view at the ends of
+// the schema's ranges: every point it draws is finite and inside the
+// chart.
+func TestRender_TurnedHoldsExtremeViews(t *testing.T) {
+	for _, v := range []View3D{
+		{RotX: 90, RotY: 360, Depth: 2000, Perspective: 240, Height: 500},
+		{RotX: -90, RotY: 0, Depth: 20, Perspective: 0, Height: 5},
+		{RotX: 89, RotY: 179, Depth: 2000, Perspective: 240},
+		{RotX: math.NaN(), RotY: math.Inf(1), Depth: math.NaN(), Perspective: math.NaN(), Height: math.NaN()},
+	} {
+		c := turned3D()
+		c.View3D = &v
+		frags := Render(context.Background(), ahem(t), c, chartRect)
+		walk(frags, 0, func(f typeset.Fragment, _ int) {
+			p, ok := f.(*typeset.Path)
+			if !ok {
+				return
+			}
+			for _, op := range p.Ops {
+				n := 1
+				switch op.Kind {
+				case typeset.ClosePath:
+					n = 0
+				case typeset.CurveTo:
+					n = 3
+				}
+				for _, q := range op.P[:n] {
+					if !numeric.Finite(q.X) || !numeric.Finite(q.Y) || q.X < chartRect.X-1 || q.Y < chartRect.Y-1 || q.X > chartRect.X+chartRect.Width+1 || q.Y > chartRect.Y+chartRect.Height+1 {
+						t.Fatalf("view %+v: point %v outside the chart %+v", v, q, chartRect)
+					}
+				}
+			}
+		})
 	}
 }
