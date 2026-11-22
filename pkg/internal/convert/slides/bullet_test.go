@@ -336,3 +336,59 @@ func TestText_SavedFit(t *testing.T) {
 		}
 	}
 }
+
+// TestText_BulletAboveItsLine checks that a bullet four times its text's
+// size, which reaches above its line's top and so above its text body's,
+// is not cut there.
+func TestText_BulletAboveItsLine(t *testing.T) {
+	p := para("One", arial(18))
+	p.MarginLeft, p.Indent = 22.5, -22.5
+	p.Bullet = &Bullet{Kind: BulletChar, Char: "•", Families: []string{"Arial"}, Scale: 4}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(100, 100, 300, 30, p)}}), office.Options{}).Pages[0]
+	var top float64
+	found := false
+	var walk func([]typeset.Fragment, typeset.Matrix, float64)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix, clipTop float64) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Text:
+				if v.Parent != nil && v.Parent.Role == "Lbl" {
+					_, y := apply(m, v.Origin.X, v.Origin.Y)
+					top, found = clipTop, true
+					if y-0.6*72 < clipTop {
+						t.Errorf("bullet of baseline %.2f cut at %.2f", y, clipTop)
+					}
+				}
+			case *typeset.Group:
+				tr := v.Transform
+				if tr == (typeset.Matrix{}) {
+					tr = typeset.Identity
+				}
+				inner := then(tr, m)
+				ct := clipTop
+				if v.Clip != nil {
+					ct = clipMinY(v.Clip, inner, ct)
+				}
+				walk(v.Content, inner, ct)
+			}
+		}
+	}
+	walk(pg.Content, typeset.Identity, math.Inf(-1))
+	if !found {
+		t.Fatalf("no bullet; clip top %.2f", top)
+	}
+}
+
+// clipMinY returns the larger of floor and the top of the clip path c
+// mapped by m.
+func clipMinY(c *typeset.Path, m typeset.Matrix, floor float64) float64 {
+	y0 := math.Inf(1)
+	for _, op := range c.Ops {
+		if op.Kind == typeset.ClosePath {
+			continue
+		}
+		_, y := apply(m, op.P[0].X, op.P[0].Y)
+		y0 = min(y0, y)
+	}
+	return max(floor, y0)
+}

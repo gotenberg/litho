@@ -708,7 +708,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	b.warnings = append(b.warnings, res.Warnings...)
 	out := &laidBody{}
 	if len(res.Pages) > 0 {
-		out.frags = res.Pages[0].Content
+		out.frags = unclipped(res.Pages[0].Content, min(max(w, 1), office.MaxPageSide))
 		out.links = res.Pages[0].Links
 		if len(b.recode) > 0 {
 			out.frags = b.recodeLabels(out.frags, b.recode)
@@ -719,6 +719,32 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	}
 	if e, ok := res.Extents["slides-body"]; ok {
 		out.height = e.Height
+	}
+	return out
+}
+
+// unclipped returns frags, the content of a text body's one page laid out
+// w wide, with the clip of the page area the layout cuts each run of the
+// flow at opened above and below: a text body is no page, and what its
+// lines draw past their tops, a bullet larger than its text or glyphs
+// taller than a line that spacing narrows, prints, as PowerPoint prints
+// it. The clip keeps the page's sides. The groups are copied, frags left
+// unchanged.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf126234.pptx's bullet of 400% of 18 points
+//     prints whole above its line's top.
+func unclipped(frags []typeset.Fragment, w float64) []typeset.Fragment {
+	out := make([]typeset.Fragment, len(frags))
+	open := &typeset.Path{Ops: rectOps(typeset.Rect{X: 0, Y: -office.MaxPageSide, Width: w, Height: 3 * office.MaxPageSide}), Fill: &typeset.Fill{}}
+	for i, f := range frags {
+		if g, ok := f.(*typeset.Group); ok && g.Clip != nil {
+			c := *g
+			c.Clip = open
+			f = &c
+		}
+		out[i] = f
 	}
 	return out
 }

@@ -40,13 +40,13 @@ var sameBytesCases = []struct {
 	{formatDOCX, "docx/parts/shapes-effects-3d", "802e8748188b548d2f00291b77873f2ad1b4b8999e567f6a7c4055ea6177d92b"},
 	{formatXLSX, "xlsx/parts/real_dashboard", "1fdea8f05e7cabe58959837855e5278dc217a38f278e71e950a9c699305709eb"},
 	{formatXLSX, "xlsx/parts/charts_pie_doughnut", "b1e663f0991d016bd470680ef354a81c27528908da8bf987fe57ed013e94938b"},
-	{formatPPTX, "pptx/parts/chart-pie", "e86fbb8d775371df01bd6785c86c859ace6b22d1dfab7c92fca1fca68f3d2394"},
-	{formatPPTX, "pptx/parts/chart-3d", "3b382bb0fb3cf15dd8bf73e5dba2afb0e5aa28aed0c5fc62d76e8f9d4b92e070"},
-	{formatPPTX, "pptx/parts/fill-gradient", "a155c2268fc696bdc3196b2fa27dd1c4471a0916fe7deaa0b85d7597452e82bd"},
-	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "f0c161c8358b4cd94bda69ab7fd87a67a2a80428fb9560d0f0c43d9ceacac20c"},
+	{formatPPTX, "pptx/parts/chart-pie", "b3eac83e7359f3ac79216180f2fd8575d1034826652958e6fd165d45eb35f94d"},
+	{formatPPTX, "pptx/parts/chart-3d", "6ad83866162e69ce1b19db690b4fbe878020ff99043368101fe435dc8a1de5d7"},
+	{formatPPTX, "pptx/parts/fill-gradient", "31bad285933ef607311093125b914047183d33be5a821c09a8892c46e8c69db6"},
+	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "7fdda65003c45cceedaf0430f12a425a36ae9b2aa6945eca3704ca3086c38a26"},
 	{formatODT, "odt/sources/mixed-sections", "a0d798280a169ffd5893ec47d4c5856f170ae674044058b085cc132498f3dea8"},
 	{formatODS, "ods/sources/mixed-sheets", "dda900462838cc6e366ba8a2a51fd3131ad6b9e12fc2cb7ebe2fba3a911fd596"},
-	{formatODP, "odp/sources/wide-deck", "daab83de9e768130c87af5631420319d1554f6d195d1f103347eceabc06f6c67"},
+	{formatODP, "odp/sources/wide-deck", "bcc17f4477a30c6e5c969d07c7247bf63a85a7be2a2fb0bcd4bd8f52086cf979"},
 }
 
 // sameBytesText is the source of the plain text case.
