@@ -547,3 +547,31 @@ func TestShapes_PlaceholderStyleOverInherited(t *testing.T) {
 		t.Errorf("line %+v, want the style's accent1", s.Line)
 	}
 }
+
+// TestShapes_StoplessGradient checks that a gradFill stating no stops
+// takes those of the gradient its style's fill reference names, along its
+// own direction, and that one whose reference names no gradient paints
+// nothing.
+func TestShapes_StoplessGradient(t *testing.T) {
+	t.Parallel()
+	grad := `<a:prstGeom prst="rect"/><a:gradFill><a:lin ang="2700000" scaled="1"/></a:gradFill>`
+	ref := func(idx string) string {
+		return `<p:style><a:lnRef idx="0"/><a:fillRef idx="` + idx + `"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"/></p:style>`
+	}
+	f := oneSlide(t, sp("G", grad, ref("2"))).Shapes[0].Fill
+	if f.Kind != slides.FillGradient || f.Gradient == nil || len(f.Gradient.Stops) != 2 || f.Gradient.Angle != 45 || !sameColor(f.Gradient.Stops[1].Color, rgb(0x4F81BD)) {
+		t.Errorf("fill %+v, want the theme's two stops of accent1 at 45 degrees", f)
+	}
+	if f := oneSlide(t, sp("G", grad, ref("1"))).Shapes[0].Fill; f.Kind != slides.FillNone {
+		t.Errorf("fill %+v, want none", f)
+	}
+	// A theme gradient of no stops gives none either.
+	stopless := strings.Replace(testTheme, `<a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"/></a:gs></a:gsLst>`, "", 1)
+	if stopless == testTheme {
+		t.Fatal("the test theme has no gradient to strip")
+	}
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: sp("G", grad, ref("2"))}}, parts: map[string]string{"ppt/theme/theme1.xml": stopless}})
+	if f := doc.Slides[0].Shapes[0].Fill; f.Kind != slides.FillNone {
+		t.Errorf("fill %+v under a stopless theme gradient, want none", f)
+	}
+}

@@ -220,9 +220,21 @@ func firstColor(f slides.Fill) (css.Color, bool) {
 //   - libreoffice/pptx: sd/tdf123684's master background, the theme's third
 //     background style, is a blipFill of the theme's own image.
 func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
+	el, tfc, f := r.styleFillOf(fc, ref)
+	if el == nil {
+		return f
+	}
+	f, _ = r.fillChoice(tfc, el)
+	return f
+}
+
+// styleFillOf returns the theme's fill element a style matrix reference
+// names, with the context it is read in; nil and the fill the reference
+// stands for alone when the theme has no such style ([reader.styleFill]).
+func (r *reader) styleFillOf(fc *fillCtx, ref *ooxml.Element) (*ooxml.Element, *fillCtx, slides.Fill) {
 	idx, ok := intAttr(ref, "idx")
 	if !ok || idx == 0 {
-		return slides.Fill{}
+		return nil, nil, slides.Fill{}
 	}
 	list := fc.sc.theme.fills
 	if idx > 1000 {
@@ -232,17 +244,41 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 	if idx < 1 || idx > len(list) {
 		// A theme without the style: the reference's colour, solid.
 		if has {
-			return slides.Fill{Kind: slides.FillSolid, Color: ph}
+			return nil, nil, slides.Fill{Kind: slides.FillSolid, Color: ph}
 		}
-		return slides.Fill{}
+		return nil, nil, slides.Fill{}
 	}
 	// The theme part's relationships name a picture of its styles.
 	tfc := fc.withPh(ph)
 	if fc.sc.theme.part != "" {
 		tfc.part = fc.sc.theme.part
 	}
-	f, _ := r.fillChoice(tfc, list[idx-1])
-	return f
+	return list[idx-1], tfc, slides.Fill{}
+}
+
+// stoplessGradient returns the fill of a shape's gradFill g that states
+// no stops (20.1.8.33 gradFill: gsLst is optional): the stops of the
+// gradient its style's fill reference ref names, along g's own direction,
+// as PowerPoint paints it; false when g states stops or the reference
+// names no gradient.
+//
+// # Corpus evidence
+//
+//   - poi/pptx: slideshow/63200.pptx's ellipse, a gradFill of a 45-degree
+//     lin and no gsLst under fillRef 3, prints in the theme's third fill's
+//     stops, diagonally.
+func (r *reader) stoplessGradient(fc *fillCtx, g, ref *ooxml.Element) (slides.Fill, bool) {
+	if g == nil || g.Child(ooxml.NSA, "gsLst") != nil || ref == nil {
+		return slides.Fill{}, false
+	}
+	el, tfc, _ := r.styleFillOf(fc, ref)
+	stops := el.Child(ooxml.NSA, "gsLst")
+	if !el.Is(ooxml.NSA, "gradFill") || stops == nil {
+		return slides.Fill{}, false
+	}
+	merged := &ooxml.Element{Space: g.Space, Local: g.Local, Attrs: g.Attrs, Children: append([]*ooxml.Element{stops}, g.Children...)}
+	f, _ := r.fillChoice(tfc, merged)
+	return f, f.Kind == slides.FillGradient
 }
 
 // shapeFill returns the fill of the first shape of chain whose spPr sets
@@ -264,6 +300,12 @@ func (r *reader) shapeFill(fc *fillCtx, chain []*ooxml.Element, style *ooxml.Ele
 		efc := *fc
 		efc.part = r.partOf(el, fc.part)
 		if f, ok := r.fillOf(&efc, spPr(el)); ok {
+			if f.Kind != slides.FillNone {
+				return f
+			}
+			if sf, ok := r.stoplessGradient(fc, spPr(el).Child(ooxml.NSA, "gradFill"), ref); ok {
+				return sf
+			}
 			return f
 		}
 		if ref != nil && kid(el, "style") == style {
