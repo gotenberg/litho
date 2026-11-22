@@ -1,11 +1,14 @@
 package xlsx
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -27,8 +30,9 @@ const maxHeaderRunes = 4096
 // and right parts. As LibreOffice imports it, differentOddEven and
 // differentFirst give the even and first pages their own texts even when
 // those are empty, which then print nothing; scaleWithDoc is not read.
-// A picture a text places (&G) is not drawn: the header of a printed
-// sheet that holds one is reported. However tall the text, the cells keep
+// A picture a text places (&G) is the shape of the sheet's
+// legacyDrawingHF part its part names (pics, [sheetReader.headerPictures]);
+// a picture code without one is reported. However tall the text, the cells keep
 // the page margins, as Excel prints them: the header and footer heights
 // LibreOffice's import makes dynamic (PageSettingsConverter) are not
 // given.
@@ -43,31 +47,135 @@ const maxHeaderRunes = 4096
 //     first cell's text from y 75.12, as under the 11-point header of
 //     headers_footers_codes, and 48 rows on the page, the rows the
 //     margins hold.
-func (r *reader) headerFooter(e *ooxml.Element, printed bool) sheet.HeaderFooter {
+func (r *reader) headerFooter(e *ooxml.Element, printed bool, pics map[string]*sheet.HeaderPicture) sheet.HeaderFooter {
 	base := r.normal().Font
-	pictures := false
-	parse := func(name string) [3][]sheet.Span {
-		parts, picture := parseHeaderFooter(textOf(e.Child(nsMain, name)), base, r.theme)
-		pictures = pictures || picture
+	missing := false
+	parse := func(name, kind, variant string) [3][]sheet.Span {
+		parts, _ := parseHeaderFooter(textOf(e.Child(nsMain, name)), base, r.theme)
+		for i := range parts {
+			for k := range parts[i] {
+				sp := &parts[i][k]
+				if sp.Picture == nil {
+					continue
+				}
+				sp.Picture = pics["LCR"[i:i+1]+kind+variant]
+				missing = missing || sp.Picture == nil
+			}
+		}
 		return parts
 	}
-	margins := func(header, footer string) sheet.Margins {
-		return sheet.Margins{Header: parse(header), Footer: parse(footer)}
+	margins := func(header, footer, variant string) sheet.Margins {
+		return sheet.Margins{Header: parse(header, "H", variant), Footer: parse(footer, "F", variant)}
 	}
-	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter")}
+	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter", "")}
 	if boolAttr(e, "differentOddEven") {
 		hf.DifferentOddEven = true
-		hf.Even = margins("evenHeader", "evenFooter")
+		hf.Even = margins("evenHeader", "evenFooter", "EVEN")
 	}
 	if boolAttr(e, "differentFirst") {
 		hf.DifferentFirst = true
-		hf.First = margins("firstHeader", "firstFooter")
+		hf.First = margins("firstHeader", "firstFooter", "FIRST")
 	}
-	if pictures && printed {
-		r.warn(warn.ContentUnsupported, warn.Omitted, "the pictures of headers and footers are left out")
+	if missing && printed {
+		r.warn(warn.ContentUnsupported, warn.Omitted, "a header or footer picture the sheet's header drawing lacks is left out")
 	}
 	return hf
 }
+
+// maxHeaderPictures caps the shapes of a header drawing read. Anti-DoS
+// guard, not spec-mandated: a sheet's headers and footers name at most 18
+// pictures, three parts of a header and a footer for three page kinds.
+const maxHeaderPictures = 64
+
+// headerPictures reads the pictures of the sheet's header and footer
+// drawing (ECMA-376 Part 1, 18.3.1.50 legacyDrawingHF): each VML shape
+// whose id names a part (LH, CH, RH for the header's left, centre and
+// right, LF, CF, RF for the footer's, EVEN or FIRST after them for those
+// pages) and whose v:imagedata names a picture, by that id. Excel prints
+// a picture whose shape is w by h points at w and h screen pixels of 96
+// to the inch scaled as the sheet's columns and rows print: the width by
+// the Normal font's digit in printer pixels over its digit on the screen,
+// the height by the standard row in printer pixels over its screen
+// pixels, each rounded to a printer pixel, and at most a page side.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: header_footer_images, under Calibri 11 (a digit of 47
+//     printer pixels and 7 screen pixels, a row of 121 and 20), prints a
+//     120 by 45 point picture at 128.88 by 43.56 points (1,074 by 363
+//     printer pixels) and a 90 by 22.5 point one at 96.72 by 21.84 (806
+//     by 182).
+func (w *sheetReader) headerPictures(root *ooxml.Element) map[string]*sheet.HeaderPicture {
+	r := w.r
+	d := root.Child(nsMain, "legacyDrawingHF")
+	if d == nil || !w.printed {
+		return nil
+	}
+	id, _ := d.AttrNS(ooxml.NSR, "id")
+	rel, ok := r.pkg.RelationshipByID(r.ctx, w.part, id)
+	if !ok || rel.External || rel.Type != relVMLDrawing || !r.pkg.Has(rel.Target) {
+		return nil
+	}
+	vml, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
+	if err != nil {
+		if !r.stop(err) {
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("the header drawing of sheet %q does not parse: %v", w.sh.Name, err))
+		}
+		return nil
+	}
+	pics := map[string]*sheet.HeaderPicture{}
+	n := 0
+	for _, sp := range vml.Kids() {
+		if !sp.Is(ooxml.NSV, "shape") || n >= maxHeaderPictures {
+			continue
+		}
+		n++
+		name := strings.ToUpper(attr(sp, "id"))
+		if !headerShapes[name] {
+			continue
+		}
+		relID, _ := sp.Child(ooxml.NSV, "imagedata").AttrNS(ooxml.NSO, "relid")
+		if relID == "" {
+			continue
+		}
+		vs := ooxml.ParseVMLStyle(attr(sp, "style"))
+		wPt, okW := vs.Length("width", 0.75)
+		hPt, okH := vs.Length("height", 0.75)
+		if !okW || !okH || !numeric.Positive(wPt) || !numeric.Positive(hPt) {
+			continue
+		}
+		pic := r.loadPicture(rel.Target, relID)
+		if pic == nil {
+			continue
+		}
+		width, height := r.headerPictureSize(wPt, hPt)
+		pics[name] = &sheet.HeaderPicture{Picture: pic, Width: width, Height: height}
+	}
+	return pics
+}
+
+// headerPictureSize returns the size a header picture of w by h points
+// prints at ([sheetReader.headerPictures]).
+func (r *reader) headerPictureSize(w, h float64) (float64, float64) {
+	px := float64(screenPixelsPerPoint)
+	width := printerPixels(float64(min(w, office.MaxPageSide)*px) * r.digitWidth / max(r.screenDigit, 1))
+	height := printerPixels(float64(min(h, office.MaxPageSide)*px) * r.standardPrinted * printerPixel / max(r.standardScreen, 1))
+	return min(width, office.MaxPageSide), min(height, office.MaxPageSide)
+}
+
+// headerShapes are the ids of the shapes of a header drawing that hold a
+// part's picture.
+var headerShapes = func() map[string]bool {
+	m := map[string]bool{}
+	for _, side := range []string{"L", "C", "R"} {
+		for _, kind := range []string{"H", "F"} {
+			for _, variant := range []string{"", "EVEN", "FIRST"} {
+				m[side+kind+variant] = true
+			}
+		}
+	}
+	return m
+}()
 
 // The sizes a font size code reads, in points: a size past them prints at
 // the nearer one, as Excel prints it.
@@ -113,10 +221,11 @@ type hfParser struct {
 // the size in points, every digit read and the size held between
 // minHeaderSize and maxHeaderSize,
 // &Krrggbb or &Kttsnnn the colour (a theme index with a tint percent);
-// && is an ampersand and a line break stays in the text. Other codes,
-// &G (a picture), &O and &H (outline and shadow) and any other character
-// after an ampersand, are dropped with their character, as Office reads
-// an unknown code (MS-OI29500, 2.1.619, emptytoken). Every span carries
+// && is an ampersand and a line break stays in the text; &G places the
+// part's picture, a span whose Picture the caller resolves. Other codes,
+// &O and &H (outline and shadow) and any other character after an
+// ampersand, are dropped with their character, as Office reads an
+// unknown code (MS-OI29500, 2.1.619, emptytoken). Every text span carries
 // the font it draws with; picture reports a picture code read.
 //
 // # Corpus evidence
@@ -173,7 +282,9 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) (parts [3]
 		case 'T':
 			p.field(sheet.FieldTime)
 		case 'G':
+			p.flush()
 			p.picture = true
+			p.parts[p.part] = append(p.parts[p.part], sheet.Span{Picture: &sheet.HeaderPicture{}})
 		case 'B':
 			p.flush()
 			p.font.Bold = !p.font.Bold

@@ -111,7 +111,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 	w.hyperlinks(root.Child(nsMain, "hyperlinks"))
 	w.pageSetup(root)
 	if hf := root.Child(nsMain, "headerFooter"); hf != nil {
-		sh.HeaderFooter = r.headerFooter(hf, w.printed)
+		sh.HeaderFooter = r.headerFooter(hf, w.printed, w.headerPictures(root))
 	}
 	sh.Page.RowBreaks = breaks(root.Child(nsMain, "rowBreaks"), maxRows)
 	sh.Page.ColumnBreaks = breaks(root.Child(nsMain, "colBreaks"), maxColumns)
@@ -711,7 +711,7 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	w.pageSetup(root)
 	sh.Page.Scale, sh.Page.FitWidth, sh.Page.FitHeight = 0, 1, 1
 	if hf := root.Child(nsMain, "headerFooter"); hf != nil {
-		sh.HeaderFooter = r.headerFooter(hf, true)
+		sh.HeaderFooter = r.headerFooter(hf, true, nil)
 	}
 	if d := root.Child(nsMain, "drawing"); d != nil {
 		id, _ := d.AttrNS(ooxml.NSR, "id")

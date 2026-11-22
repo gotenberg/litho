@@ -24,6 +24,7 @@ type span struct {
 	strike       bool
 	script       sheet.Script
 	color        css.Color
+	picture      bool
 }
 
 // TestParseHeaderFooter checks the parts, the fields and the formatting
@@ -84,7 +85,8 @@ func TestParseHeaderFooter(t *testing.T) {
 				with(b, func(s *span) { s.text, s.size = "c", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 }),
 			}},
 		},
-		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
+		{"dropped codes", "x&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
+		{"a picture", "&Lx&Gy", [3][]span{0: {with(b, func(s *span) { s.text = "x" }), {picture: true}, with(b, func(s *span) { s.text = "y" })}}},
 		{
 			"theme fonts", `&"+,Bold"A&"Arial"B&"-"C`,
 			[3][]span{1: {
@@ -171,6 +173,12 @@ func TestParseHeaderFooter(t *testing.T) {
 				}
 				for i, s := range got[part] {
 					w := tc.want[part][i]
+					if w.picture || s.Picture != nil {
+						if !w.picture || s.Picture == nil || s.Text != "" {
+							t.Errorf("part %d span %d = %+v, want a picture %v", part, i, s, w.picture)
+						}
+						continue
+					}
 					f := s.Font
 					if f == nil || s.Text != w.text || s.Field != w.field || s.Offset != w.offset || f.Families[0] != w.family || f.Size != w.size || f.Bold != w.bold ||
 						f.Italic != w.italic || f.Underline != w.under || f.Strike != w.strike || f.Script != w.script || !near(f.Color, w.color) {
@@ -207,9 +215,9 @@ func TestRead_HeaderFooter(t *testing.T) {
 	}
 }
 
-// TestRead_HeaderFooterPictures checks that the header pictures of a
-// printed sheet, which are not drawn, are reported once, and that a
-// doubled ampersand before G is no picture.
+// TestRead_HeaderFooterPictures checks that a header picture the sheet's
+// header drawing lacks is reported once, and that a doubled ampersand
+// before G is no picture.
 func TestRead_HeaderFooterPictures(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -224,7 +232,7 @@ func TestRead_HeaderFooterPictures(t *testing.T) {
 			_, warnings := readBytes(t, oneSheet(t, `<sheetData/><headerFooter differentFirst="1"><oddHeader>`+tc.header+`</oddHeader><firstFooter>`+tc.header+`</firstFooter></headerFooter>`))
 			got := 0
 			for _, w := range warnings {
-				if w.Code == warn.ContentUnsupported && w.Effect == warn.Omitted && strings.Contains(w.Message, "headers and footers") {
+				if w.Code == warn.ContentUnsupported && w.Effect == warn.Omitted && strings.Contains(w.Message, "header or footer picture") {
 					got++
 				}
 			}
@@ -244,5 +252,55 @@ func TestRead_HeaderKeepsTheMargins(t *testing.T) {
 	hf := doc.Sheets[0].HeaderFooter
 	if hf.GrowHeader || hf.GrowFooter || hf.HeaderSpacing != 0 || hf.FooterSpacing != 0 {
 		t.Errorf("header grows %v %v by %v %v, want the margins kept", hf.GrowHeader, hf.GrowFooter, hf.HeaderSpacing, hf.FooterSpacing)
+	}
+}
+
+// TestHeaderPictureSize locks the size Excel prints a header picture at
+// under Calibri 11: its screen pixels scaled by the digit's 47 printer
+// pixels over its 7 screen pixels across and the standard row's 121 over
+// 20 down, and a picture of 100,000 pixels a side held to a page side
+// before it is scaled.
+func TestHeaderPictureSize(t *testing.T) {
+	r := &reader{digitWidth: 47 * printerPixel, screenDigit: 7, standardPrinted: 121, standardScreen: 20}
+	for _, tc := range []struct{ w, h, ww, wh float64 }{
+		{120, 45, 128.88, 43.56},
+		{90, 22.5, 96.72, 21.84},
+		{75000, 75000, 14400, 13939.2},
+	} {
+		if w, h := r.headerPictureSize(tc.w, tc.h); math.Abs(w-tc.ww) > 1e-6 || math.Abs(h-tc.wh) > 1e-6 {
+			t.Errorf("%v by %v points prints %v by %v, want %v by %v", tc.w, tc.h, w, h, tc.ww, tc.wh)
+		}
+	}
+}
+
+// TestRead_HeaderPictureParts checks that the shapes of the header drawing
+// go to the parts their ids name, the even page's apart.
+func TestRead_HeaderPictureParts(t *testing.T) {
+	t.Parallel()
+	sh := testSheet{
+		name: "S",
+		xml: `<sheetData/><headerFooter differentOddEven="1"><oddHeader>&amp;L&amp;G&amp;Cx</oddHeader><oddFooter>&amp;C&amp;G</oddFooter><evenHeader>&amp;R&amp;G</evenHeader></headerFooter>` +
+			`<legacyDrawingHF r:id="rIdH"/>`,
+		rels: `<Relationship Id="rIdH" Type="` + relVMLDrawing + `" Target="../drawings/vmlDrawing1.vml"/>`,
+	}
+	shape := func(id string) string {
+		return `<v:shape id="` + id + `" style="position:absolute;width:30pt;height:15pt"><v:imagedata o:relid="rIdP"/></v:shape>`
+	}
+	files := workbookFiles([]testSheet{sh}, minimalStyles, "", "", map[string]string{
+		"xl/drawings/vmlDrawing1.vml": `<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">` +
+			shape("LH") + shape("CF") + shape("RHEVEN") + `</xml>`,
+		"xl/drawings/_rels/vmlDrawing1.vml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rIdP" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`,
+		"xl/media/image1.png": pngBytes(t),
+	})
+	doc, warnings := readBytes(t, zipFiles(t, files))
+	if len(warnings) > 0 {
+		t.Errorf("warnings %v", warnings)
+	}
+	hf := doc.Sheets[0].HeaderFooter
+	for _, p := range []*sheet.Span{&hf.Odd.Header[0][0], &hf.Odd.Footer[1][0], &hf.Even.Header[2][0]} {
+		if p.Picture == nil || p.Picture.Picture == nil || p.Picture.Width <= 0 || p.Picture.Height <= 0 {
+			t.Errorf("span %+v, want a picture", p)
+		}
 	}
 }

@@ -756,6 +756,17 @@ type Span struct {
 	// Font, when not nil, overrides the header font (HeaderFooter.Font)
 	// for the span.
 	Font *Font
+	// Picture, when not nil, is a picture the part shows (a workbook's
+	// &G), drawn at its part's side of the page: the span shows no text.
+	Picture *HeaderPicture
+}
+
+// HeaderPicture is the picture of a header or footer part (ECMA-376
+// Part 1, 18.3.1.46 &G, 18.3.1.50 legacyDrawingHF), Width by Height
+// points as the page prints it.
+type HeaderPicture struct {
+	Picture       *layout.Picture
+	Width, Height float64
 }
 
 // Field is a header or footer field.

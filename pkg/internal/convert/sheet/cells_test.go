@@ -606,6 +606,45 @@ func TestConvert_ExcelHeaderFooterInsets(t *testing.T) {
 	}
 }
 
+// TestConvert_ExcelHeaderPictures locks where a header and footer part's
+// picture prints: a header's top at the header margin, a footer's bottom
+// at the footer margin, the left part's at the left margin, the centre
+// part's centred between the margins, the right part's at the right one.
+func TestConvert_ExcelHeaderPictures(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+	doc := excelDoc(sh)
+	sh.Page.Margin = [4]float64{54, 50, 54, 40}
+	sh.Page.HeaderTop, sh.Page.FooterBottom = 21.6, 18
+	pic := func(w, h float64) []Span {
+		return []Span{{Picture: &HeaderPicture{Width: w, Height: h, Picture: &layout.Picture{Width: w, Height: h, Source: &typeset.ImageSource{Width: 1, Height: 1}}}}}
+	}
+	sh.HeaderFooter.Odd.Header = [3][]Span{pic(100, 40), nil, pic(30, 10)}
+	sh.HeaderFooter.Odd.Footer = [3][]Span{nil, pic(80, 20), nil}
+	pg := convert(t, doc, office.Options{}).Pages[0]
+	var got []typeset.Rect
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Image:
+				got = append(got, v.Rect)
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(pg.Content)
+	want := []typeset.Rect{{X: 40, Y: 21.6, Width: 100, Height: 40}, {X: pg.Width - 50 - 30, Y: 21.6, Width: 30, Height: 10}, {X: 40 + (pg.Width-90-80)/2, Y: pg.Height - 18 - 20, Width: 80, Height: 20}}
+	if len(got) != len(want) {
+		t.Fatalf("pictures %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if !near(got[i].X, want[i].X, 1e-6) || !near(got[i].Y, want[i].Y, 1e-6) || got[i].Width != want[i].Width || got[i].Height != want[i].Height {
+			t.Errorf("picture %d at %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
 // TestConvert_ExcelScaledRows locks a sheet Excel prints at 50%: each row
 // rounded to a printer pixel at the scale, 121 pixels printing 61, and the
 // top inset kept whole, so that a bottom-aligned line sits 8 pixels and its

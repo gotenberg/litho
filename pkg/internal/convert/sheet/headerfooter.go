@@ -239,8 +239,13 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	}
 	place(m.Header, max(ps.HeaderTop, 0)/z, false, max(hf.HeaderMinHeight, 0))
 	place(m.Footer, max(ps.FooterBottom, 0)/z, true, max(hf.FooterMinHeight, 0))
+	pics := b.headerPictures(m.Header, left, areaW, max(ps.HeaderTop, 0)/z, false, height)
+	pics = append(pics, b.headerPictures(m.Footer, left, areaW, max(ps.FooterBottom, 0)/z, true, height)...)
 	if len(tree.Children) == 0 {
-		return nil
+		if len(pics) == 0 {
+			return nil
+		}
+		return zoomed(artifacts(pics), z, pageW, pageH)
 	}
 	res, err := layout.Layout(b.ctx, tree, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: width, Height: height},
@@ -252,7 +257,13 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		b.warn(warn.PageSetupUnsupported, warn.Omitted, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
 		return nil
 	}
-	frags := artifacts(res.Pages[0].Content)
+	frags := artifacts(append(pics, res.Pages[0].Content...))
+	return zoomed(frags, z, pageW, pageH)
+}
+
+// zoomed returns the header and footer fragments frags, laid out on the
+// page divided by z, drawn at z on the page pageW by pageH.
+func zoomed(frags []typeset.Fragment, z, pageW, pageH float64) []typeset.Fragment {
 	if z == 1 {
 		return frags
 	}
@@ -262,6 +273,51 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		Opacity:   1,
 		Content:   frags,
 	}}
+}
+
+// headerPictures returns the pictures of the header or footer parts, each
+// part's first, at its size: a header's top at the header margin top, a
+// footer's bottom at the footer margin bottom above the page's bottom
+// edge of height; the left part's at the left margin left, the centre
+// part's centred across the area areaW wide, the right part's at its
+// right edge. The text insets ([excelHeaderInset]) do not move them.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: header_footer_images prints the left header's 160 by 60
+//     pixel logo at x 50.4, the 0.7-inch left margin, its top at 21.6,
+//     the 0.3-inch header margin; the centre footer's 120 by 30 pixel
+//     stripe centred on the page, its bottom 21.6 above the page's bottom.
+func (b *builder) headerPictures(parts [3][]Span, left, areaW, margin float64, footer bool, height float64) []typeset.Fragment {
+	var out []typeset.Fragment
+	for i, part := range parts {
+		for _, sp := range part {
+			hp := sp.Picture
+			if hp == nil || hp.Picture == nil || hp.Width <= 0 || hp.Height <= 0 {
+				continue
+			}
+			x := left
+			switch i {
+			case 1:
+				x = left + float64((areaW-hp.Width)/2)
+			case 2:
+				x = left + areaW - hp.Width
+			}
+			y := margin
+			if footer {
+				y = height - margin - hp.Height
+			}
+			r := typeset.Rect{X: x, Y: y, Width: hp.Width, Height: hp.Height}
+			switch {
+			case hp.Picture.Vector != nil:
+				out = append(out, hp.Picture.Vector(b.ctx, r)...)
+			case hp.Picture.Source != nil:
+				out = append(out, &typeset.Image{Rect: r, Source: hp.Picture.Source})
+			}
+			break
+		}
+	}
+	return out
 }
 
 // hfBlock is a run of a header or footer part's spans laid out as one
