@@ -65,15 +65,16 @@ func TestRead_Workbook(t *testing.T) {
 	}
 }
 
-// TestRead_SharedStrings checks plain and rich shared strings, the
-// phonetic runs dropped, the ST_Xstring escapes decoded and the line
-// breaks of a cell that does not wrap dropped.
+// TestRead_SharedStrings checks plain and rich shared strings, runs of an
+// empty rPr in the cell's font, the phonetic runs dropped, the ST_Xstring
+// escapes decoded and the line breaks of a cell that does not wrap
+// dropped.
 func TestRead_SharedStrings(t *testing.T) {
 	t.Parallel()
 	sst := `<sst ` + nsDecl + `><si><t>plain</t></si>` +
 		`<si><r><t>bo</t></r><r><rPr><b/><sz val="14"/><color rgb="FFFF0000"/><rFont val="Arial"/></rPr><t xml:space="preserve">ld </t></r><rPh sb="0" eb="1"><t>ふ</t></rPh></si>` +
-		`<si><t>a_x000D__x000A_b_x005F_x0041_</t><rPh><t>x</t></rPh></si></sst>`
-	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>9</v></c></row></sheetData>`}},
+		`<si><t>a_x000D__x000A_b_x005F_x0041_</t><rPh><t>x</t></rPh></si><si><r><rPr></rPr><t>cell </t></r><r><rPr/><t>font</t></r></si></sst>`
+	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>9</v></c><c r="E1" t="s"><v>3</v></c></row></sheetData>`}},
 		minimalStyles, "", "", map[string]string{"xl/sharedStrings.xml": sst})
 	doc, _ := readBytes(t, zipFiles(t, files))
 	sh := doc.Sheets[0]
@@ -81,7 +82,7 @@ func TestRead_SharedStrings(t *testing.T) {
 		col  int
 		text string
 		runs int
-	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "ab_x0041_", 0}} {
+	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "ab_x0041_", 0}, {4, "cell font", 0}} {
 		c, ok := cellAt(sh, 0, tc.col)
 		if !ok || c.Value.Kind != sheet.Text || c.Value.Text != tc.text || len(c.Runs) != tc.runs {
 			t.Errorf("column %d: %+v, want text %q with %d runs", tc.col, c, tc.text, tc.runs)

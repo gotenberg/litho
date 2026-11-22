@@ -47,8 +47,14 @@ func (r *reader) readSharedStrings(main string) error {
 // richText reads a CT_Rst (ECMA-376 Part 1, 18.4.8 si, 18.3.1.53 is): a
 // plain t, or runs r each with its properties rPr and text t. Phonetic
 // runs (18.4.6 rPh) are dropped: Calc does not print them. A run without
-// properties takes the cell's font; one with properties starts from
-// LibreOffice's default font, as a font record does.
+// properties, or whose rPr states none, takes the cell's font; one with
+// properties starts from LibreOffice's default font, as a font record
+// does.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx spreadsheet/52348.xlsx: Excel prints runs of an empty rPr
+//     in their cells' fonts, DejaVu Sans 12 bold and 10.
 func (r *reader) richText(e *ooxml.Element) richText {
 	var rt richText
 	var b strings.Builder
@@ -71,7 +77,7 @@ func (r *reader) richText(e *ooxml.Element) richText {
 		case c.Is(nsMain, "r"):
 			s := add(textOf(c.Child(nsMain, "t")))
 			run := sheet.Run{Text: s}
-			if pr := c.Child(nsMain, "rPr"); pr != nil {
+			if pr := c.Child(nsMain, "rPr"); pr != nil && len(pr.Kids()) > 0 {
 				f := r.font(pr)
 				run.Font = &f
 				rich = true
