@@ -36,6 +36,14 @@ func FuzzConvert(f *testing.F) {
 		`<select multiple size=2><option selected>x<optgroup label=G><option selected>y<option>z</optgroup></select><select size=0 multiple></select>`
 	f.Add([]byte(controls))
 	f.Add([]byte(controls[:len(controls)/2]))
+	widgets := `<style>.s{border:1px solid;accent-color:#ff0;color-scheme:dark;appearance:none;resize:none;height:40px}</style>` +
+		`<input type=checkbox checked><input type=radio disabled checked><input type=range min=9 max=1 step=0 value=x>` +
+		`<input type=color value=#12345><input type=file multiple><input type=date value=2026-02-30><input type=time value=25:61>` +
+		`<input type=datetime-local value=2026-11-22T13:45:30.123><input type=month value=0001-13><input type=week value=99999-W00>` +
+		`<progress value=-3 max=0></progress><meter min=5 max=1 low=9 high=-1 optimum=nan value=3></meter>` +
+		`<fieldset disabled><legend><button>b</button></legend><button class=s><p>c<span>d</span></button><select class=s><option>e</select></fieldset>`
+	f.Add([]byte(widgets))
+	f.Add([]byte(widgets[:len(widgets)/2]))
 	fsys := fstest.MapFS{
 		"s.css": {Data: []byte(`@import "s.css"; body { background: url(i.png) }`)},
 		"i.png": {Data: pngBytes(f, 3, 2)},

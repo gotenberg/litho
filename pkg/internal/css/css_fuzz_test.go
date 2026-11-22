@@ -27,6 +27,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("p { float: left; shape-outside: shape(evenodd from 0 0, curve by 5px 5px with 1px 0 / 2px 2px, arc to 10% 10% of 4px cw large rotate 9deg, hline to right, close) border-box; shape-margin: 5%; shape-image-threshold: 40% }"))
 	f.Add([]byte(fuzzFeatureValues))
 	f.Add([]byte(fuzzFeatureValues[:len(fuzzFeatureValues)/2]))
+	f.Add([]byte("input { appearance: menulist-button; -webkit-appearance: textfield; accent-color: light-dark(red, currentColor); resize: auto; align-content: unsafe center }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fetch := func(context.Context, string) ([]byte, string, error) { return data, "", nil }
 		s, err := Parse(context.Background(), data, ParseOptions{BaseURL: "https://e.com/s.css", Fetch: fetch})
