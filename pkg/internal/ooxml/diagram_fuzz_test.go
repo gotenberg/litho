@@ -2,6 +2,7 @@ package ooxml
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -35,6 +36,20 @@ func FuzzDiagram(f *testing.F) {
 	f.Add([]byte(diagramData(many...)), []byte(diagramLayout(blockList(`<dgm:param type="bkpt" val="bal"/>`))))
 	f.Add([]byte(diagramData("a", "b")), []byte(diagramLayout(`<dgm:alg type="snake"/><dgm:shape/><dgm:constrLst><dgm:constr type="sp" val="1e300"/>`+
 		`<dgm:constr type="h" for="ch" forName="node" val="0"/></dgm:constrLst>`+nodeList("rect", ""))))
+	// The hierarchy's numbers: an offset of 1e300 boxes, a negative bend,
+	// gaps of 1e300 millimetres, a box of no width, a chain as deep as a
+	// diagram nests and siblings past the steps of a layout.
+	org := []hierNode{{"M", -1, false}, {"E1", 0, false}, {"E2", 0, false}, {"A", 0, true}}
+	col := `<dgm:alg type="hierChild"><dgm:param type="chAlign" val="l"/><dgm:param type="linDir" val="fromT"/></dgm:alg>`
+	f.Add([]byte(hierData(org, true)), []byte(hierLayout(`<dgm:alg type="hierRoot"><dgm:param type="hierAlign" val="tL"/></dgm:alg>`, col,
+		`<dgm:constr type="alignOff" val="1e300"/><dgm:constr type="bendDist" val="-5"/>`)))
+	f.Add([]byte(hierData(org, true)), []byte(strings.Replace(hierLayout(`<dgm:alg type="hierRoot"/>`, `<dgm:alg type="hierChild"/>`, ``),
+		`fact="0.2"/></dgm:constrLst>`, `fact="0.2"/><dgm:constr type="sibSp" val="1e300"/><dgm:constr type="w" for="des" forName="comp" val="0"/></dgm:constrLst>`, 1)))
+	chain := make([]hierNode, 200)
+	for i := range chain {
+		chain[i] = hierNode{"n", i - 1, false}
+	}
+	f.Add([]byte(hierData(chain, false)), []byte(hierLayout(`<dgm:alg type="hierRoot"/>`, `<dgm:alg type="hierChild"/>`, ``)))
 	f.Fuzz(func(t *testing.T, data, layout []byte) {
 		dm, err := Parse(context.Background(), data, nil)
 		if err != nil {

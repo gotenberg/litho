@@ -99,7 +99,9 @@ func (e *engine) layoutShape(a *DiagramAtom, s *DiagramShape, cons []DiagramCons
 	case "cycle":
 		cycle(a, s)
 	case "hierChild", "hierRoot":
-		hierarchy(a, s)
+		if !e.hierDone[s] && !e.hierTree(a, s, cons) {
+			hierarchy(a, s)
+		}
 	case "lin":
 		e.linear(a, s, cons, rules)
 	case "pyra":

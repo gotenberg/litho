@@ -154,6 +154,10 @@ type engine struct {
 	rootAtom *DiagramAtom
 	// kidsByName holds [engine.presKids], nil until it is first read.
 	kidsByName map[string][]*DiagramPoint
+	// hierDone marks the shapes a hierarchy laid out whole (see
+	// [engine.hierTree]): the algorithms of the shapes it holds leave them
+	// where it put them.
+	hierDone map[*DiagramShape]bool
 }
 
 // walker is one walk of the layout definition: the current presentation
@@ -253,7 +257,7 @@ const maxFontLayouts = 3
 func (d *Diagram) layOut(w, h int64, fit DiagramTextFit, caps map[string]float64) (*DiagramShape, map[string]float64, map[string]float64) {
 	rootPt := d.root()
 	root := &DiagramShape{Group: true, W: w, H: h}
-	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: maps.Clone(caps), fontUsed: map[string]float64{}, lists: map[nodePoint]nodeLists{}, root: root, rootAtom: d.Layout}
+	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: maps.Clone(caps), fontUsed: map[string]float64{}, lists: map[nodePoint]nodeLists{}, root: root, rootAtom: d.Layout, hierDone: map[*DiagramShape]bool{}}
 	for _, c := range d.Connections {
 		e.children[[2]string{c.Src, c.Dest}] = true
 	}
