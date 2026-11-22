@@ -3,6 +3,7 @@ package numfmt
 import (
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -20,31 +21,45 @@ const hashText = "###"
 // value that does not fit is "###", with [Result.Hash] set. A fill is
 // left out of the measure. Under Excel's rules ([Format.Excel]) a General
 // number keeps as many characters as digits of the widest width fit the
-// cell, a point, sign or exponent counted as a digit (see excelGeneral).
+// cell, whether its text fits or not, a point or an exponent counted as a
+// digit and a minus sign at its own width (see excelGeneral).
 func (f *Format) Fit(v Value, width float64, measure func(string) float64) Result {
 	r := f.Apply(v)
 	if v.Kind == Text || measure == nil {
 		return r
 	}
-	if measure(r.Text) <= width {
+	x := v.Number
+	general := v.Kind == Number && f.standard && numeric.Finite(x)
+	// Excel narrows a General number by its characters, the text that
+	// fits by its width included ([Format.excelGeneral]).
+	if (!general || !f.excel) && measure(r.Text) <= width {
 		return r
 	}
-	x := v.Number
-	if v.Kind != Number || !f.standard || !numeric.Finite(x) {
+	if !general {
 		return f.hash(r)
 	}
 	maxDigit := 0.0
-	for c := '0'; c <= '9'; c++ {
-		maxDigit = max(maxDigit, measure(string(c)))
+	for _, d := range digitTexts {
+		maxDigit = max(maxDigit, measure(d))
 	}
 	if maxDigit <= 0 {
 		return f.hash(r)
 	}
 	w := width
-	s := narrowGeneral(x, digitCount(w, maxDigit))
 	if f.excel {
-		return f.excelGeneral(r, s, w, measure)
+		room := w
+		if math.Signbit(x) {
+			room -= measure("-")
+		}
+		n := min(digitCount(room, maxDigit), excelGeneralChars)
+		// The text Apply wrote holds at most excelGeneralChars; one that
+		// already keeps within n characters is what narrowing would write.
+		if utf8.RuneCountInString(r.Text)-strings.Count(r.Text, "-") <= n && measure(r.Text) <= w {
+			return r
+		}
+		return f.excelGeneral(r, excelNarrow(x, n), w, measure)
 	}
+	s := narrowGeneral(x, digitCount(w, maxDigit))
 	signs, dots, exps := strings.Count(s, "-"), strings.Count(s, "."), strings.Count(s, "E")
 	// A small value narrowed to "0" may still fit with the point counted
 	// at its own width (output2.cxx, #i112250).
@@ -67,15 +82,26 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	return r
 }
 
+// digitTexts are the ten digits, each a string of its own written once.
+var digitTexts = [10]string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+
 // excelGeneral returns r showing s, a General number narrowed to as many
-// characters as digits fit the cell, "###" when s does not fit width:
-// Excel counts each character of a narrowed General number as a digit,
-// where Calc counts a point, a sign and an exponent at their own widths.
+// characters as digits fit the cell ([excelNarrow]), a minus sign's room
+// taken first, "###" when s does not fit width: Excel counts each
+// character of a narrowed General number but the sign as a digit, where
+// Calc counts a point, a sign and an exponent at their own widths.
 //
 // # Corpus evidence
 //
 //   - libreoffice/xlsx: sc/escape-unicode prints 1161014163 as 1.16E+09 in
 //     a column of the default width, where Calc fits 1.161E+09.
+//   - litho/xlsx: large_numbers_general, in a column of 8.43 characters,
+//     prints 12345678901 as 1.2E+10 and 0.000123456789 as 0.00012, seven
+//     characters, and -1234567.891 as -1234568, seven and the sign, where
+//     1.23E+10 is narrower than -1234568.
+//   - libreoffice/xlsx: sc/Sparklines.xlsx prints 2.684713 whole and
+//     -6.105228 as -6.10523 in one column: eight characters, or seven
+//     and the sign.
 func (f *Format) excelGeneral(r Result, s string, w float64, measure func(string) float64) Result {
 	if loc := f.sections[0].loc; loc != nil {
 		s = strings.Replace(s, ".", loc.decimal, 1)
@@ -109,6 +135,56 @@ func (f *Format) hash(r Result) Result {
 		r.Text, r.Fill = "", '#'
 	}
 	return r
+}
+
+// excelGeneralChars is how many characters Excel's General format shows a
+// number in at most, a minus sign aside: a number that needs more is
+// rounded, or written in scientific notation (ECMA-376 Part 1, 18.8.30
+// numFmt leaves General to the application).
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: large_numbers_general, in a column 30 characters wide,
+//     prints 12345678901 whole, 123456789012345 as 1.23457E+14,
+//     0.000123456789 as 0.000123457, 0.3333333333333333 as 0.333333333,
+//     2.2250738585072014E-308 as 2.2251E-308, -1234567.891 whole,
+//     100000000000 and 99999999999.5 as 1E+11, 1E+16 as 1E+16.
+const excelGeneralChars = 11
+
+// excelLowerBound is the magnitude below which Excel's General format
+// prefers scientific notation, where Calc's is [expLowerBound].
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: large_numbers_general prints 0.00001 as 0.00001 in
+//     columns of 8.43, 14 and 30 characters, where Calc writes 1E-05.
+const excelLowerBound = 1e-5
+
+// excelNarrow returns x in Excel's General format in at most n
+// characters, a minus sign aside: the characters of [narrowGeneral] with
+// fixed point down to [excelLowerBound].
+func excelNarrow(x float64, n int) string {
+	if x == 0 || !numeric.Finite(x) {
+		return generalString(x)
+	}
+	a := math.Abs(x)
+	var s string
+	// A number Calc's standard format writes in fixed point within n
+	// characters is written alike: no digit it keeps rounds away.
+	if g := generalString(a); a >= excelLowerBound && len(g) <= n && !strings.ContainsAny(g, "Ee") {
+		s = g
+	} else if a < excelLowerBound || a >= expLowerBound {
+		s = narrowGeneral(a, n)
+	} else {
+		s = formatFloat(a, fmtF, max(n-2, 0), true)
+		if len(s) > n || strings.Trim(s, "0.") == "" {
+			s = narrowScientific(a, n)
+		}
+	}
+	if math.Signbit(x) && strings.Trim(s, "0.") != "" {
+		s = "-" + s
+	}
+	return s
 }
 
 // narrowGeneral returns x in the General format in at most n characters

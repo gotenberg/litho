@@ -217,8 +217,8 @@ func TestFit_General(t *testing.T) {
 }
 
 // TestFit_ExcelGeneral checks that under Excel's rules a General number
-// is narrowed to as many characters as digits fit, a point, sign or
-// exponent counted as a digit.
+// is narrowed to as many characters as digits fit, a point or an exponent
+// counted as a digit and a minus sign at its own width.
 func TestFit_ExcelGeneral(t *testing.T) {
 	w := map[rune]float64{'.': 2.78, '-': 3.33, 'E': 6.67, '+': 5.84}
 	measure := func(s string) float64 {
@@ -240,7 +240,14 @@ func TestFit_ExcelGeneral(t *testing.T) {
 		{1161014163, 45, "1.16E+09"},
 		{123456789, 48, "1.23E+08"},
 		{1234.5678, 38, "1234.6"},
-		{-98765.4321, 48, "-98765.4"},
+		{-98765.4321, 48, "-98765.43"},
+		{-1234567.891, 44, "-1234568"},
+		{12345678901, 44, "1.2E+10"},
+		{0.000123456789, 44, "0.00012"},
+		{0.00001, 44, "0.00001"},
+		// The sign's room comes first.
+		{2.684713, 46, "2.684713"},
+		{-6.105228, 46, "-6.10523"},
 		// Excel fills a cell it cannot fit with "#" (Result.Fill).
 		{123456789, 28, ""},
 	}
@@ -249,6 +256,45 @@ func TestFit_ExcelGeneral(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("Fit(%v, %v) = %q, want %q", tt.v, tt.width, got, tt.want)
 		}
+	}
+}
+
+// TestApply_ExcelGeneral checks that Excel's General format shows a
+// number in at most 11 characters, a minus sign aside, in fixed point
+// down to 0.00001.
+func TestApply_ExcelGeneral(t *testing.T) {
+	tests := []struct {
+		v    float64
+		want string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{12345678901, "12345678901"},
+		{-12345678901, "-12345678901"},
+		{123456789012, "1.23457E+11"},
+		{123456789012345, "1.23457E+14"},
+		{1e15, "1E+15"},
+		{1e16, "1E+16"},
+		{1e308, "1E+308"},
+		{100000000000, "1E+11"},
+		{99999999999.5, "1E+11"},
+		{0.000123456789, "0.000123457"},
+		{0.00001, "0.00001"},
+		{0.0000012345, "1.2345E-06"},
+		{2.2250738585072014e-308, "2.2251E-308"},
+		{-1234567.891, "-1234567.891"},
+		{0.30000000000000004, "0.3"},
+		{1.0 / 3, "0.333333333"},
+		{-2.0 / 3, "-0.666666667"},
+	}
+	for _, tt := range tests {
+		if got := General.Excel().Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("Apply(%v) = %q, want %q", tt.v, got, tt.want)
+		}
+	}
+	// Calc's standard format keeps 15 digits.
+	if got := General.Apply(Value{Kind: Number, Number: 123456789012345}).Text; got != "123456789012345" {
+		t.Errorf("Calc's General = %q", got)
 	}
 }
 

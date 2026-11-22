@@ -422,7 +422,12 @@ func (s *section) general(x float64, first bool) Result {
 			percents++
 		}
 	}
-	g := generalString(x)
+	var g string
+	if s.excel {
+		g = excelNarrow(x, excelGeneralChars)
+	} else {
+		g = generalString(x)
+	}
 	if s.loc != nil {
 		g = strings.Replace(g, ".", s.loc.decimal, 1)
 	}
