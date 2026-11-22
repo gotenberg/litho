@@ -696,6 +696,11 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.WriterLines = parent.WriterLines
 	st.TextScale = parent.TextScale
 	st.Direction = parent.Direction
+	// writing-mode and text-orientation are inherited (CSS Writing Modes
+	// 4, 3.1 and 5.1): the text of an anonymous block stands in its line as
+	// its parent's does.
+	st.WritingMode = parent.WritingMode
+	st.TextOrientation = parent.TextOrientation
 	st.ListStyleType = parent.ListStyleType
 	st.ListStylePosition = parent.ListStylePosition
 	st.ListStyleImage = parent.ListStyleImage

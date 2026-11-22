@@ -436,3 +436,25 @@ func TestVerticalLine_EmphasisMarksBesideTheirCharacters(t *testing.T) {
 		}
 	}
 }
+
+// TestVerticalLine_RubyStandsUpright locks a ruby base and its annotation
+// in a vertical line: both set upright as the line's text (writing-mode
+// and text-orientation inherit into the anonymous boxes of a ruby column,
+// CSS Writing Modes 4, 3.1 and 5.1), the annotation on the over side,
+// centred along its base.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets each glyph of
+//     the table below where it has it in vertical-rl, the annotation 20 px
+//     across where litho sets it at 19.54.
+func TestVerticalLine_RubyStandsUpright(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"vertical-rl"} {
+		gs := verticalLine(t, mode, `font: 16px 'Noto Sans CJK JP'`, `<ruby>漢<rt>かん</rt></ruby>字`)
+		wantOrigins(t, mode, gs[:2], "漢 4,24.08", "字 4,40.08")
+		if len(gs) < 4 || math.Abs(gs[2].x-20) > 1 || math.Abs(gs[2].y-17.04) > 0.5 || math.Abs(gs[3].y-25.04) > 0.5 {
+			t.Errorf("%s: annotation %v, want か 20,17.04 and ん 20,25.04", mode, gs[2:])
+		}
+	}
+}
