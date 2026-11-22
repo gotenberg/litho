@@ -975,6 +975,9 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	}
 	st.Color = textColor(rs.Color)
 	st.TextDecorationColor = st.Color
+	if rs.Highlight.A > 0 {
+		st.BackgroundColor = rs.Highlight
+	}
 	st.TextEffects = b.textEffects(rs)
 	st.TextPaint = b.textPaint(rs)
 	// PowerPoint draws emoji in Segoe UI Emoji, at its advances, and

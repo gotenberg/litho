@@ -760,6 +760,10 @@ type RunStyle struct {
 	DoubleStrike   bool
 	// Color is the text colour, black when zero.
 	Color css.Color
+	// Highlight paints the run's text box behind its glyphs, the zero
+	// colour painting nothing (ECMA-376 Part 1, 21.1.2.3.9 rPr holding
+	// highlight).
+	Highlight css.Color
 	// Spacing is the extra space between characters in points.
 	Spacing float64
 	// Script raises or lowers the text, Baseline for neither; Rise is the

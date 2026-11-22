@@ -247,3 +247,23 @@ func TestText_OfficeEmoji(t *testing.T) {
 		t.Errorf("B moves %.2f points further under PowerPoint's rules, want %.2f", got, want)
 	}
 }
+
+// TestText_Highlight checks that a highlighted run paints its text box
+// in the highlight's colour behind its glyphs.
+func TestText_Highlight(t *testing.T) {
+	green := css.Color{G: 1, A: 1}
+	st := arial(18)
+	st.Highlight = green
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(0, 0, 300, 100, para("Test", st))}}), office.Options{}).Pages[0]
+	var pp []placedPath
+	paths(pg.Content, typeset.Identity, &pp)
+	for _, p := range pp {
+		if p.p.Fill != nil && p.p.Fill.Color == colorOf(green) {
+			if b := p.bounds(); b.Height < 18 || b.Height > 22 || b.Width < 30 || b.Width > 40 {
+				t.Errorf("highlight %+v, want about 35 by 20", b)
+			}
+			return
+		}
+	}
+	t.Errorf("no green fill among %d paths", len(pp))
+}

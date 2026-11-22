@@ -463,3 +463,19 @@ func TestOuterShadow_RotWithShape(t *testing.T) {
 		}
 	}
 }
+
+// TestText_Highlight checks that a run's highlight is read, and a run
+// without one has none.
+func TestText_Highlight(t *testing.T) {
+	t.Parallel()
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{
+		tree: textBox("TB", 0, 0, 1, 1, `<a:bodyPr/><a:p><a:r><a:rPr><a:highlight><a:srgbClr val="00FF00"/></a:highlight></a:rPr><a:t>x</a:t></a:r><a:r><a:t>y</a:t></a:r></a:p>`),
+	}}})
+	runs := doc.Slides[0].Shapes[0].Text.Paragraphs[0].Runs
+	if h := runs[0].Style.Highlight; !sameColor(h, rgb(0x00FF00)) {
+		t.Errorf("highlight %+v, want green", h)
+	}
+	if h := runs[1].Style.Highlight; h.A != 0 {
+		t.Errorf("highlight %+v, want none", h)
+	}
+}

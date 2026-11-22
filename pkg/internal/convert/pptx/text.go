@@ -666,12 +666,15 @@ func hasText(runs []slides.Run) bool {
 
 // runStyle resolves a run's properties along c (21.1.2.3.9 rPr): faces
 // with theme fonts resolved, size, weight, slant, underline, strike,
-// spacing, capitals, baseline, colour, language and the effects drawn
-// from its glyphs ([reader.textEffects]).
+// spacing, capitals, baseline, colour, highlight, language and the
+// effects drawn from its glyphs ([reader.textEffects]).
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/tdf118776's text of noFill prints nothing.
+//   - libreoffice/pptx: sd/tdf127129.pptx prints its highlighted 18-point
+//     Arial run over a green box 20.18 points tall, the face's ascent and
+//     descent, as wide as the run.
 func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	s := slides.RunStyle{Size: defaultTextSize}
 	seen := map[string]bool{}
@@ -756,6 +759,11 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 		}
 	} else if col, ok := sc.resolver(nil)("tx1"); ok {
 		s.Color = col
+	}
+	if h := c.child("highlight"); h != nil {
+		if col, ok := sc.color(h, nil); ok {
+			s.Highlight = col
+		}
 	}
 	if v, ok := c.attr("lang"); ok {
 		s.Lang = v
