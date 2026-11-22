@@ -130,6 +130,7 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte("<p id=a>x</p>\x00#a { width: min(100%, round(10em, 3vi)); margin: mod(5%, 3%) calc(1px / 0); font-size: clamp(1rem, 2cap, 3ric) }"))
 	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS))
 	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS[:len(fuzzAnchorCSS)/2]))
+	f.Add([]byte("<html><frameset id=a cols='1*,2*' rows=50%,* border=9 bordercolor=red><frame><frameset cols=x frameborder=no><frame></frameset><frame><frame><frame></frameset>\x00frame { box-shadow: none }"))
 	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS))
 	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS[:len(fuzzAnimationCSS)/2]))
 	f.Fuzz(func(t *testing.T, data []byte) {

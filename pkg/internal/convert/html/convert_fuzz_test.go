@@ -30,6 +30,12 @@ func FuzzConvert(f *testing.F) {
 		`h1{string-set:t content() counter(c) content(first-letter)}.n{float:footnote;footnote-display:inline}` +
 		`header{position:running(h)}p::after{content:leader('. ') counter(c)}a{&:hover{color:red}& b{x:y}}</style>` +
 		`<header>H</header><h1>T</h1><p>a<span class=n>note</span> b<span class=n>two</span></p>`))
+	controls := `<style>#m{offset:url(#p) 40%}#n{offset:url(#m) 10%}textarea{field-sizing:fixed}</style>` +
+		`<svg width=0 height=0><path id=p d="M0 0 L9 9 Z"/></svg><div id=m>m</div><div id=n>n</div>` +
+		`<input size=3><input size=-1 value=x><textarea cols=2 rows=1>a\nb\nc</textarea><select><option>a<optgroup label=g><option>bb</select>` +
+		`<select multiple size=2><option selected>x<optgroup label=G><option selected>y<option>z</optgroup></select><select size=0 multiple></select>`
+	f.Add([]byte(controls))
+	f.Add([]byte(controls[:len(controls)/2]))
 	fsys := fstest.MapFS{
 		"s.css": {Data: []byte(`@import "s.css"; body { background: url(i.png) }`)},
 		"i.png": {Data: pngBytes(f, 3, 2)},
