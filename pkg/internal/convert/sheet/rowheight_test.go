@@ -104,16 +104,19 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 		{Index: 3, Height: 116 * excelPixel, CustomHeight: true, Cells: []Cell{textCell(0, "custom", c14)}},
 		// Text smaller than the Normal font keeps the default row.
 		{Index: 4, Cells: []Cell{textCell(0, "small", &Style{Font: Font{Families: []string{"Carlito"}, Size: 8}})}},
-	}}
+		// A cell without a format is measured in the Normal font, whatever
+		// its column's.
+		{Index: 5, Cells: []Cell{textCell(2, "unformatted", nil)}},
+	}, Columns: []Column{{First: 2, Last: 2, Style: c14}}}
 	for _, fit := range []bool{false, true} {
 		doc := excelDoc(sh)
 		doc.StandardScreenRow, doc.FitRows = 20, fit
 		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 		g := newGrid(t.Context(), doc, sh)
 		b.heightsOf(t, g)
-		want := []float64{121, 116, 121, 116, 121}
+		want := []float64{121, 116, 121, 116, 121, 121}
 		if fit {
-			want = []float64{151, 121, 151, 116, 121}
+			want = []float64{151, 121, 151, 116, 121, 121}
 		}
 		for r, w := range want {
 			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {

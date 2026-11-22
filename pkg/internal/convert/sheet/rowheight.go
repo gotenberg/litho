@@ -73,7 +73,7 @@ func (b *builder) optimalHeights(g *grid) error {
 			if !hasContent(c) {
 				if fit && c.Style != nil {
 					// An empty cell's font counts when Excel measures a row.
-					need = max(need, b.screenFit(resolveFont(g.style(ri, c.Column, c).Font, b.doc.Default.Font)))
+					need = max(need, b.screenFit(b.measuredFont(g, ri, c)))
 				}
 				continue
 			}
@@ -156,7 +156,7 @@ func (b *builder) optimalHeights(g *grid) error {
 // cell c of row ri: the tallest of its font's and its runs' fonts'
 // ([builder.screenFit]).
 func (b *builder) cellScreenFit(g *grid, ri int, c *Cell) float64 {
-	f := resolveFont(g.style(ri, c.Column, c).Font, b.doc.Default.Font)
+	f := b.measuredFont(g, ri, c)
 	h := b.screenFit(f)
 	for _, r := range c.Runs {
 		if r.Font != nil {
@@ -164,6 +164,24 @@ func (b *builder) cellScreenFit(g *grid, ri int, c *Cell) float64 {
 		}
 	}
 	return h
+}
+
+// measuredFont returns the font Excel measures the cell c of row ri in:
+// its own format's, the Default font's for a cell without one, which
+// Excel reads as the first cell format whatever its row's or column's
+// (ECMA-376 Part 1, 18.3.1.4 c s, default 0).
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/orderOfCNumFmtElements.xlsx, in an Arial Cyr
+//     10 book, prints its rows of cells without a format under columns
+//     formatted in Calibri 11 103 printer pixels tall, Arial 10's standard
+//     row.
+func (b *builder) measuredFont(g *grid, ri int, c *Cell) font {
+	if c.Style == nil {
+		return resolveFont(Font{}, b.doc.Default.Font)
+	}
+	return resolveFont(g.style(ri, c.Column, c).Font, b.doc.Default.Font)
 }
 
 // screenFit returns the height, in points, Excel gives a row it measures
@@ -227,7 +245,7 @@ func (b *builder) excelDrops(g *grid) {
 			budget--
 			// A script counts at its full size, the size its baseline is
 			// set from ([pageBuilder.excelScriptShift]).
-			f := resolveFont(g.style(ri, c.Column, c).Font, b.doc.Default.Font)
+			f := b.measuredFont(g, ri, c)
 			f.excel, f.script = true, Baseline
 			deep = max(deep, b.m.descent(f)+b.m.lineGap(f))
 			for _, r := range c.Runs {
