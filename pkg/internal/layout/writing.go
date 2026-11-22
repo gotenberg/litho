@@ -539,19 +539,17 @@ func (e *engine) uprightShift(ascent, descent, emAscent, emDescent float64) floa
 	return float64((descent-ascent)/2) - float64((emDescent-emAscent)/2)
 }
 
-// mirrorRun reflects the glyph run t of the box b, laid out in a
-// transposed flow ([transposed]), across its central baseline: each glyph
-// is reflected about it, and drawn reflected, so that the page's
-// reflection draws it as the vertical-lr line sets it, its top on the
-// line's over side, the right (CSS Writing Modes 4, 4.2), its em box
-// where it was. The glyph slice is copied: the run is shared with the
-// line.
-func (e *engine) mirrorRun(t *typeset.Text, b *box) {
-	m := e.faceMetrics(b.st, b.lang)
-	twice := m.EmDescent - m.EmAscent
+// mirrorRun reflects the glyph run t, laid out in a transposed flow
+// ([transposed]) on a line turned over across its middle
+// ([inlineState.overRight]), across its baseline: each glyph is reflected
+// about it, and drawn reflected, so that the page's reflection draws it as
+// the vertical-lr line sets it, its top on the line's over side, the right
+// (CSS Writing Modes 4, 4.2). The glyph slice is copied: the run is shared
+// with the line.
+func mirrorRun(t *typeset.Text) {
 	glyphs := make([]typeset.Glyph, len(t.Glyphs))
 	for i, g := range t.Glyphs {
-		g.Y = twice - g.Y
+		g.Y = -g.Y
 		glyphs[i] = g
 	}
 	t.Glyphs, t.Mirror = glyphs, true

@@ -1024,6 +1024,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				first = false
 			}
 			l.y = top
+			s.overRight(l)
 			s.settle(l)
 			if !paraFirst && l.changeHead {
 				// The line before one a change opens draws a bar too.
@@ -2370,6 +2371,43 @@ func lineAlign(st *css.Style, last bool) css.TextAlign {
 	case css.AlignStart, css.AlignEnd, css.AlignLeft, css.AlignRight, css.AlignCenter, css.AlignJustify:
 	}
 	return st.TextAlignLast
+}
+
+// overRight turns the line l of a vertical-lr flow over across its
+// middle, so that its over side, laid out at the top of the turned flow,
+// lies on the right of the page as on every vertical line (CSS Writing
+// Modes 4, 4.1: line-over is the right in vertical-rl and vertical-lr
+// alike). The page reflects a vertical-lr flow across its diagonal
+// ([transposed]), which puts the top of a line on the left: each item's
+// baseline, extent and box fragment are reflected across the line's
+// middle here, and its glyph runs across their baseline when painted
+// ([mirrorRun]) and its decorations across theirs ([painter.decoGeom]).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws a line of
+//     vertical-lr as the same line of vertical-rl, pixel for pixel, with
+//     an underline, an overline, emphasis marks, an inline box with
+//     padding and border, an inline block, ruby, a span of another face
+//     and raised and lowered boxes.
+func (s *inlineState) overRight(l *lineBox) {
+	if !transposed(s.e.frameOf(s.root)) {
+		return
+	}
+	l.baseline = l.h - l.baseline
+	for _, it := range l.items {
+		it.baseline = l.h - it.baseline
+		it.ascent, it.descent = it.descent, it.ascent
+		if it.text != nil {
+			it.text.Origin.Y = it.baseline
+		}
+	}
+	for _, f := range l.frags {
+		v := s.vboxOf(f.box)
+		above, below := f.base-v.ca-f.top, f.bottom-f.base-v.cd
+		f.base = l.h - f.base
+		f.top, f.bottom = f.base-v.cd-above, f.base+v.ca+below
+	}
 }
 
 // settle moves the atomic inlines of l, placed at l.y, to their place.

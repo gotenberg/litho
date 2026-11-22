@@ -158,6 +158,7 @@ func (s *inlineState) remark(cl *clampLine, mark string) {
 		return
 	}
 	s.align(nl, cl.indent, true)
+	s.overRight(nl)
 	// The line keeps its place and height; its content keeps its
 	// baseline.
 	d := l.baseline - nl.baseline

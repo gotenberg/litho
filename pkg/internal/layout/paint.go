@@ -1860,7 +1860,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	}
 	c.Parent = it.box.elem
 	if transposed(p.e.frameOf(it.box)) {
-		p.e.mirrorRun(&c, it.box)
+		mirrorRun(&c)
 	}
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
 	if !p.textPaint(it, l, page, &c, top, bottom) && !p.strokeText(it, l, page, &c, top, bottom) && c.Color.A > 0 {
@@ -1984,6 +1984,25 @@ type decoGeom struct {
 // decoGeom returns where decoration d draws on item it of line l, false
 // when it draws nothing.
 func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (decoGeom, bool) {
+	if transposed(p.e.frameOf(it.box)) {
+		// The line is turned over across its middle (overRight): each
+		// line is placed as on the line before the turn, then reflected
+		// across the baseline it is measured from.
+		u := *it
+		u.ascent, u.descent = it.descent, it.ascent
+		g, ok := p.flatDecoGeom(&u, l, d, sh)
+		under := decoBaseline(it, l, d)
+		g.y[0] = float64(2*under) - g.y[0] - g.thick
+		g.y[1] = float64(2*it.baseline) - g.y[1] - g.thick
+		g.y[2] = float64(2*it.baseline) - g.y[2] - g.thick
+		return g, ok
+	}
+	return p.flatDecoGeom(it, l, d, sh)
+}
+
+// flatDecoGeom returns where decoration d draws on item it of line l,
+// over side up, false when it draws nothing.
+func (p *painter) flatDecoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (decoGeom, bool) {
 	var g decoGeom
 	col, ok := colorOf(d.color)
 	if sh != nil {

@@ -103,7 +103,7 @@ func wantOrigins(t *testing.T, name string, got []glyphOrigin, want ...string) {
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets each glyph
 //     of the table below where it has it, to the hundredth of a pixel, in
-//     vertical-rl.
+//     vertical-rl and vertical-lr alike.
 func TestVerticalLine_UprightGlyphsOnTheCentralBaseline(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -118,7 +118,7 @@ func TestVerticalLine_UprightGlyphsOnTheCentralBaseline(t *testing.T) {
 		{"DejaVu Sans falling back, 23px", `font: 23px 'DejaVu Sans'`, `縦Ag`, []string{"縦 7.5,30.24", "A 9,33"}},
 		{"a span of another face", `font: 16px 'Noto Sans CJK JP'`, `縦<span style="font: 24px 'Liberation Serif'">Ag縦</span>書`, []string{"縦 9,24.08", "A 9,26", "縦 7.5,76.45", "書 9,93.42"}},
 	} {
-		for _, mode := range []string{"vertical-rl"} {
+		for _, mode := range []string{"vertical-rl", "vertical-lr"} {
 			gs := verticalLine(t, mode, c.css, c.html)
 			// A sideways run is one glyph a character; keep its first.
 			var first []glyphOrigin
@@ -131,4 +131,47 @@ func TestVerticalLine_UprightGlyphsOnTheCentralBaseline(t *testing.T) {
 			wantOrigins(t, c.name+", "+mode, first, c.want...)
 		}
 	}
+}
+
+// TestVerticalLine_LROverSideOnTheRight locks the over side of a
+// vertical-lr line on the right, as on a vertical-rl line (CSS Writing
+// Modes 4, 4.1): its lines stack from the left, and each sets its glyphs,
+// its decorations and its inline boxes as the vertical-rl line does.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws a line of
+//     vertical-lr as the same line of vertical-rl, pixel for pixel, and
+//     sets the lines of a vertical-lr paragraph of Liberation Serif and
+//     Noto Sans CJK JP, 15 px at line-height 1.6, 24 px apart from the
+//     left, the first one's upright glyphs at 6 px.
+func TestVerticalLine_LROverSideOnTheRight(t *testing.T) {
+	t.Parallel()
+	const css = `font: 15px/1.6 'Liberation Serif'; line-height: 1.6`
+	gs := verticalLine(t, "vertical-lr", css, `縦<br>書<br>き`)
+	wantOrigins(t, "lines", gs, "縦 6,23.2", "書 30,23.2", "き 54,23.2")
+	const deco = `font: 16px 'Noto Sans CJK JP'`
+	for _, html := range []string{
+		`<span style="text-decoration: underline red">縦書</span>`,
+		`<span style="text-decoration: overline red">縦書</span>`,
+		`縦<span style="background: blue; padding-left: 3px; border-right: 4px solid red">書</span>`,
+	} {
+		rl, lr := verticalPaths(t, "vertical-rl", deco, html), verticalPaths(t, "vertical-lr", deco, html)
+		if rl != lr {
+			t.Errorf("%s: vertical-lr paints %s, vertical-rl %s", html, lr, rl)
+		}
+	}
+}
+
+// verticalPaths converts one line as verticalLine does and returns the
+// boxes of its filled paths, in pixels.
+func verticalPaths(t *testing.T, mode, css, html string) string {
+	t.Helper()
+	src := `<!DOCTYPE html><meta charset=utf-8><style>@page { size: 400px 300px; margin: 0 } html, body { margin: 0 }
+		.v { writing-mode: ` + mode + `; position: absolute; left: 10px; top: 10px; height: 200px; ` + css + ` }</style><div class=v>` + html + `</div>`
+	doc, err := Convert(context.Background(), strings.NewReader(src), gotenbergFonts(t), Options{PreferCSSPageSize: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprint(pxBoxes(doc)[0])
 }
