@@ -354,3 +354,40 @@ func TestHTMLHints_Frameset(t *testing.T) {
 		t.Errorf("frame = %+v by %+v", f1.Width, f1.Height)
 	}
 }
+
+// The border between the cells of a frameset is edged as Blink edges it: a
+// pixel of #aaaaaa against the cell before, one of black against the cell
+// after, on borders of 3 pixels or more; its fill is the bordercolor when
+// one is given.
+func TestHTMLHints_FramesetEdges(t *testing.T) {
+	t.Parallel()
+	light, dark := rgb(0xaa, 0xaa, 0xaa), rgb(0, 0, 0)
+	c := compute(t, `<html><frameset id=fs cols="1*,2*" rows="1*,1*" bordercolor="red"><frame id=a><frame id=b><frame id=c><frameset id=d><frame id=e></frameset><frame id=past></frameset></html>`, ``)
+	want := map[string][]Shadow{
+		"a":    {{X: 0.75, Color: light}, {Y: 0.75, Color: light}},
+		"b":    {{Y: 0.75, Color: light}, {X: -0.75, Color: dark}},
+		"c":    {{X: 0.75, Color: light}, {Y: -0.75, Color: dark}},
+		"d":    {{X: -0.75, Color: dark}, {Y: -0.75, Color: dark}},
+		"e":    nil,
+		"past": nil,
+	}
+	for id, w := range want {
+		got := c.of(id).BoxShadow
+		if len(got) != len(w) {
+			t.Errorf("#%s: shadows %+v, want %+v", id, got, w)
+			continue
+		}
+		for i := range w {
+			if got[i].X != w[i].X || got[i].Y != w[i].Y || got[i].Blur != 0 || got[i].Spread != 0 || got[i].Inset || !colorEq(got[i].Color, w[i].Color) {
+				t.Errorf("#%s: shadow %d %+v, want %+v", id, i, got[i], w[i])
+			}
+		}
+	}
+	if fs := c.of("fs"); !colorEq(fs.BackgroundColor, rgb(0xff, 0, 0)) {
+		t.Errorf("frameset fill %v, want the bordercolor", fs.BackgroundColor)
+	}
+	thin := compute(t, `<html><frameset cols="1*,1*" border=2><frame id=a><frame id=b></frameset></html>`, ``)
+	if got := thin.of("a").BoxShadow; len(got) != 0 {
+		t.Errorf("2 pixel border: shadows %+v, want none", got)
+	}
+}

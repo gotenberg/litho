@@ -56,6 +56,7 @@ func HTMLHints(n *html.Node) []Declaration {
 	switch n.Data {
 	case "frameset":
 		h.frameset(n)
+		h.frameEdges(n)
 	case "frame":
 		if p := n.Parent; p != nil && isHTML(p, "frameset") {
 			// A frame fills its cell of the frameset's grid (HTML
@@ -64,6 +65,7 @@ func HTMLHints(n *html.Node) []Declaration {
 			h.add("width", "100%")
 			h.add("height", "100%")
 			h.add("background-color", "white")
+			h.frameEdges(n)
 		}
 	case "body":
 		h.color(n, "bgcolor", "background-color")
@@ -637,24 +639,19 @@ func nonNegativeInt(s string) (int, bool) {
 // weight, a weight of zero being one. A border is as wide as the border
 // attribute, 6 pixels without one as in Blink, gray (#d0d0d0, Blink's
 // fill of a frame border); none where the frameset's frameborder
-// attribute says no.
+// attribute says no, filled with the colour of its bordercolor attribute
+// when it has one, as Blink fills it.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a
 //     frameset of cols="40%,60%" over the page area of A4, its two frames
 //     285 and 429 pixels wide either side of a 6 pixel border filled with
-//     #d0d0d0, edged in #aaaaaa and black.
+//     #d0d0d0, edged in #aaaaaa and black; a border of border="8"
+//     bordercolor="red" filled with red; framespacing="20" changes
+//     nothing.
 func (h *hints) frameset(n *html.Node) {
-	border := 6
-	if v, ok := attr(n, "border"); ok {
-		if px, ok := nonNegativeInt(v); ok {
-			border = px
-		}
-	}
-	if v, ok := attr(n, "frameborder"); ok && !framesetBorder(v) {
-		border = 0
-	}
+	border := framesetBorderWidth(n)
 	h.add("display", "grid")
 	if p := n.Parent; p == nil || !isHTML(p, "frameset") {
 		h.add("height", "100vh")
@@ -666,6 +663,81 @@ func (h *hints) frameset(n *html.Node) {
 	if border > 0 {
 		h.add("gap", fmt.Sprintf("%dpx", border))
 		h.add("background-color", "#d0d0d0")
+		h.color(n, "bordercolor", "background-color")
+	}
+}
+
+// framesetBorderWidth returns the width in pixels of the borders between
+// the cells of the frameset n: its border attribute, 6 without one as in
+// Blink, 0 where its frameborder attribute says no.
+func framesetBorderWidth(n *html.Node) int {
+	border := 6
+	if v, ok := attr(n, "border"); ok {
+		if px, ok := nonNegativeInt(v); ok {
+			border = px
+		}
+	}
+	if v, ok := attr(n, "frameborder"); ok && !framesetBorder(v) {
+		border = 0
+	}
+	return border
+}
+
+// minEdgedFrameBorder is the narrowest frameset border Blink edges: one
+// pixel of each edge colour and one of fill.
+const minEdgedFrameBorder = 3
+
+// frameEdges edges the borders around the cell of n, a frame or a frameset
+// in a frameset, as Blink draws a frameset's borders: a border of 3 pixels
+// or more is edged in #aaaaaa on the side of the cell before it and in
+// black on the side of the cell after it, a pixel each over its fill; a
+// narrower one is fill alone. The cells fill the grid row by row (HTML
+// Standard, 15.6, step 7). Each edge is an outer box-shadow of the cell,
+// a pixel off one of its sides, which paints outside its border box
+// alone (CSS Backgrounds 3, 7.1.1). A cell past the grid's has none.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints the 6, 8
+//     and 10 pixel borders of a frameset's columns and rows, nested
+//     framesets included, as a pixel of #aaaaaa against the cell before,
+//     the fill, and a pixel of black against the cell after; borders of
+//     1 and 2 pixels as fill alone, one of 3 pixels as one pixel of each.
+//     A frame of frameborder="0" beside one without keeps the edged
+//     border between them.
+func (h *hints) frameEdges(n *html.Node) {
+	p := n.Parent
+	if p == nil || !isHTML(p, "frameset") || framesetBorderWidth(p) < minEdgedFrameBorder {
+		return
+	}
+	colsAttr, _ := attr(p, "cols")
+	rowsAttr, _ := attr(p, "rows")
+	cols, rows := len(strings.Fields(frameTracks(colsAttr))), len(strings.Fields(frameTracks(rowsAttr)))
+	i := 0
+	for c := p.FirstChild; c != nil && c != n; c = c.NextSibling {
+		if isHTML(c, "frame") || isHTML(c, "frameset") {
+			i++
+		}
+	}
+	if i >= cols*rows {
+		return
+	}
+	col, row := i%cols, i/cols
+	var shadows []string
+	if col+1 < cols {
+		shadows = append(shadows, "1px 0 #aaaaaa")
+	}
+	if row+1 < rows {
+		shadows = append(shadows, "0 1px #aaaaaa")
+	}
+	if col > 0 {
+		shadows = append(shadows, "-1px 0 black")
+	}
+	if row > 0 {
+		shadows = append(shadows, "0 -1px black")
+	}
+	if len(shadows) > 0 {
+		h.add("box-shadow", strings.Join(shadows, ", "))
 	}
 }
 
