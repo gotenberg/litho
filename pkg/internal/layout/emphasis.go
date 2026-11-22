@@ -71,6 +71,16 @@ func (s *inlineState) emphasisExtent(it *lineItem) (float64, bool, bool) {
 	if m == nil {
 		return 0, false, false
 	}
+	if it.text.Upright {
+		// Upright glyphs stand on the central line of their face's
+		// ascent and descent (uprightShift): the marks sit against their
+		// em box, half the font size either side of it.
+		half, rise := float64(it.text.Size/2), float64((it.ascent-it.descent)/2)
+		if it.box.st.TextEmphasisPosition == css.EmphasisUnder {
+			return half - rise + m.emAscent + m.emDescent, false, true
+		}
+		return half + rise + m.emAscent + m.emDescent, true, true
+	}
 	em := s.e.faceMetrics(it.box.st, it.box.lang)
 	if it.box.st.TextEmphasisPosition == css.EmphasisUnder {
 		return em.EmDescent + m.emAscent + m.emDescent, false, true
@@ -98,6 +108,12 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		base = it.baseline + em.EmDescent + m.emAscent
 	}
 	hs := hscale(t)
+	// An upright glyph's X holds its vertical origin past its pen: the
+	// first glyph's, at the run's start, is taken off every one.
+	vo := 0.0
+	if t.Upright {
+		base, vo = e.uprightMarkBase(it, m), t.Glyphs[0].X
+	}
 	// The units of the run: a cluster starts at a glyph that carries its
 	// characters and ends where the next one starts.
 	var centres []float64
@@ -109,9 +125,9 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		}
 		r, _ := utf8.DecodeRuneInString(gs[i].Text)
 		if gs[i].Text != "" && takesMark(r) {
-			x0, x1 := float64(gs[i].X*hs), it.w
+			x0, x1 := float64(gs[i].X*hs)-vo, it.w
 			if j < len(gs) {
-				x1 = float64(gs[j].X * hs)
+				x1 = float64(gs[j].X*hs) - vo
 			}
 			centres = append(centres, (x0+x1)/2)
 		}
@@ -135,6 +151,12 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		}
 		c.Origin = typeset.Point{X: t.Origin.X, Y: base}
 		c.Parent = nil
+		if t.Upright && transposed(e.frameOf(it.box)) {
+			// The line is turned over across its middle (overRight): the
+			// marks are reflected across the baseline with the text.
+			c.Origin.Y = float64(2*it.baseline) - base
+			mirrorRun(&c)
+		}
 		out = append(out, c)
 	}
 	return out
@@ -155,4 +177,34 @@ func (p *painter) emphasisMarks(it *lineItem, l *lineBox, page int) {
 		top := c.Origin.Y - m.emAscent
 		p.emit(it.box, true, &c, top, top+m.emAscent+m.emDescent, page)
 	}
+}
+
+// uprightMarkBase returns the baseline the emphasis marks of item it, a
+// run of upright glyphs, are set on: each mark's em box against the em
+// box of the text, which stands on the central line of the face's ascent
+// and descent (CSS Text Decoration 3, 3.5; uprightShift), over it or under
+// it as text-emphasis-position asks, the marks shaped upright and
+// centred on that line of their own.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets the marks of
+//     a vertical-rl line of Noto Sans CJK JP, Liberation Sans and DejaVu
+//     Sans at 12 to 23 px with their em box against the text's, the line
+//     growing by the mark's size.
+func (e *engine) uprightMarkBase(it *lineItem, m *emphasisMark) float64 {
+	a, d := it.ascent, it.descent
+	if transposed(e.frameOf(it.box)) {
+		// overRight swapped them with the line.
+		a, d = d, a
+	}
+	half, rise := float64(it.text.Size/2), float64((a-d)/2)
+	mark := float64((m.emAscent + m.emDescent) / 2)
+	ownRise := float64((m.emAscent - m.emDescent) / 2)
+	b := it.baseline
+	centre := b - rise - half - mark
+	if it.box.st.TextEmphasisPosition == css.EmphasisUnder {
+		centre = b - rise + half + mark
+	}
+	return centre + ownRise
 }

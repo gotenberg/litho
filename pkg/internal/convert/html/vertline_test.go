@@ -397,3 +397,42 @@ func TestVerticalTable_RootsAnOrthogonalFlow(t *testing.T) {
 		}
 	}
 }
+
+// TestVerticalLine_EmphasisMarksBesideTheirCharacters locks the emphasis
+// marks of upright text in a vertical line: shaped upright, centred along
+// the line on their character, their em box against the text's over or
+// under it (CSS Text Decoration 3, 3.1 to 3.5), within a pixel of
+// Chromium's on both axes.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets each mark of
+//     the table below where it has it, in vertical-rl and vertical-lr; litho
+//     sets them within 0.54 px along the line and 0.5 px across.
+func TestVerticalLine_EmphasisMarksBesideTheirCharacters(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		css  string
+		want [][3]float64
+	}{
+		{`filled sesame`, [][3]float64{{20.5, 20.5}, {20.5, 36.5}}},
+		{`filled circle; text-emphasis-position: under left`, [][3]float64{{-0.5, 21}, {-0.5, 37}}},
+	} {
+		for _, mode := range []string{"vertical-rl", "vertical-lr"} {
+			var marks []glyphOrigin
+			for _, g := range verticalLine(t, mode, `font: 16px 'Noto Sans CJK JP'`, `<span style="text-emphasis: `+c.css+`">縦書</span>`) {
+				if g.text == "﹅" || g.text == "●" {
+					marks = append(marks, g)
+				}
+			}
+			if len(marks) != len(c.want) {
+				t.Fatalf("%s, %s: %d marks %v", c.css, mode, len(marks), marks)
+			}
+			for i, w := range c.want {
+				if math.Abs(marks[i].x-w[0]) > 1 || math.Abs(marks[i].y-w[1]) > 1 {
+					t.Errorf("%s, %s, mark %d at %.2f,%.2f, want %g,%g", c.css, mode, i, marks[i].x, marks[i].y, w[0], w[1])
+				}
+			}
+		}
+	}
+}
