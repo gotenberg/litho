@@ -194,8 +194,9 @@ func fontRefLevel(ref *ooxml.Element) *ooxml.Element {
 //
 //   - libreoffice/pptx: sd/tdf120028's body placeholder of an index its
 //     layout lacks prints in the master body style's Arial.
-//   - libreoffice/pptx: sd-data/n759180's placeholder of the index
-//     4294967295 takes the master's other style.
+//   - libreoffice/pptx: sd-data/n759180's body placeholder of the index
+//     4294967295 prints the master body style's bullets, indent and
+//     spacing.
 //   - libreoffice/pptx: sd/bullet-indent's <p:ph/> prints its bullets at
 //     margin 0.
 func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *ooxml.Element) *slides.TextBody {
@@ -204,10 +205,9 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		return nil
 	}
 	// A placeholder takes its master's text style for its type even when
-	// its layout lacks it; one of the index 4294967295, which Impress looks
-	// up nowhere, takes the other style.
+	// its layout lacks it, one of the index 4294967295 too, as PowerPoint
+	// prints it.
 	own, isPh := phOf(sc[0])
-	isPh = isPh && !own.skip
 	master := c.layer.styleFor(p, isPh)
 	if isPh && own.typ == "obj" && !own.hasIdx {
 		// An object placeholder without an index takes no list style of

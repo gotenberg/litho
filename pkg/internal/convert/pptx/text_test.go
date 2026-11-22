@@ -269,11 +269,11 @@ func TestText_OrphanPlaceholder(t *testing.T) {
 			phShape("Nowhere", "body", 4294967295, 0, 0, 12700, 12700, para("x"))}},
 	})
 	// A placeholder its layout lacks takes its master's style for its type
-	// alone; one of the index looked up nowhere, the other style.
+	// alone, and so does one of the index looked up nowhere.
 	if p := doc.Slides[0].Shapes[0].Text.Paragraphs[0]; p.Bullet == nil || p.Runs[0].Style.Size != 32 {
 		t.Errorf("an orphan body placeholder: %+v", p)
 	}
-	if p := doc.Slides[0].Shapes[1].Text.Paragraphs[0]; p.Bullet != nil || p.MarginLeft != 0 || p.Runs[0].Style.Size != 18 {
+	if p := doc.Slides[0].Shapes[1].Text.Paragraphs[0]; p.Bullet == nil || p.MarginLeft != 27 || p.Runs[0].Style.Size != 32 {
 		t.Errorf("a placeholder looked up nowhere: %+v", p)
 	}
 }

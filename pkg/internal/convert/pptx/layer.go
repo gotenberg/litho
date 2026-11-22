@@ -114,7 +114,7 @@ type placeholder struct {
 	idx    int
 	hasIdx bool
 	// typed reports a type the file names; skip an index of 4294967295,
-	// which Impress looks up nowhere.
+	// which no layout or master placeholder answers.
 	typed, skip bool
 }
 
@@ -215,16 +215,16 @@ func (l *layer) find(p placeholder) *ooxml.Element {
 // inherited returns the chain of shapes el inherits from in layer l: el,
 // then its layout's placeholder, then that one's master placeholder. A
 // placeholder its layout has no placeholder for inherits nothing, not even
-// from the master, and its text takes the master's other style, as Impress
-// imports it; so does a placeholder of the index 4294967295, which Impress
-// looks up nowhere. A placeholder without a type that its layout has one
-// of the same index for takes that one's type.
+// from the master; nor does a placeholder of the index 4294967295. Their
+// text still takes the master's text style for their type (textBody). A
+// placeholder without a type that its layout has one of the same index
+// for takes that one's type.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd-data/n759180's body placeholder of idx 4294967295, on a
-//     layout of a title, a footer and a slide number, prints at its box's
-//     inset without the master body style's bullet and indent.
+//     layout of a title, a footer and a slide number, prints at its own box
+//     and inset.
 func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 	chain := []*ooxml.Element{el}
 	p, ok := phOf(el)
