@@ -161,6 +161,28 @@ func SymbolNode(tn *layout.Node, fonts *text.Fonts, rule symbolfont.Rule, codes 
 	}
 }
 
+// SymbolDrawn reports whether s, symbol-font codes set in family, draws in
+// a face [SymbolNode] gives it after rule: family itself, a clone of it,
+// or OpenSymbol through LibreOffice's recoding ([symbolfont.Draw]). It is
+// false when a code would fall to a face that holds no glyph for it, or
+// fonts is nil.
+func SymbolDrawn(s, family string, fonts *text.Fonts, rule symbolfont.Rule) bool {
+	if fonts == nil || s == "" {
+		return false
+	}
+	draw, fams, ok := symbolfont.Draw(s, family, rule, fonts.Covers)
+	fam, aliases := family, true
+	if ok && fams != nil {
+		fam, aliases = fams[0], false
+	}
+	for _, r := range draw {
+		if !fonts.Covers(fam, aliases, r) {
+			return false
+		}
+	}
+	return true
+}
+
 // SymbolText returns the characters text stands for when it is written in
 // family, a symbol font LibreOffice recodes (Symbol, Wingdings, Webdings
 // and their kin, [symbolfont.Recode]): each code from 0x20 to 0xFF, or

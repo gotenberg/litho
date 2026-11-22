@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
 func TestNotes(t *testing.T) {
@@ -147,5 +148,40 @@ func TestTOCEntriesDropTheHyperlinkStyle(t *testing.T) {
 				t.Errorf("entry colour %+v, blue %v want %v", texts[0].Style.Color, blue, tc.blue)
 			}
 		})
+	}
+}
+
+// TestSymbol_SetInItsFont locks that a w:sym is set in the font it names,
+// not the run's (ECMA-376 Part 1, 17.3.3.30): a Wingdings code the fixture
+// fonts lack is drawn in OpenSymbol and read as Wingdings's, where the
+// run's font drew the code's Latin-1 letter.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/fdo78384.docx prints Wingdings 0xE7, a
+//     w:sym in a run of the default font, as Wingdings's arrow, where
+//     the run's font drew "ç".
+func TestSymbol_SetInItsFont(t *testing.T) {
+	t.Parallel()
+	fonts := pinnedFonts(t)
+	body := `<w:p><w:r><w:t xml:space="preserve">a </w:t><w:sym w:font="Wingdings" w:char="F0E7"/><w:t xml:space="preserve"> b</w:t></w:r></w:p>`
+	pkg, err := ooxml.Open(t.Context(), docx(t, body, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := load(t.Context(), pkg, fonts, office.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := &layout.Node{Kind: layout.Element, Style: d.blockStyle()}
+	for _, s := range d.body(d.root) {
+		root.Children = append(root.Children, d.sectionNode(s, nil))
+	}
+	sym := find(root, func(n *layout.Node) bool { return n.Kind == layout.Text && n.ActualText != "" })
+	if len(sym) != 1 {
+		t.Fatalf("%d runs with an ActualText, want the symbol's alone", len(sym))
+	}
+	if fam := sym[0].Style.FontFamilies; len(fam) == 0 || fam[0] != "OpenSymbol" || strings.ContainsRune(textOf(root), 'ç') {
+		t.Errorf("symbol %q in %v, text %q; want it drawn in OpenSymbol", sym[0].Text, fam, textOf(root))
 	}
 }

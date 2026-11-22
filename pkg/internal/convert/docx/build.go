@@ -1292,7 +1292,32 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			flush()
 			el.Children = append(el.Children, &layout.Node{Kind: layout.LineBreak, Style: st})
 		case c.Is(w, "sym"):
-			buf.WriteString(symbol(c))
+			code, font := symCode(c)
+			if code == "" {
+				break
+			}
+			recodes := symbolfont.Recodes(font)
+			if font == "" || recodes && !office.SymbolDrawn(code, font, d.fonts, symbolfont.RuleWord) {
+				// A symbol font's code no face draws keeps its Latin-1
+				// character in the run's font: set in its own font it
+				// would fall to a face that holds no glyph for it.
+				buf.WriteString(symbol(c))
+				break
+			}
+			// The symbol is set in the font w:sym names, not the run's
+			// (17.3.3.30): a symbol font's code is drawn and read as that
+			// font's ([office.SymbolNode]).
+			if !recodes {
+				code = symbol(c)
+			}
+			flush()
+			own := *st
+			own.FontFamilies = append([]string{font}, st.FontFamilies...)
+			runStyle := st
+			st = d.share(&own)
+			buf.WriteString(code)
+			flush()
+			st = runStyle
 		case c.Is(w, "noBreakHyphen"):
 			buf.WriteRune('\u2011')
 		case c.Is(w, "softHyphen"):
@@ -1405,12 +1430,23 @@ func (d *document) ruby(s *story, rp resolvedPara, ps *css.Style, lineMult float
 // symbol returns the character of a w:sym (17.3.3.30): its char in its
 // font, symbol fonts mapped to Unicode.
 func symbol(c *ooxml.Element) string {
-	v, err := strconv.ParseUint(attrOr(c, "char"), 16, 21)
-	if err != nil || v == 0 || !utf8.ValidRune(rune(v)) { //nolint:gosec // at most 21 bits, parsed above
+	code, font := symCode(c)
+	if code == "" {
 		return ""
 	}
-	s, _ := mapSymbolText(string(rune(v)), attrOr(c, "font")) //nolint:gosec // at most 21 bits, parsed above
+	s, _ := mapSymbolText(code, font)
 	return s
+}
+
+// symCode returns the character code of a w:sym (17.3.3.30), its char
+// attribute, and the font it names; the code is "" when char is no
+// character.
+func symCode(c *ooxml.Element) (code, font string) {
+	v, err := strconv.ParseUint(attrOr(c, "char"), 16, 21)
+	if err != nil || v == 0 || !utf8.ValidRune(rune(v)) { //nolint:gosec // at most 21 bits, parsed above
+		return "", ""
+	}
+	return string(rune(v)), attrOr(c, "font") //nolint:gosec // at most 21 bits, parsed above
 }
 
 // wordText returns the text of a w:t element t as Word reads it: without
