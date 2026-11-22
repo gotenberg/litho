@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -398,6 +399,20 @@ func TestTokenF1(t *testing.T) {
 	for _, tc := range tests {
 		if got := tokenF1(tc.golden, tc.got); fmt.Sprintf("%.6f", got) != fmt.Sprintf("%.6f", tc.want) {
 			t.Errorf("tokenF1(%q, %q) = %.4f, want %.4f", tc.golden, tc.got, got, tc.want)
+		}
+	}
+}
+
+// TestReferenceDrawTimeout pins the time a reference's pages are drawn
+// within: the fixture's limit for each started 64 pages, counted over the
+// pages a fixture scores.
+func TestReferenceDrawTimeout(t *testing.T) {
+	for pages, want := range map[int]time.Duration{
+		-1: perFileTimeout, 0: perFileTimeout, 1: perFileTimeout, 64: perFileTimeout,
+		65: 2 * perFileTimeout, 242: 4 * perFileTimeout, maxDiffPages: 4 * perFileTimeout, 100000: 4 * perFileTimeout,
+	} {
+		if got := referenceDrawTimeout(pages); got != want {
+			t.Errorf("referenceDrawTimeout(%d) = %v, want %v", pages, got, want)
 		}
 	}
 }

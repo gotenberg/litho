@@ -558,9 +558,8 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	fonts, reportDir, office := f.fontDirs, f.reportDir, f.office
 	f.mu.RUnlock()
-	// Each side has the time limit of a fixture: litho converting and
-	// drawing its PDF, then the reference's pages drawn ([FixtureTimeout]
-	// grants both).
+	// Each side has its own time limit: litho converting and drawing its
+	// PDF, then the reference's pages drawn ([FixtureTimeout] grants both).
 	lctx, cancel := context.WithTimeout(ctx, perFileTimeout)
 	defer cancel()
 	src, settings, err := sourceSettings(srcPath, office, fonts)
@@ -586,7 +585,7 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		return nil, err
 	}
 	defer ref.Close()
-	rctx, cancelRef := context.WithTimeout(ctx, perFileTimeout)
+	rctx, cancelRef := context.WithTimeout(ctx, referenceDrawTimeout(g.text.NumPages))
 	defer cancelRef()
 	draw := func(page int) (image.Image, error) { return drawDiffPage(rctx, ref, page, office) }
 	out := scoreDiff(g, doc, draw, settings.Format == fixture.FormatCSV, settings.ExpectedText, func(page int, got, want image.Image, d pixelDiff) {
@@ -608,11 +607,34 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	return json.Marshal(out)
 }
 
-// FixtureTimeout gives a fixture twice [perFileTimeout]: one for litho's
-// side, converting the source and drawing its pages, one for drawing the
-// reference's (see [diffFeature.Run]). A reference page past its share is
-// a page that does not draw, which leaves the fixture unscored.
-func (f *diffFeature) FixtureTimeout(string) time.Duration { return 2 * perFileTimeout }
+// FixtureTimeout gives a fixture [perFileTimeout] for litho's side,
+// converting the source and drawing its pages, and [referenceDrawTimeout]
+// for drawing the reference's (see [diffFeature.Run]). A reference page
+// past its share is a page that does not draw, which leaves the fixture
+// unscored.
+func (f *diffFeature) FixtureTimeout(fixtureID string) time.Duration {
+	pages := 0
+	if g := f.golden(fixtureID); g != nil {
+		pages = g.text.NumPages
+	}
+	return perFileTimeout + referenceDrawTimeout(pages)
+}
+
+// referencePagesPerLimit is the number of reference pages one
+// [perFileTimeout] is granted for.
+const referencePagesPerLimit = 64
+
+// referenceDrawTimeout returns the time limit for drawing a reference of
+// pages pages, of which a fixture scores at most [maxDiffPages]:
+// [perFileTimeout] for each started [referencePagesPerLimit] pages. The
+// reference is the yardstick, not what the cell judges, so its limit
+// grows with its length: a fixed one left a reference of some two hundred
+// pages undrawn whenever the machine was loaded, and the fixture scored
+// in one run and unscored in the next.
+func referenceDrawTimeout(pages int) time.Duration {
+	pages = min(max(pages, 1), maxDiffPages)
+	return time.Duration((pages+referencePagesPerLimit-1)/referencePagesPerLimit) * perFileTimeout
+}
 
 // referenceForm reads the widgets of the reference at path into g, which
 // [diffFeature.scoreForm] scores litho's against.
