@@ -18,6 +18,7 @@ func FuzzChartFromElement(f *testing.F) {
 	f.Add([]byte(full))
 	f.Add([]byte(full[:len(full)/2]))
 	f.Add([]byte(chartXML("", "", `<c:pieChart>`+ser(0, "P", `<c:dLbls><c:showPercent val="1"/><c:dLblPos val="bestFit"/></c:dLbls>`, "1", "2", "3")+`</c:pieChart>`)))
+	f.Add([]byte(bubbleXML))
 	fonts, err := text.NewFonts(context.Background(), nil, []string{filepath.Join("..", "layout", "testdata")})
 	if err != nil {
 		f.Fatal(err)

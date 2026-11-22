@@ -705,3 +705,24 @@ func TestChartFromElement_DateAxisTimeUnits(t *testing.T) {
 		t.Errorf("base %v, major %v, want automatic", a.BaseTimeUnit, a.MajorTimeUnit)
 	}
 }
+
+// bubbleXML is a bubble chart sized by width whose labels show the
+// bubbles' sizes.
+var bubbleXML = chartXML("", "", `<c:bubbleChart><c:ser><c:idx val="0"/><c:order val="0"/>`+
+	`<c:dLbls><c:showVal val="0"/><c:showBubbleSize val="1"/></c:dLbls>`+
+	`<c:xVal><c:numRef><c:f>Sheet1!$A$2:$A$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:xVal>`+
+	`<c:yVal><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>3</c:v></c:pt><c:pt idx="1"><c:v>4</c:v></c:pt></c:numCache></c:numRef></c:yVal>`+
+	`<c:bubbleSize><c:numRef><c:f>Sheet1!$C$2:$C$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1e308</c:v></c:pt><c:pt idx="1"><c:v>-5</c:v></c:pt></c:numCache></c:numRef></c:bubbleSize>`+
+	`</c:ser><c:bubbleScale val="300"/><c:sizeRepresents val="w"/><c:axId val="1"/><c:axId val="2"/></c:bubbleChart>`+
+	`<c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>`+
+	`<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>`)
+
+func TestChartFromElement_BubbleWidthAndSizeLabels(t *testing.T) {
+	c := readChart(t, bubbleXML, false)
+	if len(c.Groups) != 1 || !c.Groups[0].BubbleWidth {
+		t.Fatalf("groups %+v, want one bubble group sized by width", c.Groups)
+	}
+	if s := c.Groups[0].Series; len(s) != 1 || !s[0].Labels.ShowSize || s[0].Labels.ShowValue {
+		t.Errorf("labels %+v, want the sizes alone", c.Groups[0].Series[0].Labels)
+	}
+}
