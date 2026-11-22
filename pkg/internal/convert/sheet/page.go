@@ -1,12 +1,14 @@
 package sheet
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -112,13 +114,23 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 	if b.cellBudget <= 0 {
 		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of sheet %s holds more than %d cells; the rest are left out", quote(b.g.sh.Name), maxPageCells))
 	}
-	res, err := layout.Layout(b.ctx, table, b.fonts, layout.Options{
-		Page:     layout.PageBox{Width: max(b.dataW, 1), Height: b.layoutHeight()},
-		Lang:     b.lang,
-		Fallback: b.fallback(),
-		MaxPages: maxSubPages,
-		Logger:   b.opts.Logger,
-	})
+	lay := func(height float64) (*layout.Result, error) {
+		return layout.Layout(b.ctx, table, b.fonts, layout.Options{
+			Page:     layout.PageBox{Width: max(b.dataW, 1), Height: height},
+			Lang:     b.lang,
+			Fallback: b.fallback(),
+			MaxPages: maxSubPages,
+			Logger:   b.opts.Logger,
+		})
+	}
+	height := b.layoutHeight()
+	res, err := lay(height)
+	if errors.Is(err, limits.ErrTooManyPages) && height < maxSide {
+		// Wrapped text far taller than its row runs on past the pages
+		// the cells' page leaves out; its cell clips it, so a page as tall
+		// as the layout takes holds it and draws nothing more.
+		res, err = lay(maxSide)
+	}
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("sheet %s: %w", quote(b.g.sh.Name), err)
 	}
