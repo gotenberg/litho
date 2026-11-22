@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"math"
 	"strings"
 	"testing"
 
@@ -246,6 +247,91 @@ func TestVerticalText(t *testing.T) {
 	// glyph 10 further down, rows 57.6..67.6.
 	img, _ = draw(t, fixture{page: textPage, content: "0 g BT /F 20 Tf 50 80 Td [<0002> 500 <0002>] TJ ET", objs: identityVObjs()})
 	expect(t, img, 0, map[[2]int]rgb{{50, 32}: black, {50, 52}: paper, {50, 62}: black})
+}
+
+// TestGlyphsLandOnTheirExactOutline checks that a glyph's ink lies where its
+// outline does under the text rendering matrix (ISO 32000-1, 9.4.2) and the
+// page's device matrix (8.3.2.2), at any fraction of a pixel: the ink's
+// centroid is the outline's, and its total the outline's area, whatever the
+// resolution. No glyph origin is rounded to the pixel grid, as poppler's
+// Splash rounds it (down to a whole pixel vertically, to a quarter or a
+// whole pixel horizontally, half a pixel off on average).
+//
+// # Corpus evidence
+//
+//   - probe, pdf: the H of DejaVu Sans (TrueType, simple and CID), Nimbus Sans
+//     (CFF), Noto Sans JP (CID CFF), Nimbus Roman (Type 1) and a Type 3 H, at 12
+//     and 48 points from (60.3, 40.7), at 72, 96, 150 and 300 dpi: litho's ink
+//     centroid lies within 0.03 px of the outline's on every one; PDF.js (the
+//     pinned revision) and pdftocairo 26.11 place them within 0.2 px, and
+//     pdftoppm 26.09 0.2 to 0.8 px above and up to 0.63 px left.
+//   - probe, pdf: a d1 Type 3 glyph filling one rectangle, its origin moved
+//     by 0.15 pt steps: adjusted, litho's ink moved up to 0.45 px off the
+//     outline; pdftoppm 26.09 does not adjust it, nor does PDF.js.
+func TestGlyphsLandOnTheirExactOutline(t *testing.T) {
+	t.Parallel()
+	// A at 20 points is a 12 by 10 box from the origin; the Type 3 glyph a
+	// a 10 by 10 one.
+	fonts := []struct {
+		name string
+		objs []string
+		show string
+		w, h float64
+	}{
+		{"TrueType", trueTypeObjs(), "(A)", 12, 10},
+		{"Type 3", type3Objs("1000 0 0 0 500 500 d1 0 0 500 500 re f"), "(a)", 10, 10},
+	}
+	for _, f := range fonts {
+		for _, dpi := range []float64{72, 96, 150} {
+			for _, off := range []float64{0, 0.3, 0.55, 0.8} {
+				ox, oy := 10+off, 50+off/2
+				content := fmt.Sprintf("0 g BT /F 20 Tf %g %g Td %s Tj ET", ox, oy, f.show)
+				fx := fixture{page: textPage, content: content, objs: f.objs}
+				doc, pg := open(t, fx.bytes(), models.Limits{})
+				c, _, err := Render(context.Background(), doc, pg, Options{DPI: dpi, Background: white})
+				if err != nil {
+					t.Fatalf("Render: %v", err)
+				}
+				s := dpi / 72
+				wantX, wantY := (ox+f.w/2)*s, (100-oy-f.h/2)*s
+				wantInk := f.w * f.h * s * s
+				cx, cy, ink := inkCentroid(c.Image())
+				if math.Abs(cx-wantX) > 0.02 || math.Abs(cy-wantY) > 0.02 || math.Abs(ink/wantInk-1) > 0.01 {
+					t.Errorf("%s at (%g, %g), %g dpi: ink centroid (%.3f, %.3f), total %.2f; want (%.3f, %.3f), %.2f",
+						f.name, ox, oy, dpi, cx, cy, ink, wantX, wantY, wantInk)
+				}
+			}
+		}
+	}
+}
+
+// TestType3ColouredGlyphIsAdjusted checks that a d0 glyph's rectangle snaps
+// to whole pixels as a page's does ([renderer.adjusts]): its edges at x 10.3
+// and 20.3 round to 10 and 20.
+func TestType3ColouredGlyphIsAdjusted(t *testing.T) {
+	t.Parallel()
+	img, _ := draw(t, fixture{page: textPage, content: "BT /F 20 Tf 10.3 50 Td (a) Tj ET", objs: type3Objs("1000 0 d0 0 g 0 0 500 500 re f")})
+	expect(t, img, 0, map[[2]int]rgb{{10, 45}: black, {19, 45}: black, {9, 45}: paper, {20, 45}: paper})
+}
+
+// inkCentroid returns the centroid of img's ink, each pixel weighing how far
+// its red channel lies from white, and the total ink in pixels. A pixel
+// (x, y) covers [x, x+1) × [y, y+1) of device space (ISO 32000-1, 8.3.2.2),
+// so it weighs at its centre.
+func inkCentroid(img *image.NRGBA) (cx, cy, ink float64) {
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			a := float64(255-img.NRGBAAt(x, y).R) / 255
+			cx += a * (float64(x) + 0.5)
+			cy += a * (float64(y) + 0.5)
+			ink += a
+		}
+	}
+	if ink == 0 {
+		return 0, 0, 0
+	}
+	return cx / ink, cy / ink, ink
 }
 
 func TestTextWithoutFont(t *testing.T) {

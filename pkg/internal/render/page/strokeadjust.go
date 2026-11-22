@@ -24,8 +24,16 @@ import (
 // agrees: SplashOutputDev turns the adjustment on in startPage only, and
 // tilingPatternFill draws the cells on a Splash of its own whose state keeps
 // SplashState's default, off.
+//
+// Nor does the description of a Type 3 glyph that opens with d1: it is a
+// shape, the glyph's outline (ISO 32000-1, 9.6.5, Table 113), and lands where
+// its geometry says, as the outline of a glyph from a font program does. The
+// leniency has no ground there either: poppler draws such a glyph into its
+// glyph cache (SplashOutputDev::beginType3Char), on a Splash whose
+// adjustment is off, and adjusts only a d0 glyph, which it paints on the page
+// as any other content. A d0 glyph is adjusted here too.
 func (r *renderer) adjusts() bool {
-	return !r.unadjusted
+	return !r.unadjusted && (r.type3Depth == 0 || r.m.Glyph == nil || r.m.Glyph.Colored)
 }
 
 // alignEpsilon is how far, in device pixels, the two ends of a segment may
