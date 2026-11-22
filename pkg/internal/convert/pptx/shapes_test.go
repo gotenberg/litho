@@ -260,20 +260,20 @@ func TestShapes_Table(t *testing.T) {
 	if r := d.Text.Paragraphs[0].Runs[0].Style; !sameColor(r.Color, rgb(0)) || r.Size != 18 {
 		t.Errorf("body text %+v", r)
 	}
-	// A table naming no style takes the presentation's default; one naming
+	// A table naming one of the presentation's styles takes it; one naming
 	// an unknown style prints without one.
 	s = oneSlide(t, frame(`<a:tblPr><a:tableStyleId>{00000000-0000-0000-0000-000000000000}</a:tableStyleId></a:tblPr>`))
 	if f := s.Shapes[0].Table.Rows[2].Cells[1].Fill; f.Kind != slides.FillNone {
 		t.Errorf("unknown style fills %+v", f)
 	}
 	doc, _ := readDeck(t, testDeck{
-		slides: []testSlide{{tree: frame(`<a:tblPr/>`)}},
+		slides: []testSlide{{tree: frame(`<a:tblPr><a:tableStyleId>{AB}</a:tableStyleId></a:tblPr>`)}},
 		parts: map[string]string{"ppt/tableStyles.xml": `<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{AB}">` +
 			`<a:tblStyle styleId="{AB}" styleName="x"><a:wholeTbl><a:tcTxStyle b="on"><a:schemeClr val="accent2"/></a:tcTxStyle><a:tcStyle><a:fill><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:fill></a:tcStyle></a:wholeTbl></a:tblStyle></a:tblStyleLst>`},
 	})
 	f := doc.Slides[0].Shapes[0].Table.Rows[2].Cells[1]
 	if !sameColor(f.Fill.Color, rgb(0xABCDEF)) || !f.Text.Paragraphs[0].Runs[0].Style.Bold || !sameColor(f.Text.Paragraphs[0].Runs[0].Style.Color, rgb(0xC0504D)) {
-		t.Errorf("default style cell %+v %+v", f.Fill, f.Text.Paragraphs[0].Runs[0].Style)
+		t.Errorf("presentation style cell %+v %+v", f.Fill, f.Text.Paragraphs[0].Runs[0].Style)
 	}
 }
 

@@ -102,10 +102,9 @@ type reader struct {
 	// themes the themes.
 	layers map[string]*layer
 	themes map[string]*theme
-	// tableStyles are the presentation's table styles by ID, defTable the
-	// default style's ID (ECMA-376 Part 1, 20.1.4.2.27 tblStyleLst).
+	// tableStyles are the presentation's table styles by ID (ECMA-376
+	// Part 1, 20.1.4.2.27 tblStyleLst).
 	tableStyles map[string]*ooxml.Element
-	defTable    string
 	// shapes and runes count against the caps.
 	shapes, runes int
 	pictures      map[string]*layout.Picture

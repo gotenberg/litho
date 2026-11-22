@@ -29,7 +29,7 @@ const (
 )
 
 // readTableStyles reads the presentation's table styles part (20.1.4.2.27
-// tblStyleLst): its styles by ID and its default style's ID.
+// tblStyleLst): its styles by ID.
 func (r *reader) readTableStyles() {
 	r.tableStyles = map[string]*ooxml.Element{}
 	name := r.related(r.main, relTableStyles)
@@ -43,7 +43,6 @@ func (r *reader) readTableStyles() {
 		}
 		return
 	}
-	r.defTable = strings.ToUpper(attr(root, "def"))
 	for _, s := range root.Kids() {
 		if s.Is(ooxml.NSA, "tblStyle") {
 			if id := strings.ToUpper(attr(s, "styleId")); id != "" {
@@ -57,13 +56,22 @@ func (r *reader) readTableStyles() {
 
 // tableStyle returns the table style of a table's properties: its inline
 // a:tableStyle, the style its a:tableStyleId names in the presentation's
-// part or among the built-in styles, the presentation's default style for
-// a table naming none, as Impress applies it; nil for none.
+// part or among the built-in styles; for a table naming none, "No Style,
+// Table Grid", whatever the presentation's default style (20.1.4.2.27
+// tblStyleLst def), as PowerPoint prints it; nil for none.
+//
+// # Corpus evidence
+//
+//   - poi/pptx: slideshow/table-with-no-theme.pptx, a table naming no
+//     style in a presentation whose default is Medium Style 2 - Accent 1,
+//     prints without fills, every cell edged with a black line of a point;
+//     libreoffice/pptx: sd/tdf123090.pptx prints without fills, the lines
+//     its cells state.
 func (r *reader) tableStyle(pr *ooxml.Element) *ooxml.Element {
 	if s := pr.Child(ooxml.NSA, "tableStyle"); s != nil {
 		return s
 	}
-	id := r.defTable
+	id := idNoStyleTableGrid
 	if e := pr.Child(ooxml.NSA, "tableStyleId"); e != nil {
 		id = strings.ToUpper(strings.TrimSpace(e.Text))
 	}

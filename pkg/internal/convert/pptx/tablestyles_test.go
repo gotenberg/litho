@@ -10,7 +10,7 @@ import (
 func TestTable_BackgroundUnderTheCells(t *testing.T) {
 	t.Parallel()
 	frame := `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="T"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="254000"/></p:xfrm>` +
-		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr bandRow="1"/><a:tblGrid><a:gridCol w="127000"/></a:tblGrid>` +
+		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr bandRow="1"><a:tableStyleId>{AB}</a:tableStyleId></a:tblPr><a:tblGrid><a:gridCol w="127000"/></a:tblGrid>` +
 		`<a:tr h="127000"><a:tc><a:tcPr/></a:tc></a:tr><a:tr h="127000"><a:tc><a:tcPr/></a:tc></a:tr><a:tr h="127000"><a:tc><a:tcPr><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></a:tcPr></a:tc></a:tr>` +
 		`</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
 	style := func(bg string) string {
@@ -66,6 +66,28 @@ func TestTable_CellWritingModes(t *testing.T) {
 	for i, want := range []css.WritingMode{css.VerticalRL, css.HorizontalTB, css.SidewaysLR} {
 		if got := cells[i].Text.Vertical; got != want {
 			t.Errorf("cell %d writing mode %v, want %v", i, got, want)
+		}
+	}
+}
+
+// TestTable_NoStyleIsTableGrid checks that a table naming no style takes
+// "No Style, Table Grid", whatever the presentation's default style, as
+// PowerPoint prints it.
+func TestTable_NoStyleIsTableGrid(t *testing.T) {
+	t.Parallel()
+	frame := `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="T"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="254000"/></p:xfrm>` +
+		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="1" bandRow="1"/><a:tblGrid><a:gridCol w="127000"/></a:tblGrid>` +
+		`<a:tr h="127000"><a:tc><a:tcPr/></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
+	style := `<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{AB}"><a:tblStyle styleId="{AB}" styleName="x">` +
+		`<a:wholeTbl><a:tcStyle><a:fill><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fill></a:tcStyle></a:wholeTbl></a:tblStyle></a:tblStyleLst>`
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: frame}}, parts: map[string]string{"ppt/tableStyles.xml": style}})
+	cell := doc.Slides[0].Shapes[0].Table.Rows[0].Cells[0]
+	if cell.Fill.Kind != slides.FillNone {
+		t.Errorf("fill %+v, want none", cell.Fill)
+	}
+	for side, b := range cell.Borders {
+		if b.Width != 1 || !sameColor(b.Color, rgb(0x000000)) {
+			t.Errorf("border %d %+v, want a black point", side, b)
 		}
 	}
 }
