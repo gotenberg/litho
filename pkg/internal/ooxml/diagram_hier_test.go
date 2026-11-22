@@ -118,3 +118,13 @@ func TestDiagramLayoutNodeOutsideItsForEach(t *testing.T) {
 		t.Errorf("texts %q, want %q", got, want)
 	}
 }
+
+// TestDiagramForEachOfAssistants lays out a for-each of ptType asst
+// (21.4.2.8): every assistant of the point, not the first alone.
+func TestDiagramForEachOfAssistants(t *testing.T) {
+	nodes := []hierNode{{"M", -1, false}, {"A1", 0, true}, {"A2", 0, true}, {"E1", 0, false}}
+	root := ParseDiagram(mustParse(t, hierData(nodes, false)), mustParse(t, hierLayout(`<dgm:alg type="hierRoot"/>`, `<dgm:alg type="hierChild"/>`, ``)), nil, nil).LayOut(14400, 9120, nil)
+	if got, want := strings.Join(texts(root), " "), "A1 A2 E1 M"; got != want {
+		t.Errorf("texts %q, want %q", got, want)
+	}
+}

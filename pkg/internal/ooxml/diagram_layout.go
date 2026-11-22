@@ -343,10 +343,16 @@ func (w *walker) kids(a *DiagramAtom) {
 }
 
 // forEach walks a for-each (21.4.2.8): the one it references, else its
-// atoms once per point, as LibreOffice counts them: the most points any
-// of its layout nodes presents for a node or nonAsst iteration, one for
-// any other, cut at cnt; a transition iteration after the last sibling
-// is skipped when hideLastTrans says so.
+// atoms once per point: the most points any of its layout nodes presents
+// for a node, nonAsst or asst iteration, one for any other, as LibreOffice
+// counts them but for assistants, cut at cnt; a transition iteration after
+// the last sibling is skipped when hideLastTrans says so.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: HierarchyDiagram_TP10174325's orgChart1 prints both
+//     of its assistants, either side of the line under the root, where an
+//     iteration of one point left the second out.
 func (w *walker) forEach(a *DiagramAtom) {
 	switch w.m {
 	case modeTemplate:
@@ -366,7 +372,7 @@ func (w *walker) forEach(a *DiagramAtom) {
 		return
 	}
 	n := 1
-	if a.Iter.PtType == "node" || a.Iter.PtType == "nonAsst" {
+	if a.Iter.PtType == "node" || a.Iter.PtType == "nonAsst" || a.Iter.PtType == "asst" {
 		s := &walker{e: w.e, m: modeShallow, cur: w.cur, depth: w.depth}
 		s.kids(a)
 		n = s.count
