@@ -278,7 +278,15 @@ func listOf(item *css.Style) css.Style {
 }
 
 // sameBorders reports two paragraphs that share their border group: the
-// same borders and indents (17.3.1.24).
+// same borders, their ST_Border values included, and indents (17.3.1.24:
+// identical border settings), whatever CSS style each value draws in.
+//
+// # Corpus evidence
+//
+//   - litho/docx para-borders-shading: Word draws the adjacent paragraphs
+//     bordered single and thick, both 1.5 points, as two boxes 8 points
+//     apart, their spacing, and so the dashed, dotDash and dotDotDash
+//     ones.
 func sameBorders(a, b *paraInfo) bool {
 	if len(a.borders) != len(b.borders) || a.indLeft != b.indLeft || a.indRight != b.indRight {
 		return false

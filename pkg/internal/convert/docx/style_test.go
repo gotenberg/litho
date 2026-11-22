@@ -303,6 +303,32 @@ func TestParagraphSpacing_Automatic(t *testing.T) {
 	}
 }
 
+// TestParagraphBorders_GroupByValue checks that adjacent paragraphs whose
+// borders draw alike in CSS but name different ST_Border values (single
+// and thick, dashed and dotDash) keep their own boxes, as 17.3.1.24 groups
+// identical settings alone, and that identical ones share a box.
+func TestParagraphBorders_GroupByValue(t *testing.T) {
+	t.Parallel()
+	p := func(val, text string) string {
+		b := `w:val="` + val + `" w:sz="12" w:space="1"`
+		return `<w:p><w:pPr><w:pBdr><w:top ` + b + `/><w:bottom ` + b + `/></w:pBdr></w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	b := build(t, p("single", "a")+p("thick", "b")+p("dashed", "c")+p("dotDash", "d")+p("dotDash", "e"), nil)
+	ps := role(b.root, "P")
+	if len(ps) != 5 {
+		t.Fatalf("%d paragraphs", len(ps))
+	}
+	for i, want := range []struct{ top, bottom bool }{{true, true}, {true, true}, {true, true}, {true, false}, {false, true}} {
+		st := ps[i].Style
+		if got := st.Border[css.Top].Width > 0; got != want.top {
+			t.Errorf("paragraph %d top border %v, want %v", i, got, want.top)
+		}
+		if got := st.Border[css.Bottom].Width > 0; got != want.bottom {
+			t.Errorf("paragraph %d bottom border %v, want %v", i, got, want.bottom)
+		}
+	}
+}
+
 func TestEmptyParagraphKeepsALine(t *testing.T) {
 	t.Parallel()
 	b := build(t, `<w:p/><w:p><w:pPr><w:rPr><w:sz w:val="48"/></w:rPr></w:pPr></w:p>`, nil)

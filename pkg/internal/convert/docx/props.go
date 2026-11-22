@@ -509,6 +509,9 @@ type borderSpec struct {
 	css.Border
 	// space is the distance from the text to the border in points.
 	space float64
+	// val is the border's ST_Border value (17.18.2), which tells borders
+	// apart that draw in one CSS style.
+	val string
 }
 
 // tabSpec is one custom tab stop of a paragraph (ECMA-376 Part 1,
@@ -812,8 +815,8 @@ func parseTab(t *ooxml.Element) (tabSpec, bool) {
 // parseBorder reads one border element (ECMA-376 Part 1, 17.3.4: its val,
 // its sz in eighths of a point, its space in points and its colour).
 func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
-	bs := &borderSpec{}
 	val := attrOr(b, "val")
+	bs := &borderSpec{val: val}
 	sz := 4.0
 	if v, ok := ooxml.Int(attrOr(b, "sz")); ok {
 		sz = float64(max(2, min(96, v)))
