@@ -165,6 +165,21 @@ func TestWordAnchor_Align(t *testing.T) {
 	}
 }
 
+// TestWordAnchor_AlignOnce aligns a block-level float of css.WordAnchor
+// AlignX once when its top gap reaches above where it stands, which seeds
+// it into the passes that follow: each pass places it where the first
+// aligned it.
+func TestWordAnchor_AlignOnce(t *testing.T) {
+	seeded := func(s *css.Style) {
+		s.WordAnchor.AlignX = 1
+		s.WrapGap = [4]float64{px(2), 0, 0, 0}
+	}
+	res := run(t, doc(wpara("aaaa"), wordFloat(css.FrameWrapBoth, 90, 0, 20, 20, seeded), wpara("b")), page(100, 200))
+	if got, want := linePlaces(res, 1), "X@70,18 aaaa@0,8 b@0,18 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+}
+
 // TestWordAnchor_TallFloatBreaks lays a float of css.Office.WordAnchor
 // without PageClamp that is taller than its page out across the pages it
 // reaches, a line that would cross a page's end moved to the next, where

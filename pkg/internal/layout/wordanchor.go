@@ -132,7 +132,8 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	if a.FromPage {
 		y = e.pageTop(page) + a.Y
 	}
-	if s, ok := e.frozen[f.node]; ok {
+	s, frozen := e.frozen[f.node]
+	if frozen {
 		x, y, page = s.bx, e.pageTop(s.page)+s.by, s.page
 	} else if a.NoOverlap && f.kind == kindReplaced {
 		w, h := e.replacedSize(f, cb)
@@ -154,7 +155,9 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 		}
 		f.x, f.y = x, y
 		e.layoutOwnContext(f, cb)
-		if a.AlignX != 0 || a.AlignY != 0 {
+		if (a.AlignX != 0 || a.AlignY != 0) && !frozen {
+			// A frozen float stands where the pass that placed it
+			// aligned it.
 			f.shift(-float64(a.AlignX*f.borderW()), -float64(a.AlignY*f.borderH()))
 		}
 	}
