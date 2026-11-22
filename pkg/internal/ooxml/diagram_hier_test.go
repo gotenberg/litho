@@ -128,3 +128,19 @@ func TestDiagramForEachOfAssistants(t *testing.T) {
 		t.Errorf("texts %q, want %q", got, want)
 	}
 }
+
+// TestDiagramIfCountsItsPointType evaluates an if of func cnt (21.4.2.11)
+// over the children of its point type alone: a node whose one child is no
+// assistant has no assistant.
+func TestDiagramIfCountsItsPointType(t *testing.T) {
+	data := strings.Replace(diagramData("a", "b"), `</dgm:ptLst>`, `<dgm:pt modelId="k0"><dgm:prSet/><dgm:spPr/></dgm:pt></dgm:ptLst>`, 1)
+	data = strings.Replace(data, `</dgm:cxnLst>`, `<dgm:cxn modelId="kx" srcId="n0" destId="k0" srcOrd="0"/></dgm:cxnLst>`, 1)
+	shape := `<dgm:choose><dgm:if axis="ch" ptType="asst" func="cnt" op="gte" val="1"><dgm:shape type="ellipse"/></dgm:if><dgm:else><dgm:shape type="rect"/></dgm:else></dgm:choose>`
+	layout := diagramLayout(`<dgm:alg type="lin"/><dgm:shape/><dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/>` + shape + `</dgm:layoutNode></dgm:forEach>`)
+	root := ParseDiagram(mustParse(t, data), mustParse(t, layout), nil, nil).LayOut(2000, 1000, nil)
+	for _, k := range root.Kids {
+		if k.Name == "node" && k.Preset() != "rect" {
+			t.Errorf("node %s, want rect: no child is an assistant", k.Preset())
+		}
+	}
+}

@@ -757,8 +757,15 @@ func (e *engine) navigate(typ, from string, forward bool) string {
 }
 
 // nodeCount counts the children of a presentation point's data point
-// (of its first child for the axis "ch ch"), as LibreOffice counts them
-// for the cnt function whatever the axis.
+// (of its first child for the axis "ch ch") of the if's point type
+// (21.4.2.11 ptType: node, asst, nonAsst or all).
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-org-chart2's B2 and C2, whose children
+//     are no assistants, hang them 0.25 of a width right of their own
+//     left edge, the alignOff orgChart1 gives a root without assistants
+//     (an if of axis ch, ptType asst, cnt gte 1 picks 0.65 otherwise).
 func (e *engine) nodeCount(a *DiagramAtom, p *DiagramPoint) int {
 	id := p.PresAssocID
 	if len(a.Iter.Axis) == 2 && a.Iter.Axis[0] == "ch" && a.Iter.Axis[1] == "ch" {
@@ -769,9 +776,24 @@ func (e *engine) nodeCount(a *DiagramAtom, p *DiagramPoint) int {
 	}
 	n := 0
 	for _, c := range e.d.Connections {
-		if c.Type == "parOf" && c.Src == id {
-			n++
+		if c.Type != "parOf" || c.Src != id {
+			continue
 		}
+		typ := "node"
+		if dp := e.d.byID[c.Dest]; dp != nil {
+			typ = dp.Type
+		}
+		switch a.Iter.PtType {
+		case "node", "asst":
+			if typ != a.Iter.PtType {
+				continue
+			}
+		case "nonAsst":
+			if typ == "asst" {
+				continue
+			}
+		}
+		n++
 	}
 	return n
 }
