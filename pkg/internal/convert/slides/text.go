@@ -1128,7 +1128,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	space := func(pts, pct float64) float64 {
 		v := pts
 		if pct > 0 && !numeric.Positive(pts) {
-			v = pct * size
+			v = pct * pctLine(size)
 		}
 		if !numeric.PositiveFinite(v) {
 			return 0
@@ -1148,7 +1148,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 			}
 			after := prev.SpaceAfter
 			if prev.SpaceAfterPct > 0 && !numeric.Positive(after) {
-				after = prev.SpaceAfterPct * psize
+				after = prev.SpaceAfterPct * pctLine(psize)
 			}
 			if numeric.PositiveFinite(after) {
 				before = max(before, min(after, maxCoordinate)*f.spacing)
@@ -1213,6 +1213,22 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		b.bullet(node, p, first, lb, f, number, indent)
 	}
 	return node
+}
+
+// pctLine returns the length a percentage spacing before or after a
+// paragraph whose largest size is size takes its share of: a single line
+// of that size, 1.2 times it, where ECMA-376 Part 1, 21.1.2.2.11 spcPct
+// names the text size, as PowerPoint spaces a PresentationML paragraph.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/n778859.pptx's 18-point paragraphs with a
+//     spacing before of 20% print 25.95 points apart, 21.6 plus 20% of it.
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/Text_200chars.pptx's
+//     32-point paragraphs with a spacing before of 20% print 7.9 points
+//     more apart than their lines.
+func pctLine(size float64) float64 {
+	return float64(size * fixedLineFactor)
 }
 
 // maxTabStops caps a paragraph's tab stops. Anti-DoS guard, not

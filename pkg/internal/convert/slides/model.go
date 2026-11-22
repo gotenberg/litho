@@ -644,8 +644,9 @@ type Paragraph struct {
 	// line shorter than it grows to it, a taller one keeps its height.
 	LineSpacingAtLeast float64
 	// SpaceBefore and SpaceAfter are the spacing around the paragraph in
-	// points; SpaceBeforePct and SpaceAfterPct their percentage-of-size
-	// forms when a file gives those instead, as fractions of 1.
+	// points; SpaceBeforePct and SpaceAfterPct their percentage forms when
+	// a file gives those instead, as fractions of 1 of a single line of the
+	// paragraph's largest size.
 	SpaceBefore, SpaceAfter       float64
 	SpaceBeforePct, SpaceAfterPct float64
 	// RightToLeft is the paragraph's base direction.

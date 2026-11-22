@@ -25,6 +25,10 @@ func TestText_LinePlacement(t *testing.T) {
 		p.LineSpacing, p.LineSpacingPoints = prop, pts
 		return p
 	}
+	pct := func(p Paragraph, before float64) Paragraph {
+		p.SpaceBeforePct = before
+		return p
+	}
 	for _, tc := range []struct {
 		name  string
 		paras []Paragraph
@@ -39,6 +43,8 @@ func TestText_LinePlacement(t *testing.T) {
 		// size (sd-data/n759180.pptx: 13 points, end mark 5).
 		{"closing-break", []Paragraph{{Runs: []Run{{Text: "B0", Style: a20}, {Break: true, Style: a20}}, Style: arial(5)}, para("B1", a20)}, map[string]float64{"B0": 48.33, "B1": 78.33}},
 		{"spacing", []Paragraph{spaced(para("P0", a20), 10, 5), spaced(para("P1", a20), 10, 5), spaced(para("P2", a20), 10, 5)}, map[string]float64{"P0": 48.33, "P1": 87.33, "P2": 126.34}},
+		// A percentage spacing is a share of the 24-point single line.
+		{"spacing-percent", []Paragraph{pct(para("P0", a20), 0.2), pct(para("P1", a20), 0.2), pct(para("P2", a20), 0.2)}, map[string]float64{"P0": 48.33, "P1": 77.13, "P2": 105.93}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 340, 340, tc.paras...)}})
