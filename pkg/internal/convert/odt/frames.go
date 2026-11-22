@@ -234,6 +234,12 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 	g.wrap = g.props.Get("style:wrap")
 	g.hpos, g.hrel = g.props.Get("style:horizontal-pos"), g.props.Get("style:horizontal-rel")
 	g.vpos, g.vrel = g.props.Get("style:vertical-pos"), g.props.Get("style:vertical-rel")
+	// LibreOffice writes a position against the page's top or bottom
+	// margin area, which ODF 1.3 does not name, as loext:vertical-rel
+	// beside a style:vertical-rel ODF 1.3 knows.
+	if v := g.props.Get("loext:vertical-rel"); v == "page-content-top" || v == "page-content-bottom" {
+		g.vrel = v
+	}
 	b.relativeSize(c, &g)
 	return g
 }
@@ -275,10 +281,16 @@ func (b *builder) relativeSize(c *odf.Element, g *frameGeom) {
 
 // pageRelative reports a frame whose position Writer measures from the
 // page: anchored to the page (ODF 1.3, Part 3, 19.756), or placed
-// against the page or its content area vertically (20.387,
-// style:vertical-rel page and page-content).
+// against the page, its content area or its top or bottom margin area
+// vertically (20.387, style:vertical-rel page and page-content;
+// LibreOffice's loext:vertical-rel page-content-top and
+// page-content-bottom).
 func (g frameGeom) pageRelative() bool {
-	return g.anchor == "page" || g.vrel == "page" || g.vrel == "page-content"
+	switch g.vrel {
+	case "page", "page-content", "page-content-top", "page-content-bottom":
+		return true
+	}
+	return g.anchor == "page"
 }
 
 // frameBox returns the style of a frame's box: its size, border,
@@ -676,7 +688,12 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 		x = x1 - w
 	}
 	y0, y1 := 0.0, ph
-	if g.vrel == "page-content" || g.vrel != "page" && (g.vrel != "" || g.anchor != "page") {
+	switch {
+	case g.vrel == "page-content-top":
+		y1 = pg.top
+	case g.vrel == "page-content-bottom":
+		y0 = pg.bottom
+	case g.vrel == "page-content" || g.vrel != "page" && (g.vrel != "" || g.anchor != "page"):
 		y0, y1 = pg.top, pg.bottom
 	}
 	y := y0 + g.y

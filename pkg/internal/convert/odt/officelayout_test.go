@@ -688,3 +688,34 @@ func TestConvert_ShapeTextCentred(t *testing.T) {
 		t.Error("no line Mid")
 	}
 }
+
+// TestConvert_MarginAreaFrames places text boxes against the page's top
+// and bottom margin areas, which LibreOffice names in loext:vertical-rel:
+// the top one measured from the page's top edge, the bottom one from the
+// top of the bottom margin.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/page-content-top.odt prints its 10 cm
+//     square 3 cm below the page's top edge, and
+//     odfexport/page-content-bottom.odt its square of svg:y -10.998 cm
+//     with its top 423.5 points below the top of a 27.94 cm page of 2 cm
+//     margins, 311.8 points above the bottom margin.
+func TestConvert_MarginAreaFrames(t *testing.T) {
+	auto := `<style:style style:name="t" style:family="graphic"><style:graphic-properties style:vertical-pos="from-top" style:vertical-rel="paragraph" loext:vertical-rel="page-content-top" style:horizontal-pos="from-left" style:horizontal-rel="paragraph" style:wrap="run-through"/></style:style>` +
+		`<style:style style:name="b" style:family="graphic"><style:graphic-properties style:vertical-pos="from-top" style:vertical-rel="paragraph" loext:vertical-rel="page-content-bottom" style:horizontal-pos="from-left" style:horizontal-rel="paragraph" style:wrap="run-through"/></style:style>`
+	body := `<text:p>Xg<draw:frame draw:style-name="t" text:anchor-type="paragraph" svg:y="1cm" svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>T</text:p></draw:text-box></draw:frame>` +
+		`<draw:frame draw:style-name="b" text:anchor-type="paragraph" svg:y="-5cm" svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>B</text:p></draw:text-box></draw:frame></text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	got := map[string]run{}
+	for _, r := range runs(res.Pages[0]) {
+		got[r.text] = r
+	}
+	// The default page is 29.7 cm tall with 2 cm margins: the bottom
+	// margin starts 785.2 points down.
+	for text, top := range map[string]float64{"T": 28.35, "B": 785.2 - 141.73} {
+		if r, ok := got[text]; !ok || r.y < top || r.y > top+15 {
+			t.Errorf("%s at %+v, want its box's top at %v", text, r, top)
+		}
+	}
+}
