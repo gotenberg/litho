@@ -40,7 +40,8 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 		return
 	}
 	content := doc.Content
-	if p.artifact || !p.hang(b.elem, doc.Structure) {
+	hung := !p.artifact && p.hang(b.elem, doc.Structure)
+	if !hung {
 		// A repeated table header paints copies that hang from nothing,
 		// and a frame without an element of its own hangs its content
 		// from the element it paints in.
@@ -68,10 +69,8 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 	if p.artifact {
 		return
 	}
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
 	for _, l := range doc.Links {
-		if l.URI == "" {
-			continue
-		}
 		r, ok := intersect(l.Rect, typeset.Rect{Width: view.Width, Height: view.Height})
 		if !ok {
 			continue
@@ -79,11 +78,47 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 		r.X += view.X
 		r.Y += view.Y
 		if turn != nil {
-			r = turnedRect(b.turn, box.X+float64(box.Width/2), box.Y+float64(box.Height/2), r)
+			r = turnedRect(b.turn, cx, cy, r)
 		}
 		lk := &link{href: l.URI, elem: l.Parent, contents: l.Contents, described: true}
+		if l.URI == "" {
+			to, ok := frameTarget(l.Dest, view)
+			if !ok {
+				p.e.warnOnce(warn.LinkUnresolved, warn.Omitted, "a link to a part of a frame's document that the frame does not show was left out", box.Y)
+				continue
+			}
+			if turn != nil {
+				t := turnedRect(b.turn, cx, cy, typeset.Rect{X: to.X, Y: to.Y})
+				to = typeset.Point{X: t.X, Y: t.Y}
+			}
+			lk.to = &to
+			if hung {
+				lk.toElem = l.Dest.Elem
+			}
+		}
 		p.links = append(p.links, pendingLink{lk: lk, rect: r})
 	}
+}
+
+// frameTarget returns the flow position of d, a destination in a frame's
+// document laid out on the one page of the frame's viewport view, and
+// whether the frame shows it: the HTML Standard, 7.4.6.4, scrolls the
+// frame's own navigable to a fragment of its document, and the place lies
+// in view when the frame's box shows it unscrolled. A link to any other
+// place would leave the reader at a part of the page the frame does not
+// show.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 writes a link of a
+//     framed document to "#near", "#far", "#" and to an ID of a srcdoc as
+//     the named destinations /near, /far, / and /s, which the file does not
+//     define, and no link for an ID the document lacks.
+func frameTarget(d *typeset.Dest, view typeset.Rect) (typeset.Point, bool) {
+	if d == nil || d.Page != 1 || d.X < 0 || d.Y < 0 || d.X > view.Width || d.Y >= view.Height {
+		return typeset.Point{}, false
+	}
+	return typeset.Point{X: view.X + d.X, Y: view.Y + d.Y}, true
 }
 
 // snappedView returns the content box box, on page page, with its edges

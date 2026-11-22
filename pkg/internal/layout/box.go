@@ -41,6 +41,12 @@ type link struct {
 	// (Node.Comment): elem is then its Annot element.
 	comment *typeset.Comment
 	point   bool
+	// to, when set, is the target of a link of a frame's document to a
+	// part of that document the frame shows: a place in the flow, and
+	// toElem the structure element there, nil for none
+	// ([painter.embedded]). href is then empty.
+	to     *typeset.Point
+	toElem *typeset.StructElem
 }
 
 // maxLinkContents bounds the characters of a link's description. Anti-DoS

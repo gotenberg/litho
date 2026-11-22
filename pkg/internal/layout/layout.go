@@ -921,6 +921,9 @@ func (e *engine) pageRect(p int, r typeset.Rect) (typeset.Rect, bool) {
 // structure element: no element is the document's top. Off, a link names
 // an element or nothing.
 //
+// A link of a frame's document to a place the frame shows goes to that
+// place on the page ([frameTarget]).
+//
 // # Corpus evidence
 //
 //   - litho/html color-scheme: Chromium links "#top", which no element of
@@ -935,6 +938,11 @@ func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 		return typeset.Link{}, false
 	}
 	href := pl.lk.href
+	if to := pl.lk.to; to != nil {
+		d := e.dest(clamp(to.X), max(clamp(to.Y), 0))
+		d.Elem = pl.lk.toElem
+		return typeset.Link{Dest: &d, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
+	}
 	if id, ok := strings.CutPrefix(href, "#"); ok {
 		var d typeset.Dest
 		found := false

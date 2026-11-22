@@ -107,7 +107,7 @@ func TestEmbed_LinksArePlacedAndCut(t *testing.T) {
 		d.Links = []typeset.Link{
 			{Rect: typeset.Rect{X: px(1), Y: px(1), Width: px(10), Height: px(1)}, URI: "https://example.com/in", Parent: lk, Contents: "in"},
 			{Rect: typeset.Rect{X: px(1), Y: px(5), Width: px(1), Height: px(1)}, URI: "https://example.com/out", Parent: lk},
-			{Rect: typeset.Rect{X: px(1), Y: px(1), Width: px(1), Height: px(1)}, Dest: &typeset.Dest{Page: 1}},
+			{Rect: typeset.Rect{X: px(1), Y: px(5), Width: px(1), Height: px(1)}, Dest: &typeset.Dest{Page: 1}},
 		}
 		return d
 	}
@@ -233,5 +233,33 @@ func TestEmbed_DroppedUnderGroupsIsNamed(t *testing.T) {
 	}
 	if hasWarning(res, warn.LimitReached, "a vector picture") {
 		t.Errorf("warnings %v name a vector picture", res.Warnings)
+	}
+}
+
+// A link of the document to a part of it the frame shows goes to that
+// place in the frame's box, its element kept (HTML Standard, 7.4.6.4: the
+// fragment scrolls the frame's own navigable); a link to a part the frame
+// does not show is left out with a warning, never written as a
+// destination the reader cannot see.
+func TestEmbed_FragmentLinksGoInsideTheFrame(t *testing.T) {
+	doc0 := redDoc(1)
+	target := doc0.Structure.Kids[0]
+	doc0.Links = []typeset.Link{
+		{Rect: typeset.Rect{X: 0, Y: 0, Width: px(1), Height: px(1)}, Dest: &typeset.Dest{Page: 1, X: px(2), Y: px(1), Elem: target}},
+		{Rect: typeset.Rect{X: px(1), Y: 0, Width: px(1), Height: px(1)}, Dest: &typeset.Dest{Page: 1, X: 0, Y: px(30)}},
+	}
+	make := func(float64, float64) *Embedded { return doc0 }
+	frame := &Node{Kind: Replaced, Style: sty(width(3), height(2), margin(1), func(s *css.Style) { s.Display = css.Block }), Role: "DocumentFragment", Picture: embedded(make)}
+	res := run(t, doc(frame), page(10, 10))
+	links := res.Pages[0].Links
+	if len(links) != 1 || links[0].Dest == nil {
+		t.Fatalf("links %+v, want one internal link", links)
+	}
+	d := links[0].Dest
+	if d.Page != 1 || !near(d.X, px(3)) || !near(d.Y, px(2)) || d.Elem != target {
+		t.Errorf("destination %+v, want page 1 at (3, 2) px on the P", d)
+	}
+	if !hasWarning(res, warn.LinkUnresolved, "does not show") {
+		t.Errorf("warnings %v, want the hidden target reported", res.Warnings)
 	}
 }
