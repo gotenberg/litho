@@ -282,6 +282,8 @@ A capture narrowed by `CORPUS` or `FEATURE` replaces only the cells it measured 
 
 Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.md).
 
+The cells that compare drawings take each side from a stated renderer. `render` judges litho's renderer: litho's drawing of a PDF against poppler's (`pdftoppm`) drawing of the same PDF, captured at provisioning. `diff` judges a conversion: litho's PDF and the reference PDF are both drawn by litho's renderer when the fixture is scored, so the layout and strict scores read what the converter wrote and not how two rasterizers differ (poppler places each glyph's origin on a whole pixel vertically, half a pixel above its outline on average). `reftest`, `draw` and `svgdraw` draw litho's side with litho's renderer and compare it with references drawn by litho, by hand, or by resvg.
+
 ## Corpora
 
 | Corpus             | Fixtures                                   | Source                                                                                                                                                                               |

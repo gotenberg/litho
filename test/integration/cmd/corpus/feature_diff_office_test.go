@@ -28,7 +28,7 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 	}
 	root := filepath.Join("..", "..", "testdata", filepath.FromSlash(corpus))
 	goldens := filepath.Join(root, filepath.FromSlash(m.Goldens["diff"]))
-	if _, err := os.Stat(filepath.Join(goldens, "render")); err != nil {
+	if _, err := os.Stat(filepath.Join(goldens, "text")); err != nil {
 		t.Skipf("%s is not provisioned (run %s)", corpus, prepareRemedy(corpus))
 	}
 	pf, err := os.Open(filepath.Join(corpusSourceDir, versionsFileName))
@@ -83,9 +83,9 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 // Office rig on its own references: each litho Office corpus's Microsoft
 // PDF, handed to the diff feature as litho's conversion, passes
 // Prepare's checks and scores 1 on pages, links and outline against the
-// goldens made from it, and clears the text and layout bars but for the
-// references below, where litho's reading and drawing of the PDF part from
-// PDF.js's and poppler's. The list is exact, so a reference that comes
+// goldens made from it, 1 on layout and strict (both sides are the same
+// PDF drawn by the same renderer), and clears the text bar but for the
+// references below, where litho's reading of the PDF parts from PDF.js's. The list is exact, so a reference that comes
 // to clear the bars, or one that drops under them, fails the test. The
 // libreoffice corpora are left to a corpus run: drawing all of them takes a
 // minute.
@@ -147,7 +147,7 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 				}
 				v := f.Compare(fx.ID, out)
 				s := v.Scores
-				if s[scorePages] != 1 || s[scoreLinks] != 1 || s[scoreOutline] != 1 {
+				if s[scorePages] != 1 || s[scoreLinks] != 1 || s[scoreOutline] != 1 || s[scoreLayout] != 1 || s[scoreStrict] != 1 {
 					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
 				}
 				clears := s[scoreText] >= diffTextBar && s[scoreLayout] >= diffLayoutBar

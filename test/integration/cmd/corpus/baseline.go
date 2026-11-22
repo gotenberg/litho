@@ -220,6 +220,9 @@ var uncomparedMetrics = map[string]bool{
 	// The diff fixtures left unscored because their reference draws a face
 	// no fixture font draws as it does: an inventory of the references.
 	metricReferenceFontsMissing: true,
+	// The diff fixtures left unscored because litho's renderer cannot draw
+	// a page of their reference: an inventory of renderer findings.
+	metricReferenceUndrawn: true,
 }
 
 // defaultBaselinePath returns the canonical baseline location. The

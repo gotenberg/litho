@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/text/unicode/norm"
 
@@ -25,9 +26,14 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
-// diffDPI is the resolution the diff goldens are drawn at, that of the render
-// goldens: one pixel per point.
+// diffDPI is the resolution both sides of the diff cell are drawn at, that
+// of the render goldens: one pixel per point.
 const diffDPI = renderDPI
+
+// metricReferenceUndrawn counts the diff fixtures left unscored because
+// litho's renderer could not draw a page of their reference. An inventory,
+// not gated: each is a finding about the renderer.
+const metricReferenceUndrawn = "reference_undrawn"
 
 // The layout score's tolerance of position (see [layoutScore]), in pixels
 // at 72 dpi. A page is halved to one pixel per two points, blurred with a box
@@ -58,8 +64,8 @@ const diffScoreTolerance = 0.02
 // The bars a fixture must clear on text and layout to count as matched in
 // the cell's count. The baseline gates each score itself; the count reads how
 // many fixtures look like Chromium's. Both sit between what Chromium's own
-// PDF scores against its goldens, where litho reads and draws a PDF poppler
-// and PDF.js read too, and what another document scores: the gap is the
+// PDF scores against its goldens, where litho reads a PDF PDF.js reads too
+// and draws both sides, and what another document scores: the gap is the
 // room a faithful conversion by another engine has.
 //
 // # Corpus evidence
@@ -67,8 +73,8 @@ const diffScoreTolerance = 0.02
 //   - litho/html, gotenberg/html: each Chromium reference converted back through the feature (litho
 //     reads and draws the PDF the goldens come from) scores text F1 1 on 11
 //     sources and 0.89 on i18n, whose Arabic, Hebrew and Thai litho's text
-//     extraction and PDF.js tokenise apart; layout 0.93 (i18n) to 0.99
-//     (backgrounds, images, floats); strict 1 on every page.
+//     extraction and PDF.js tokenise apart; layout and strict 1, both sides
+//     being one drawing.
 //   - probe, html: litho's drawing of each reference's first page shifted by 1 or
 //     2 pixels both ways, or stretched by 1% down the page (a line pitch a
 //     fraction of a pixel apart), scores layout 0.92 to 0.99 against its
@@ -165,9 +171,11 @@ func normalizeLinkURI(s string) string {
 
 // diffGolden is everything the goldens hold for one source.
 type diffGolden struct {
-	text   *pdfjsReference
-	render *renderIndex
-	links  *diffLinkGolden
+	text  *pdfjsReference
+	links *diffLinkGolden
+	// pdf is the provisioned reference PDF, whose pages [diffFeature.Run]
+	// draws with litho's renderer as it draws litho's own.
+	pdf string
 	// sizes are the reference's page sizes in points, read with litho from
 	// the provisioned Chromium PDF; nil skips the page size check.
 	sizes []diffPageSize
@@ -225,8 +233,9 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 // litho at the options of its options.json (test/integration/fixture: by default
 // print media, A4, Gotenberg's default margins) and compared with the PDF
 // Gotenberg's Chromium route wrote from the same source at the same options,
-// read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),
-// and at load by litho (page sizes, outline). It scores the Office
+// read at provisioning by PDF.js (text, links), at load by litho (page
+// sizes, outline), and drawn by litho's renderer when scored, as litho's
+// conversion is ([drawDiffPage]). It scores the Office
 // converters against LibreOffice alike: each docx, odt, xlsx, ods, csv,
 // pptx or odp corpus source is converted at the LibreOffice route's fields its
 // options.json names and compared with the PDF that route wrote, a
@@ -265,7 +274,6 @@ type diffFeature struct {
 
 	mu        sync.RWMutex
 	goldens   map[string]*diffGolden
-	renderDir string
 	fontDirs  []string
 	reportDir string
 
@@ -328,9 +336,9 @@ func (f *diffFeature) SetReportDir(dir string) {
 	f.mu.Unlock()
 }
 
-// LoadGoldens reads the text, render and link goldens under dir, keyed by
-// reference name, the fixture ID with "/" written "__" ([reportName]); a
-// source needs all three.
+// LoadGoldens reads the text and link goldens under dir, keyed by reference
+// name, the fixture ID with "/" written "__" ([reportName]), and finds each
+// one's reference PDF; a source needs all three.
 func (f *diffFeature) LoadGoldens(dir string) error {
 	f.mu.RLock()
 	office := f.office
@@ -339,10 +347,6 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	texts := make(map[string]*pdfjsReference)
 	var textMu sync.RWMutex
 	if err := loadPDFJSReferences(filepath.Join(dir, "text"), texts, &textMu); err != nil {
-		return err
-	}
-	renders, err := loadDiffJSON[renderIndex](filepath.Join(dir, "render"))
-	if err != nil {
 		return err
 	}
 	links, err := loadDiffJSON[diffLinkGolden](filepath.Join(dir, "links"))
@@ -368,29 +372,24 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	}
 	goldens := make(map[string]*diffGolden, len(texts))
 	for id, t := range texts {
-		r, l := renders[id], links[id]
-		if r == nil || l == nil {
+		l := links[id]
+		if l == nil {
 			continue
 		}
-		if r.DPI != diffDPI {
-			return fmt.Errorf("diff render golden %s was drawn at %g dpi, the feature compares at %d: re-provision goldens/diff", id, r.DPI, diffDPI)
-		}
-		if r.HideAnnotations != office {
-			return fmt.Errorf("diff render golden %s was drawn with hide_annotations %v, the corpus compares with %v: re-provision goldens/diff", id, r.HideAnnotations, office)
-		}
-		sizes, outline, err := readReferenceShape(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
+		ref := filepath.Join(pdfsDir, id+".pdf")
+		sizes, outline, err := readReferenceShape(context.Background(), ref)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
 			return fmt.Errorf("diff reference %s: %w", id, err)
 		}
-		g := &diffGolden{text: t, render: r, links: l, sizes: sizes, outline: outline}
+		g := &diffGolden{text: t, links: l, pdf: ref, sizes: sizes, outline: outline}
 		if office {
-			f.referenceForm(g, filepath.Join(pdfsDir, id+".pdf"))
+			f.referenceForm(g, ref)
 		}
 		if checkFonts {
-			missing, err := referenceMissingFaces(context.Background(), qpdf, filepath.Join(pdfsDir, id+".pdf"), fixture)
+			missing, err := referenceMissingFaces(context.Background(), qpdf, ref, fixture)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "diff: reading the fonts of reference %s: %v; scored as it is\n", id, err)
 			} else {
@@ -403,7 +402,7 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 		return ErrNoGoldens
 	}
 	f.mu.Lock()
-	f.goldens, f.renderDir, f.fontDirs = goldens, filepath.Join(dir, "render"), fonts
+	f.goldens, f.fontDirs = goldens, fonts
 	f.mu.Unlock()
 	return nil
 }
@@ -499,7 +498,7 @@ func (f *diffFeature) golden(id string) *diffGolden {
 }
 
 // CountsSkippedMetrics counts the metrics of the fixtures the cell leaves
-// unscored, reference_fonts_missing.
+// unscored, reference_fonts_missing and reference_undrawn.
 func (f *diffFeature) CountsSkippedMetrics() {}
 
 // diffOutput is Run's output.
@@ -516,6 +515,9 @@ type diffOutput struct {
 	// MissingFonts are the faces the reference draws that no fixture font
 	// draws as it does: the fixture is left unscored.
 	MissingFonts []string `json:"reference_fonts_missing,omitempty"`
+	// Undrawn says which page of the reference litho's renderer could not
+	// draw, and why: the fixture is left unscored.
+	Undrawn string `json:"reference_undrawn,omitempty"`
 	// PDFSHA256 is the SHA-256 of litho's PDF, in hexadecimal.
 	PDFSHA256 string `json:"pdf_sha256,omitempty"`
 	// ExpectedText reports a text score against the source's expected
@@ -554,27 +556,40 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "no golden", Scores: zeroDiffScores()})
 	}
 	f.mu.RLock()
-	fonts, renderDir, reportDir, office := f.fontDirs, f.renderDir, f.reportDir, f.office
+	fonts, reportDir, office := f.fontDirs, f.reportDir, f.office
 	f.mu.RUnlock()
+	// Each side has the time limit of a fixture: litho converting and
+	// drawing its PDF, then the reference's pages drawn ([FixtureTimeout]
+	// grants both).
+	lctx, cancel := context.WithTimeout(ctx, perFileTimeout)
+	defer cancel()
 	src, settings, err := sourceSettings(srcPath, office, fonts)
 	var data []byte
 	if err == nil {
-		data, err = f.convert(ctx, src, settings)
+		data, err = f.convert(lctx, src, settings)
 	}
 	var doc diffLithoDoc
 	if err == nil {
-		doc, err = readDiffPages(ctx, data, office)
+		doc, err = readDiffPages(lctx, data, office)
 	}
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if lctx.Err() != nil {
+			return nil, lctx.Err()
 		}
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: err.Error(), GoldenPages: g.text.NumPages, Scores: zeroDiffScores()})
 	}
 	f.mu.RLock()
 	borrowed := f.borrowed[fixtureID]
 	f.mu.RUnlock()
-	out := scoreDiff(g, doc, renderDir, settings.Format == fixture.FormatCSV, settings.ExpectedText, func(page int, got, want image.Image, d pixelDiff) {
+	ref, err := openReference(g.pdf)
+	if err != nil {
+		return nil, err
+	}
+	defer ref.Close()
+	rctx, cancelRef := context.WithTimeout(ctx, perFileTimeout)
+	defer cancelRef()
+	draw := func(page int) (image.Image, error) { return drawDiffPage(rctx, ref, page, office) }
+	out := scoreDiff(g, doc, draw, settings.Format == fixture.FormatCSV, settings.ExpectedText, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}
@@ -583,12 +598,21 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 			fmt.Fprintf(os.Stderr, "diff: report for %s page %d: %v\n", fixtureID, page, err)
 		}
 	})
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	out.ReferenceOf, out.MissingFonts = borrowed, g.missingFonts
 	sum := sha256.Sum256(data)
 	out.PDFSHA256 = hex.EncodeToString(sum[:])
 	f.scoreForm(ctx, g, data, &out)
 	return json.Marshal(out)
 }
+
+// FixtureTimeout gives a fixture twice [perFileTimeout]: one for litho's
+// side, converting the source and drawing its pages, one for drawing the
+// reference's (see [diffFeature.Run]). A reference page past its share is
+// a page that does not draw, which leaves the fixture unscored.
+func (f *diffFeature) FixtureTimeout(string) time.Duration { return 2 * perFileTimeout }
 
 // referenceForm reads the widgets of the reference at path into g, which
 // [diffFeature.scoreForm] scores litho's against.
@@ -632,8 +656,7 @@ func zeroDiffScores() map[string]float64 {
 }
 
 // readDiffPages reads litho's PDF: each page's text, links, size and
-// drawing at 72 dpi, without its annotations when hideAnnotations is set as
-// the Office corpora's goldens are drawn, and the outline. A page with no
+// drawing ([drawDiffPage]), and the outline. A page with no
 // text at all reads as empty, as PDF.js reads it.
 func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diffLithoDoc, error) {
 	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -674,11 +697,7 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 				links = append(links, diffLink{Page: p, Rect: a.Rect[:], URI: a.URI, DestPage: a.DestPage})
 			}
 		}
-		renderOpts := []pdf.RenderOption{pdf.WithRenderDPI(diffDPI)}
-		if hideAnnotations {
-			renderOpts = append(renderOpts, pdf.WithRenderContent(models.RenderAllContent&^models.RenderAnnotations))
-		}
-		img, err := r.RenderPage(ctx, p, renderOpts...)
+		img, err := drawDiffPage(ctx, r, p, hideAnnotations)
 		if err != nil {
 			return diffLithoDoc{}, fmt.Errorf("render page %d: %w", p, err)
 		}
@@ -687,23 +706,58 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 	return diffLithoDoc{pages: pages, outline: flattenOutline(marks)}, nil
 }
 
+// drawDiffPage draws page p of r for the layout and strict scores, litho's
+// conversion and the reference alike: with litho's renderer at diffDPI and
+// the default limits, without the annotations when hide is set, as the
+// Office corpora compare their pages. Both sides come from one renderer, so
+// the scores measure the conversion and not how two rasterizers differ:
+// poppler places a glyph's origin on a whole pixel vertically, half a pixel
+// above its outline on average, and draws Type 3 glyphs about a tenth
+// darker, which a reference it drew would carry into every score. The
+// reference is drawn when it is scored, so its drawing follows the renderer
+// of the tree that runs the cell. The render cell is where litho's renderer
+// is judged against poppler.
+func drawDiffPage(ctx context.Context, r *pdf.Reader, p int, hide bool) (image.Image, error) {
+	opts := []pdf.RenderOption{pdf.WithRenderDPI(diffDPI)}
+	if hide {
+		opts = append(opts, pdf.WithRenderContent(models.RenderAllContent&^models.RenderAnnotations))
+	}
+	return r.RenderPage(ctx, p, opts...)
+}
+
+// openReference opens the provisioned reference PDF at path for drawing.
+// The caller closes it.
+func openReference(path string) (*pdf.Reader, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // provisioned reference under the corpus testdata root
+	if err != nil {
+		return nil, fmt.Errorf("read the reference: %w", err)
+	}
+	r, err := pdf.Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("open the reference: %w", err)
+	}
+	return r, nil
+}
+
 // scoreDiff scores litho's pages against the goldens. outlineByPage
 // matches the outline items by page alone, for a reference whose titles
 // no converter can know. expected, when not "", is the text the source's
 // options name, which litho's text is scored against whole in place of the
-// reference's page by page. report is called for each page the strict
-// rule fails, with litho's drawing, Chromium's and their comparison.
-func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage bool, expected string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
+// reference's page by page. draw draws a page of the reference, one at a
+// time so a long document holds one of its pages at once. report is called
+// for each page the strict rule fails, with litho's drawing, the
+// reference's and their comparison.
+//
+// A reference page draw cannot draw leaves the fixture unscored
+// (diffOutput.Undrawn): its layout and strict scores would judge the
+// renderer, not the conversion.
+func scoreDiff(g *diffGolden, doc diffLithoDoc, draw func(page int) (image.Image, error), outlineByPage bool, expected string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
 	pages := doc.pages
 	out := diffOutput{Pages: len(pages), GoldenPages: g.text.NumPages}
 	n := max(len(pages), g.text.NumPages)
 	goldenText := make(map[int]string, len(g.text.Pages))
 	for _, p := range g.text.Pages {
 		goldenText[p.PageNumber] = p.Text
-	}
-	goldenPNG := make(map[int]string, len(g.render.Pages))
-	for _, p := range g.render.Pages {
-		goldenPNG[p.Page] = p.File
 	}
 	var textSum, layoutSum, strictSum float64
 	sizesCompared, sizesMatched := 0, 0
@@ -723,21 +777,19 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage 
 			if expected == "" {
 				res.TextF1 = tokenF1(goldenText[p], lp.text)
 			}
-			if file := goldenPNG[p]; file != "" {
-				want, err := readPNG(filepath.Join(renderDir, file))
-				if err != nil {
-					res.Detail = err.Error()
-				} else {
-					res.Layout = layoutScore(lp.img, want)
-					d := comparePixels(lp.img, want, renderPixelRule, renderSizeSlack)
-					res.Strict = d.within(renderPixelRule)
-					if !res.Strict {
-						res.Detail = d.String()
-						report(p, lp.img, want, d)
-					}
+			if want, err := draw(p); err != nil {
+				res.Detail = err.Error()
+				if out.Undrawn == "" {
+					out.Undrawn = fmt.Sprintf("page %d of the reference does not draw: %v", p, err)
 				}
 			} else {
-				res.Detail = "poppler drew no golden of this page"
+				res.Layout = layoutScore(lp.img, want)
+				d := comparePixels(lp.img, want, renderPixelRule, renderSizeSlack)
+				res.Strict = d.within(renderPixelRule)
+				if !res.Strict {
+					res.Detail = d.String()
+					report(p, lp.img, want, d)
+				}
 			}
 		} else {
 			res.Detail = "page missing on one side"
@@ -1019,7 +1071,7 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 	if err := json.Unmarshal(output, &got); err != nil {
 		return Verdict{
 			FixtureID: fixtureID, Outcome: outcomeError, Reason: fmt.Sprintf("decode output: %v", err),
-			Scores: zeroDiffScores(), Metrics: map[string]int{metricConvertError: 1, metricPagesEqual: 0, metricReferenceFontsMissing: 0},
+			Scores: zeroDiffScores(), Metrics: map[string]int{metricConvertError: 1, metricPagesEqual: 0, metricReferenceFontsMissing: 0, metricReferenceUndrawn: 0},
 		}
 	}
 	if got.Scores == nil {
@@ -1038,7 +1090,17 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 		}
 		return Verdict{
 			FixtureID: fixtureID, Skipped: true, Outcome: got.Outcome, Reason: reason, Scores: got.Scores,
-			Metrics:   map[string]int{metricReferenceFontsMissing: 1},
+			Metrics:   map[string]int{metricReferenceFontsMissing: 1, metricReferenceUndrawn: 0},
+			PDFSHA256: got.PDFSHA256,
+		}
+	}
+	if got.Undrawn != "" {
+		// Unscored as well: the layout and strict scores of a page the
+		// renderer cannot draw on the reference's side say nothing of the
+		// conversion.
+		return Verdict{
+			FixtureID: fixtureID, Skipped: true, Outcome: got.Outcome, Reason: "unscored: " + got.Undrawn, Scores: got.Scores,
+			Metrics:   map[string]int{metricReferenceFontsMissing: 0, metricReferenceUndrawn: 1},
 			PDFSHA256: got.PDFSHA256,
 		}
 	}
@@ -1047,7 +1109,7 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 		Outcome:   got.Outcome,
 		Reason:    got.Reason,
 		Scores:    got.Scores,
-		Metrics:   map[string]int{metricConvertError: 0, metricPagesEqual: 0, metricReferenceFontsMissing: 0},
+		Metrics:   map[string]int{metricConvertError: 0, metricPagesEqual: 0, metricReferenceFontsMissing: 0, metricReferenceUndrawn: 0},
 		PDFSHA256: got.PDFSHA256,
 	}
 	s := got.Scores

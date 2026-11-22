@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -471,24 +470,15 @@ func TestPageCountScore(t *testing.T) {
 func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
 	page := withSquare(40, 40, 10, 10, 10)
-	f, err := os.Create(filepath.Join(dir, "x.1.png"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := png.Encode(f, page); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	draw := func(int) (image.Image, error) { return page, nil }
 	g := &diffGolden{
-		text:   &pdfjsReference{NumPages: 1, Pages: []pdfjsRefPage{{PageNumber: 1, Text: "hello world"}}},
-		render: &renderIndex{DPI: diffDPI, PageCount: 1, Pages: []renderIndexPage{{Page: 1, File: "x.1.png"}}},
-		links:  &diffLinkGolden{NumPages: 1, Links: []diffLink{{Page: 1, URI: "https://a.example/"}}},
+		text:  &pdfjsReference{NumPages: 1, Pages: []pdfjsRefPage{{PageNumber: 1, Text: "hello world"}}},
+		links: &diffLinkGolden{NumPages: 1, Links: []diffLink{{Page: 1, URI: "https://a.example/"}}},
 	}
 	noReport := func(int, image.Image, image.Image, pixelDiff) {}
 
-	same := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}}, dir, false, "", noReport)
+	same := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}}, draw, false, "", noReport)
 	if same.Outcome != outcomePass || same.Scores[scoreLayout] != 1 || same.Scores[scoreStrict] != 1 || same.Scores[scoreText] != 1 {
 		t.Errorf("identical conversion: %+v", same)
 	}
@@ -497,12 +487,28 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	extra := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{
 		{text: "hello", img: solid(40, 40, color.RGBA{0xff, 0xff, 0xff, 0xff})},
 		{text: "overflow", img: page},
-	}}, dir, false, "", func(int, image.Image, image.Image, pixelDiff) { reported++ })
+	}}, draw, false, "", func(int, image.Image, image.Image, pixelDiff) { reported++ })
 	if extra.Outcome != outcomeFail || extra.Scores[scorePages] != 0.5 || extra.Scores[scoreLinks] != 0 || extra.Scores[scoreLayout] != 0 {
 		t.Errorf("blank page plus an extra one: %+v", extra.Scores)
 	}
 	if reported != 1 {
 		t.Errorf("reported %d pages, want the one compared page that fails", reported)
+	}
+
+	// A reference page the renderer cannot draw leaves the fixture
+	// unscored, with the page and the error in its reason.
+	undrawn := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello world", img: page}}}, func(int) (image.Image, error) {
+		return nil, errors.New("page render exceeds its budget")
+	}, false, "", noReport)
+	if !strings.Contains(undrawn.Undrawn, "page 1 of the reference does not draw: page render exceeds its budget") {
+		t.Errorf("undrawn reference: %q", undrawn.Undrawn)
+	}
+	out, err := json.Marshal(undrawn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := newDiffFeature().Compare("x", out); !v.Skipped || v.Match || v.Metrics[metricReferenceUndrawn] != 1 || !strings.HasPrefix(v.Reason, "unscored: page 1 of the reference") {
+		t.Errorf("undrawn reference verdict: %+v", v)
 	}
 
 	// An expected text stands for the reference's: litho's text, its pages
@@ -511,14 +517,14 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	wrong := *g
 	wrong.text = &pdfjsReference{NumPages: 1, Pages: []pdfjsRefPage{{PageNumber: 1, Text: "dlrow olleh"}}}
 	broken := diffLithoPage{text: "hello\nworld", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}
-	if got := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, dir, false, "", noReport); got.Scores[scoreText] != 0 || got.ExpectedText {
+	if got := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, draw, false, "", noReport); got.Scores[scoreText] != 0 || got.ExpectedText {
 		t.Errorf("against a reference whose text is wrong: text %v, expected text %v", got.Scores[scoreText], got.ExpectedText)
 	}
-	judged := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, dir, false, "hello\n world\n", noReport)
+	judged := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, draw, false, "hello\n world\n", noReport)
 	if judged.Outcome != outcomePass || judged.Scores[scoreText] != 1 || !judged.ExpectedText || judged.PageResults[0].TextF1 != 0 {
 		t.Errorf("against the expected text: %+v", judged)
 	}
-	half := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, dir, false, "hello there", noReport)
+	half := scoreDiff(&wrong, diffLithoDoc{pages: []diffLithoPage{broken}}, draw, false, "hello there", noReport)
 	if half.Scores[scoreText] != 0.5 {
 		t.Errorf("one of two tokens against the expected text: text %v, want 0.5", half.Scores[scoreText])
 	}
@@ -545,7 +551,7 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	for _, tc := range cases {
 		p := lithoPage
 		p.size = tc.size
-		got := scoreDiff(&shaped, diffLithoDoc{pages: []diffLithoPage{p}, outline: tc.outline}, dir, false, "", noReport)
+		got := scoreDiff(&shaped, diffLithoDoc{pages: []diffLithoPage{p}, outline: tc.outline}, draw, false, "", noReport)
 		if got.Scores[scorePages] != tc.pages || got.Scores[scoreOutline] != tc.recall || got.Outcome != tc.outcome {
 			t.Errorf("%s: pages %v, outline %v, %s (%s); want %v, %v, %s", tc.name, got.Scores[scorePages], got.Scores[scoreOutline], got.Outcome, got.Reason, tc.pages, tc.recall, tc.outcome)
 		}
@@ -606,9 +612,8 @@ func TestConverterFeatures_ReportErrorsWithoutTheConverter(t *testing.T) {
 	diff := newDiffFeature()
 	diff.convert = unsupportedStub
 	diff.goldens["x"] = &diffGolden{
-		text:   &pdfjsReference{NumPages: 1},
-		render: &renderIndex{DPI: diffDPI},
-		links:  &diffLinkGolden{},
+		text:  &pdfjsReference{NumPages: 1},
+		links: &diffLinkGolden{},
 	}
 
 	cases := []struct {
