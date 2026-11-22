@@ -81,6 +81,12 @@
     "max_rss_mib": 768,
     "why": "10,000 frames of one document of 1 MiB of paragraphs: the document is read once, and the documents the frames lay out are held together to the input cap of 16 MiB, so 16 frames show it and the others keep their boxes empty, with a warning; about 830 pages, 7 seconds and 360 MiB."
   },
+  "html-frames-documents": {
+    "result": "pdf",
+    "max_seconds": 30,
+    "require": ["Frames of files.", "After the frames."],
+    "why": "Frames, an object and an embed of files that are no HTML document: a text file of 24 MiB on one line, read once, shown in a text document cut to its first 256 KiB with a warning; a PNG of 100,000 by 100,000 pixels, refused by the picture limits with a warning wherever it is named, the object then showing its fallback; an SVG drawing that names itself, drawn once without its self-references. The paragraphs around them convert."
+  },
   "docx-2000pages": {
     "result": "pdf",
     "max_seconds": 20,

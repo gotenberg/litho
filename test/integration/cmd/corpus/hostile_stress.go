@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gotenberg/litho/internal/imagetest"
 )
 
 // stressCorpus is the corpus of large documents `corpus build` generates
@@ -37,6 +39,10 @@ const (
 	// holds, each of the same 1 MiB document.
 	stressFrameChain = 200
 	stressFrames     = 10_000
+	// stressFrameTextBytes is the size of the one-line text file a frame
+	// of the frame document probe shows: under the 32 MiB a resource may
+	// weigh, over the input cap.
+	stressFrameTextBytes = 24 << 20
 )
 
 // stressDoc is one document of the stress corpus.
@@ -78,6 +84,7 @@ func stressDocs() []stressDoc {
 		stressDoc{"html-frames-self", "index.html", writeStressSelfFrames},
 		stressDoc{fmt.Sprintf("html-frames-chain-%d", stressFrameChain), "index.html", writeStressFrameChain},
 		stressDoc{fmt.Sprintf("html-frames-%d", stressFrames), "index.html", writeStressFrameFlood},
+		stressDoc{"html-frames-documents", "index.html", writeStressFrameDocuments},
 	)
 	docs = append(docs, stressDoc{fmt.Sprintf("docx-%dpages", stressDocxPages), "index.docx", func(dir string) error {
 		data, err := stressDocx(stressDocxPages)
@@ -388,6 +395,41 @@ func writeStressFrameChain(dir string) error {
 	for i := range stressFrameChain {
 		doc := fmt.Sprintf("<!doctype html><p>Document %d.</p>%s\n", i, frame(i+1))
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("d%03d.html", i)), []byte(doc), 0o644); err != nil { //nolint:gosec // testdata is world-readable
+			return err
+		}
+	}
+	return nil
+}
+
+// writeStressFrameDocuments writes a page whose frames, objects and embeds
+// show files that are no HTML document: a text file of
+// [stressFrameTextBytes] on one line, a PNG of 100,000 by 100,000 pixels
+// whose data holds one row, an SVG drawing that draws itself, then a
+// paragraph after them.
+func writeStressFrameDocuments(dir string) error {
+	page := `<!doctype html><html><body><p>Frames of files.</p>
+<iframe src="long.txt" width="600" height="400"></iframe>
+<object data="long.txt" type="text/plain" width="600" height="100"></object>
+<iframe src="bomb.png" width="300" height="150"></iframe>
+<object data="bomb.png" width="300" height="150">The bomb's fallback.</object>
+<embed src="bomb.png" width="300" height="150">
+<iframe src="self.svg" width="300" height="150"></iframe>
+<p>After the frames.</p></body></html>
+`
+	line := bytes.Repeat([]byte("lorem ipsum dolor sit amet "), stressFrameTextBytes/27)
+	self := `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="50">` +
+		`<rect width="100" height="50" fill="teal"/><image href="self.svg" width="50" height="25"/><image xlink:href="self.svg#x" x="50" width="50" height="25"/></svg>` + "\n"
+	files := []struct {
+		name string
+		data []byte
+	}{
+		{"index.html", []byte(page)},
+		{"long.txt", line},
+		{"bomb.png", imagetest.PNGBomb()},
+		{"self.svg", []byte(self)},
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dir, f.name), f.data, 0o644); err != nil { //nolint:gosec // testdata is world-readable
 			return err
 		}
 	}
