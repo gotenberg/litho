@@ -796,6 +796,10 @@ type Drawing struct {
 	// reads a workbook's anchors (ECMA-376 Part 1, 20.5.2.19 colOff and
 	// rowOff).
 	Unbounded bool
+	// InCell marks a drawing that fills the cell From names, a sparkline
+	// (MS-XLSX, 2.6.88 CT_Sparkline sqref): it extends the print range
+	// to that cell alone, wherever To lies.
+	InCell bool
 	// Painted, when not nil, is the box the drawing paints, from the
 	// point From places, where it differs from the box From and To place:
 	// a shape its anchors size unturned and its transform turns. The

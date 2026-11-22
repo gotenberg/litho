@@ -362,6 +362,19 @@ func TestDrawingCells_ExcelEndCell(t *testing.T) {
 	}
 }
 
+// TestDrawingCells_InCell locks the cells of a drawing that fills its
+// cell, a sparkline: that cell alone under Excel's rules, though its
+// anchors reach the next cell's corner.
+func TestDrawingCells_InCell(t *testing.T) {
+	sh := &Sheet{Name: "S", Drawings: []Drawing{{From: Anchor{Row: 4, Column: 6}, To: &Anchor{Row: 5, Column: 7}, InCell: true}}}
+	doc := newDoc(sh)
+	doc.ExcelRules = true
+	r, ok := newGrid(t.Context(), doc, sh).drawingCells(&sh.Drawings[0])
+	if want := (Range{FirstRow: 4, LastRow: 4, FirstColumn: 6, LastColumn: 6}); !ok || r != want {
+		t.Errorf("cells %+v, want %+v", r, want)
+	}
+}
+
 // TestConvert_FallbackPaper prints a sheet that names no paper on A4 when
 // the conversion names no default paper, and on the conversion's default
 // paper when it names one.

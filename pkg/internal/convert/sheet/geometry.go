@@ -151,13 +151,17 @@ func clampSide(v float64) float64 {
 // box. Under Excel's rules the box covers the cell its bottom-right
 // corner touches too, at that cell's top or left edge: Excel extends a
 // sheet's print range to a drawing's end cell even when the drawing stops
-// at its edge.
+// at its edge. A drawing that fills its cell (Drawing.InCell) covers
+// that cell alone.
 //
 // # Corpus evidence
 //
 //   - litho/xlsx: charts_bar_column, fitted to one landscape page, with
 //     charts ending at the left edge of column T and the top of row 45,
 //     prints at 66%, the zoom that fits columns A to T: A to S fit at 70%.
+//   - litho/xlsx: sparklines, fitted to one landscape Letter page with
+//     sparklines in its last column P, prints at 95%, the zoom that fits
+//     columns A to P (690.24 of 721.92 points): A to Q fit at 89%.
 //   - libreoffice/ods: sc/tdf119191_FitToCellSize.ods, a chevron anchored
 //     from D5 to F14 and turned so it paints within columns B to D,
 //     prints columns A to E on one A4 page: column F, which its anchors
@@ -166,6 +170,10 @@ func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	rc := g.drawingRect(d)
 	if rc.Width <= 0 && rc.Height <= 0 {
 		return Range{}, false
+	}
+	if d.InCell && !d.Absolute {
+		r, c := min(max(d.From.Row, 0), maxRows-1), min(max(d.From.Column, 0), maxColumns-1)
+		return Range{FirstRow: r, LastRow: r, FirstColumn: c, LastColumn: c}, true
 	}
 	var limit int
 	switch {

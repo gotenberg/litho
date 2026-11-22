@@ -52,7 +52,7 @@ func (w *sheetReader) sparklines(root *ooxml.Element) {
 					n++
 					to := sheet.Anchor{Row: row + 1, Column: col + 1}
 					w.sh.Drawings = append(w.sh.Drawings, sheet.Drawing{
-						From: sheet.Anchor{Row: row, Column: col}, To: &to, Shape: true,
+						From: sheet.Anchor{Row: row, Column: col}, To: &to, Shape: true, InCell: true,
 						Name: "sparkline", Picture: g.Picture(len(refs)),
 					})
 					refs = append(refs, strings.TrimSpace(textOf(sp.Child(nsXM, "f"))))
