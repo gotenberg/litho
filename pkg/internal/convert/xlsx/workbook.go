@@ -2,6 +2,7 @@ package xlsx
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -24,6 +25,12 @@ type definedName struct {
 // A sheet the selection of opts leaves out ([sheet.Printed]) is read
 // without its drawings and conditional formats, which only print: its
 // cells, merges, tables and pivot tables still feed the sheets that print.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx sc/tdf100034.xlsx: _xlnm.Print_Area is defined
+//     twice for its second sheet, A1:L97 both times; Excel prints the area
+//     once, on 5 pages.
 func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document, opts office.Options) error {
 	r.doc = doc
 	if pr := root.Child(nsMain, "workbookPr"); pr != nil {
@@ -42,7 +49,16 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 		if !strings.EqualFold(n, "_xlnm.Print_Area") && !strings.EqualFold(n, "_xlnm.Print_Titles") {
 			continue
 		}
-		names = append(names, definedName{name: strings.ToLower(n), local: intAttr(d, "localSheetId", -1), formula: d.Text})
+		dn := definedName{name: strings.ToLower(n), local: intAttr(d, "localSheetId", -1), formula: d.Text}
+		if !slices.ContainsFunc(names, func(o definedName) bool {
+			return o.name == dn.name && o.local == dn.local && (dn.local >= 0 || o.formula == dn.formula)
+		}) {
+			// A name is unique in its scope (ECMA-376 Part 1, 18.2.5): Excel
+			// prints a print area defined twice for one sheet once, so the
+			// first definition stands. A workbook-wide one names its sheet
+			// in its formula and stands with each other formula.
+			names = append(names, dn)
+		}
 	}
 	printed, err := printedSheets(root.Child(nsMain, "sheets"), opts)
 	if err != nil {

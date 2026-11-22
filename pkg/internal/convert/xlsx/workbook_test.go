@@ -8,7 +8,8 @@ import (
 )
 
 // TestRead_Workbook checks the sheets in book order with their states,
-// the print areas and titles of the defined names, the 1904 date system
+// the print areas and titles of the defined names, a print area defined
+// twice for one sheet read once, the 1904 date system
 // and the core properties.
 func TestRead_Workbook(t *testing.T) {
 	t.Parallel()
@@ -22,6 +23,7 @@ func TestRead_Workbook(t *testing.T) {
 		{name: "Last &amp; one", xml: data},
 	}, styles, `<workbookPr date1904="1"/>`,
 		`<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">First!$A$1:$C$9,First!$E$2</definedName>`+
+			`<definedName name="_xlnm.Print_Area" localSheetId="0">First!$A$1:$C$9,First!$E$2</definedName>`+
 			`<definedName name="_xlnm.Print_Titles" localSheetId="3">'Last &amp; one'!$A:$B,'Last &amp; one'!$1:$2</definedName>`+
 			`<definedName name="Other">First!$A$1</definedName></definedNames>`,
 		map[string]string{"docProps/core.xml": `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
