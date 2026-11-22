@@ -1109,6 +1109,9 @@ type Style struct {
 	// its widget is then drawn as its CSS box, as Chromium draws it. Not
 	// inherited.
 	AuthorBorder, AuthorBackground bool
+	// Resize says whether the box can be resized, which a textarea's
+	// resize grip shows (CSS Basic User Interface 4, 5.1).
+	Resize Resize
 	// AccentColor is the accent-color of a form control's widget (CSS
 	// Basic User Interface 4, 6.2), nil for auto. Shared and never
 	// mutated.

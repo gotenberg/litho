@@ -65,3 +65,17 @@ func TestAuthorStyled_MarksBorderAndBackground(t *testing.T) {
 		}
 	}
 }
+
+// TestResize_Computes reads resize (CSS Basic User Interface 4, 5.1): a
+// textarea is resizable by the user agent sheet, as Chromium's is, and an
+// author's none stops it.
+func TestResize_Computes(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<textarea id=ta></textarea><textarea id=no></textarea><div id=d></div><div id=v></div>`,
+		`#no { resize: none } #v { resize: vertical }`)
+	for id, want := range map[string]Resize{"ta": ResizeAuto, "no": ResizeNone, "d": ResizeNone, "v": ResizeVertical} {
+		if got := c.of(id).Resize; got != want {
+			t.Errorf("%s: resize %v, want %v", id, got, want)
+		}
+	}
+}

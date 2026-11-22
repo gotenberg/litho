@@ -192,6 +192,7 @@ own	|textarea|font	Chromium's control font, font: -webkit-small-control, which c
 own	|textarea|font-family	Chromium's control font, font: -webkit-small-control, which computes to 13.333px (10pt) and draws in the face Chromium's sans-serif takes (Liberation Sans in the pinned image); a textarea and the date and time fields in monospace
 own	|textarea|overflow-wrap	Chromium's control box, which the Standard leaves to the user agent: the border, padding and margin each control takes in Chromium, measured on its printed boxes; a control drawn as its widget paints the widget in their place
 own	|textarea|padding	Chromium's control box, which the Standard leaves to the user agent: the border, padding and margin each control takes in Chromium, measured on its printed boxes; a control drawn as its widget paints the widget in their place
+own	|textarea|resize	Chromium's textarea is resizable, resize: auto, and draws its resize grip in print, which resize: none takes away, measured
 own	|th|text-align	th centres its text when its parent's text-align is start and takes the parent's otherwise, as Chromium computes (-internal-center); the Standard says it in prose
 own	|h1|bookmark-level	CSS Generated Content 3, 8.1: the headings make the outline at their rank, as WeasyPrint's user agent sheet sets it; the HTML Standard says nothing of bookmarks
 own	|h2|bookmark-level	CSS Generated Content 3, 8.1: the headings make the outline at their rank, as WeasyPrint's user agent sheet sets it; the HTML Standard says nothing of bookmarks

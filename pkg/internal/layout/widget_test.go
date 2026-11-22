@@ -247,3 +247,25 @@ func TestWidget_RangeBaselineUnderNone(t *testing.T) {
 		t.Errorf("baseline %.2f, want the border box's bottom %.2f", b.baseline, b.borderH())
 	}
 }
+
+// TestWidget_GripFollowsResize draws a textarea's resize grip unless its
+// resize is none (CSS Basic User Interface 4, 5.1).
+func TestWidget_GripFollowsResize(t *testing.T) {
+	t.Parallel()
+	grips := func(r css.Resize) int {
+		st := widgetStyle(width(100), height(30), func(s *css.Style) { s.Resize = r })
+		n := 0
+		for _, p := range widgetPaths(run(t, doc(el(sty(), &Node{Kind: Element, Style: st, Control: &Control{Kind: ControlTextArea}})), page(200, 50))) {
+			if p.Stroke != nil && len(p.Ops) == 4 {
+				n++
+			}
+		}
+		return n
+	}
+	if got := grips(css.ResizeAuto); got != 2 {
+		t.Errorf("resize auto: %d grip strokes, want 2", got)
+	}
+	if got := grips(css.ResizeNone); got != 0 {
+		t.Errorf("resize none: %d grip strokes, want none", got)
+	}
+}

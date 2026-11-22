@@ -298,6 +298,7 @@ const (
 	pFieldSizing
 	pAppearance
 	pAccentColor
+	pResize
 	numProps
 )
 
@@ -1182,6 +1183,12 @@ func init() {
 	// menulist-button (CSS Basic User Interface 4, 7.2).
 	props[pAppearance] = enumProp("appearance", false, func(s *Style) *Appearance { return &s.Appearance }, appearanceKeywords)
 	props[pAccentColor] = accentColorProp()
+	// resize: none | both | horizontal | vertical | block | inline (CSS
+	// Basic User Interface 4, 5.1), and Chromium's auto.
+	props[pResize] = enumProp("resize", false, func(s *Style) *Resize { return &s.Resize }, map[string]Resize{
+		"none": ResizeNone, "both": ResizeBoth, "horizontal": ResizeHorizontal, "vertical": ResizeVertical,
+		"block": ResizeBlock, "inline": ResizeInline, "auto": ResizeAuto,
+	})
 	anchorLengths()
 	longhandByName = map[string]propID{}
 	for i := range props {

@@ -30,6 +30,23 @@ var appearanceKeywords = map[string]Appearance{
 	"progress-bar": AppearanceAuto, "button": AppearanceAuto,
 }
 
+// Resize is the resize property (CSS Basic User Interface 4, 5.1), which
+// a printed page reads only to draw a textarea's resize grip.
+type Resize uint8
+
+// The resize values: every value but none lets the box be resized.
+const (
+	ResizeNone Resize = iota
+	ResizeBoth
+	ResizeHorizontal
+	ResizeVertical
+	ResizeBlock
+	ResizeInline
+	// ResizeAuto is Chromium's -internal value of a textarea, resized
+	// both ways.
+	ResizeAuto
+)
+
 // accentAuto is the specified accent-color auto.
 type accentAuto struct{}
 

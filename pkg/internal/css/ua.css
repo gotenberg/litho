@@ -751,6 +751,7 @@ input {
   background-color: Field;
 }
 textarea {
+  resize: auto;
   font-family: monospace;
   padding: 2px;
   border: 1px solid light-dark(#767676, #858585);

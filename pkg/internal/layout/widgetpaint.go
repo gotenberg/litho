@@ -188,7 +188,7 @@ func (p *painter) widgetParts(b *box, r typeset.Rect) {
 			p.dropArrow(b, r)
 		}
 	case ControlTextArea:
-		if b.st.Appearance != css.AppearanceNone || drawn {
+		if b.st.Resize != css.ResizeNone {
 			p.grip(b, r, t)
 		}
 	case ControlDate, ControlTime:
@@ -476,15 +476,18 @@ func (p *painter) dropArrow(b *box, r typeset.Rect) {
 	}, Stroke: &typeset.Stroke{Color: col, Width: 2 * wpx, Cap: typeset.ButtCap, Join: typeset.MiterJoin}})
 }
 
-// grip paints a textarea's resize grip in the bottom right corner of its
-// padding box: two dark lines and two light ones, at 45 degrees.
+// grip paints the resize grip of a textarea that can be resized (CSS
+// Basic User Interface 4, 5.1) in the bottom right corner of its padding
+// box: two dark lines and two light ones, at 45 degrees, under
+// appearance: none too.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws, from the
 //     padding box's bottom right corner, hairlines of #000000 at 0.45
 //     from (-2, -9) to (-9, -2) and (-2, -5) to (-5, -2) pixels, and of
-//     #ffffff at 0.45 from (-2, -8) to (-8, -2) and (-2, -4) to (-4, -2).
+//     #ffffff at 0.45 from (-2, -8) to (-8, -2) and (-2, -4) to (-4, -2);
+//     none under resize: none.
 func (p *painter) grip(b *box, r typeset.Rect, t widgetTheme) {
 	x := r.X + r.Width - b.bd[css.Right]
 	y := r.Y + r.Height - b.bd[css.Bottom]
