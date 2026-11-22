@@ -303,11 +303,13 @@ func TestTables_FramesInCells(t *testing.T) {
 		`<w:tr><w:tc><w:p><w:pPr>` + frame + `</w:pPr><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>` +
 		`<w:p><w:pPr>` + frame + `</w:pPr><w:r><w:t>body</w:t></w:r></w:p>`
 	b := build(t, body, nil)
+	frames := find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set })
+	if len(frames) != 1 || textOf(frames[0]) != "body" {
+		t.Fatalf("%d frames placed, want the body paragraph's alone", len(frames))
+	}
 	for _, p := range role(b.root, "P") {
-		st := p.Style
-		framed := st.Float != css.FloatNone || st.Width.Kind != css.Auto
-		if want := textOf(p) == "body"; framed != want {
-			t.Errorf("%q: float %v width %v, framed %v, want %v", textOf(p), st.Float, st.Width, framed, want)
+		if st := p.Style; st.Float != css.FloatNone || st.Width.Kind != css.Auto {
+			t.Errorf("%q: float %v width %v, want a paragraph in the flow of its cell or frame", textOf(p), st.Float, st.Width)
 		}
 	}
 }
@@ -412,5 +414,68 @@ func TestHoldsAnchored(t *testing.T) {
 	}
 	if holdsAnchored([]*layout.Node{{Style: plain}}, 0) {
 		t.Error("a plain block taken for an anchored one")
+	}
+}
+
+// TestFrames_Placed places a text frame of the body as Word places a
+// drawing that wraps the text, at its x and y from the area its anchors
+// name or aligned in it, its text starting at its left edge, the
+// consecutive paragraphs and tables of identical frame properties in one
+// frame.
+func TestFrames_Placed(t *testing.T) {
+	t.Parallel()
+	para := func(framePr, text string) string {
+		return `<w:p><w:pPr>` + framePr + `</w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	// The default page is Letter with 72-point margins.
+	for _, tc := range []struct {
+		name, framePr string
+		want          css.WordAnchor
+		wrap          css.FrameWrap
+		width, height css.Dimension
+	}{
+		{"from the page", `<w:framePr w:w="2000" w:h="1000" w:hRule="exact" w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="3000" w:y="4000"/>`,
+			css.WordAnchor{X: 78, Y: 128, FromPage: true}, css.FrameWrapBoth, css.Pts(100), css.Pts(50)},
+		{"right of the page", `<w:framePr w:w="2000" w:wrap="around" w:vAnchor="text" w:hAnchor="page" w:xAlign="right" w:y="200"/>`,
+			css.WordAnchor{X: 440, Y: 10}, css.FrameWrapBoth, css.Pts(100), css.Dimension{Kind: css.Auto}},
+		{"above and below the text", `<w:framePr w:w="2000" w:h="1000" w:hRule="atLeast" w:wrap="notBeside" w:vAnchor="margin" w:hAnchor="margin" w:x="200"/>`,
+			css.WordAnchor{X: 10, FromPage: true}, css.FrameWrapNone, css.Pts(100), css.Dimension{Kind: css.Auto}},
+		{"at the bottom right of the page, as wide as its text", `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:xAlign="right" w:yAlign="bottom"/>`,
+			css.WordAnchor{X: 540, Y: 720, AlignX: 1, AlignY: 1, FromPage: true}, css.FrameWrapBoth, css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}},
+	} {
+		b := build(t, para(tc.framePr, "framed")+`<w:p/>`, nil)
+		for _, a := range b.secs[0].pending {
+			a.resolve(b.secs[0])
+		}
+		frames := find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set })
+		if len(frames) != 1 {
+			t.Fatalf("%s: %d frames, want 1", tc.name, len(frames))
+		}
+		st := frames[0].Style
+		got := st.WordAnchor
+		got.Set = false
+		if math.Abs(got.X-tc.want.X) > 1e-9 || math.Abs(got.Y-tc.want.Y) > 1e-9 || got.AlignX != tc.want.AlignX || got.AlignY != tc.want.AlignY || got.FromPage != tc.want.FromPage {
+			t.Errorf("%s: at %+v, want %+v", tc.name, got, tc.want)
+		}
+		if st.FrameWrap != tc.wrap || st.Width != tc.width || (tc.height.Kind == css.Points && st.Height != tc.height) {
+			t.Errorf("%s: wrap %v width %v height %v min %v, want %v %v %v", tc.name, st.FrameWrap, st.Width, st.Height, st.MinHeight, tc.wrap, tc.width, tc.height)
+		}
+		if textOf(frames[0]) != "framed" {
+			t.Errorf("%s: frame holds %q", tc.name, textOf(frames[0]))
+		}
+	}
+	f := `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="3000" w:y="4000"/>`
+	other := `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="3000" w:y="9000"/>`
+	tbl := `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>` + para(f, "cell") + `</w:tc></w:tr></w:tbl>`
+	b := build(t, para(f, "one")+tbl+para(f, "two")+para(other, "three")+para("", "flow"), nil)
+	frames := find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set })
+	if len(frames) != 2 || textOf(frames[0]) != "onecelltwo" || textOf(frames[1]) != "three" {
+		t.Fatalf("frames %d, want onecelltwo and three", len(frames))
+	}
+	if w := frames[0].Style.Width; w != css.Pts(468) {
+		t.Errorf("frame of several blocks without a width: width %v, want the column's 468", w)
+	}
+	if w := frames[1].Style.Width; w.Kind != css.Auto {
+		t.Errorf("frame of one paragraph without a width: width %v, want auto", w)
 	}
 }

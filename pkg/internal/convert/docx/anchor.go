@@ -706,10 +706,21 @@ func breakAnywhere(n *layout.Node, depth int) {
 	}
 }
 
+// breakWords lets the text of the paragraph n of style st, not yet
+// shared, break between any two letters.
+func breakWords(n *layout.Node, st *css.Style) {
+	st.OverflowWrap = css.Anywhere
+	for _, k := range n.Children {
+		breakAnywhere(k, 1)
+	}
+}
+
 // frame lays a paragraph with a w:framePr (17.3.1.11) out as a float: a
-// drop cap's letter floats at the start of the next paragraph's lines, a
-// text frame floats on the side its xAlign says, as wide as its w. Frames
-// positioned at absolute page coordinates float too, an approximation.
+// drop cap's letter floats at the start of the next paragraph's lines; a
+// text frame of the body is placed with the paragraphs of its frame
+// ([document.placeFrame]); any other text frame, in a header, a footer, a
+// note or a section of columns, floats on the side its xAlign says, as
+// wide as its w, an approximation of a position at page coordinates.
 //
 // # Corpus evidence
 //
@@ -727,6 +738,15 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 	if f == nil || len(f.Attrs) == 0 {
 		// A frame without properties is a plain paragraph, as LibreOffice
 		// imports it.
+		return
+	}
+	if d.framePlaced(f) {
+		// The frame is placed with the paragraphs that share its
+		// properties ([document.placeFrame]); a frame without a width
+		// breaks a word longer than its column.
+		if v, ok := ooxml.Twips(attrOr(f, "w")); !ok || v <= 0 {
+			breakWords(n, st)
+		}
 		return
 	}
 	if d.inCell > 0 {
@@ -758,10 +778,7 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 		// column: Writer breaks a word longer than the column inside it,
 		// which a float's shrink-to-fit width allows only when the word's
 		// letters are break opportunities.
-		st.OverflowWrap = css.Anywhere
-		for _, k := range n.Children {
-			breakAnywhere(k, 1)
-		}
+		breakWords(n, st)
 	}
 	if v, ok := ooxml.Twips(attrOr(f, "hSpace")); ok && v > 0 {
 		st.Margin[css.Right] = css.Pts(v)
@@ -769,4 +786,154 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 	if attrOr(f, "dropCap") == "" && (hasAttr(f, "x") || hasAttr(f, "y")) {
 		d.warn(warn.ContentUnsupported, warn.Approximated, "a text frame at a page position floats beside its anchor")
 	}
+}
+
+// framePlaced reports whether the text frame of properties f (17.3.1.11
+// framePr) is placed as Word places a frame of the body
+// ([document.placeFrame]): a frame that is no drop cap, names its
+// horizontal and vertical anchors, has a position or an alignment, and wraps the text around it or keeps it above and below
+// (wrap around, auto, tight, through or notBeside), in the body outside
+// tables and text boxes, in a section of one column: the layout measures a
+// float's offset from its column.
+func (d *document) framePlaced(f *ooxml.Element) bool {
+	if f == nil || !d.pageAnchors() || d.columned || d.inCell > 0 || hasAttr(f, "dropCap") && attrOr(f, "dropCap") != "none" {
+		return false
+	}
+	switch attrOr(f, "wrap") {
+	case "", "auto", "around", "tight", "through", "notBeside":
+	default:
+		return false
+	}
+	if !hasAttr(f, "hAnchor") || !hasAttr(f, "vAnchor") {
+		// The areas a frame that names no anchor is placed in are not
+		// measured: such a frame floats as before.
+		return false
+	}
+	for _, name := range [4]string{"x", "y", "xAlign", "yAlign"} {
+		if hasAttr(f, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameFrame reports two frame properties that make one frame: the same
+// attributes with the same values (17.3.1.11: consecutive paragraphs
+// with identical frame properties are one text frame).
+func sameFrame(a, b *ooxml.Element) bool {
+	if a == nil || b == nil || len(a.Attrs) != len(b.Attrs) {
+		return false
+	}
+	for _, x := range a.Attrs {
+		v, ok := b.Attr(x.Name.Local)
+		if !ok || v != x.Value {
+			return false
+		}
+	}
+	return true
+}
+
+// frameGroup is a text frame of the body: the paragraphs that share its
+// properties pr, laid out in the box that frame places.
+type frameGroup struct {
+	pr      *ooxml.Element
+	members []blockNode
+}
+
+// placeFrame makes the box of the text frame of properties f (17.3.1.11)
+// and places it as Word places a drawing that wraps the text
+// ([document.placeWord]): its left edge, where its paragraphs' text
+// starts, x right of the area hAnchor names (the page, the margins, or
+// the column for text), or aligned in it by xAlign; its top edge y below
+// the top of the area vAnchor names, or below the paragraph after the
+// frame for text, or aligned by yAlign, in the margins for a frame
+// anchored to the text. A frame wraps the text on both sides, at hSpace
+// beside it and vSpace above and below; one of wrap notBeside keeps it
+// above and below. w sets its width, h its height, exact or at least by
+// hRule (17.18.37 ST_HeightRule); a frame without a width is as wide as
+// its text, at most its column.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo60957-2.docx: Word sets the text of
+//     three paragraphs of one frame of x 6345 and y 2225 from the page one
+//     under the other, the first line's text at 317.4 points across, its
+//     top at 111.3 points down.
+//   - litho/docx para-dropcap-frames: a frame of w 2880, x 5000 from the
+//     margin and y 200 from the text sits 322 points across, the text on
+//     both of its sides; one of xAlign center from the page, w 4320, h
+//     1440 exact and wrap notBeside is centred on the page, 72 points
+//     tall, the text below it; one of xAlign right and yAlign bottom from
+//     the page has its corner at the page's bottom right corner.
+//   - libreoffice/docx layout/tdf124423.docx: a frame anchored to the
+//     text has the top of its border y below the top of the paragraph
+//     after it, its text starting at its x, the border outside.
+func (d *document) placeFrame(f *ooxml.Element) *layout.Node {
+	twips := func(name string) float64 {
+		v, _ := ooxml.Twips(attrOr(f, name))
+		return v
+	}
+	bv := d.blockOf()
+	st := &bv
+	p := placement{wrap: "wrapSquare", posH: twips("x"), posV: twips("y")}
+	if attrOr(f, "wrap") == "notBeside" {
+		p.wrap = "wrapTopAndBottom"
+	}
+	h, v := max(0, twips("hSpace")), max(0, twips("vSpace"))
+	p.dist = [4]float64{v, h, v, h}
+	switch a := attrOr(f, "hAnchor"); a {
+	case "margin", "page":
+		p.relH = a
+	default:
+		p.relH = "column"
+	}
+	switch a := attrOr(f, "xAlign"); a {
+	case "left", "center", "right", "inside", "outside":
+		p.alignH = a
+	}
+	switch a := attrOr(f, "yAlign"); a {
+	case "top", "center", "bottom", "inside", "outside":
+		p.alignV = a
+	}
+	switch a := attrOr(f, "vAnchor"); a {
+	case "margin", "page":
+		p.relV = a
+	default:
+		p.relV = "paragraph"
+		if p.alignV != "" {
+			p.relV = "margin"
+		}
+	}
+	if w := twips("w"); w > 0 {
+		st.Width = css.Pts(w)
+		p.w = w
+	}
+	if ht := twips("h"); ht > 0 {
+		switch attrOr(f, "hRule") {
+		case "exact":
+			st.Height = css.Pts(ht)
+			p.h = ht
+		case "atLeast", "auto":
+			st.MinHeight = css.Pts(ht)
+		}
+	}
+	n := &layout.Node{Kind: layout.Element, Style: st}
+	d.placeWord(p, n)
+	if p.w == 0 {
+		switch p.alignH {
+		case "center":
+			st.WordAnchor.AlignX = 0.5
+		case "right", "outside":
+			st.WordAnchor.AlignX = 1
+		}
+	}
+	if p.h == 0 {
+		switch p.alignV {
+		case "center":
+			st.WordAnchor.AlignY = 0.5
+		case "bottom", "outside":
+			st.WordAnchor.AlignY = 1
+		}
+	}
+	return n
 }

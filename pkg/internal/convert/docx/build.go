@@ -70,6 +70,9 @@ type paraInfo struct {
 	// [document.finish].
 	autoBefore, autoAfter bool
 	list                  *numInstance
+	// frame is the properties of the text frame of the body the paragraph
+	// belongs to, nil for none ([document.placeFrame]).
+	frame *ooxml.Element
 }
 
 // blockNode is a block-level node with the paragraph data the post-pass
@@ -77,6 +80,9 @@ type paraInfo struct {
 type blockNode struct {
 	node *layout.Node
 	info *paraInfo
+	// frame holds the paragraphs of the text frame node places, nil for
+	// any other block.
+	frame *frameGroup
 }
 
 // blocks builds the block-level content of a container element (w:body,
@@ -119,13 +125,15 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 		}
 		switch e.Local {
 		case "p":
-			*out = append(*out, d.paragraph(s, c, e, depth)...)
+			for _, b := range d.paragraph(s, c, e, depth) {
+				d.addBlock(out, b)
+			}
 		case "tbl":
 			d.anchorless = !holdsParagraph(kids[i+1:]) && !d.bodyFollows
 			n := d.table(s, e, depth+1)
 			d.anchorless = false
 			if n != nil {
-				*out = append(*out, blockNode{node: n})
+				d.addTable(out, blockNode{node: n}, e)
 			}
 		case "sdt":
 			d.blocksInto(s, c, e.Child(w, "sdtContent"), depth+1, out)
@@ -150,6 +158,59 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 			}
 		}
 	}
+}
+
+// addBlock appends the block b to out: a paragraph of a text frame of the
+// body joins the frame that ends out when their properties are the same
+// (17.3.1.11), or starts a new frame, placed by [document.placeFrame].
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf124423.docx: Word draws the border of a
+//     frame of two empty paragraphs and no width as wide as the column
+//     from the frame's x, and that of a frame of one empty paragraph a few
+//     points wide.
+//   - libreoffice/docx layout/tdf135035.docx: in a section of three
+//     columns, a frame of two empty paragraphs is as wide as a column, and
+//     the one word of a frame of one paragraph breaks at the column's
+//     width.
+func (d *document) addBlock(out *[]blockNode, b blockNode) {
+	if b.info == nil || b.info.frame == nil {
+		*out = append(*out, b)
+		return
+	}
+	if n := len(*out); n > 0 {
+		if g := (*out)[n-1].frame; g != nil && sameFrame(g.pr, b.info.frame) {
+			g.members = append(g.members, b)
+			if st := (*out)[n-1].node.Style; st.Width.Kind != css.Points && d.page != nil {
+				// A frame of several paragraphs without a width is as
+				// wide as its column.
+				st.Width = css.Pts(d.page.columnWidth())
+			}
+			return
+		}
+	}
+	*out = append(*out, blockNode{node: d.placeFrame(b.info.frame), frame: &frameGroup{pr: b.info.frame, members: []blockNode{b}}})
+}
+
+// addTable appends the table b, built from tbl, to out: a table whose
+// first cell's first paragraph has the properties of the text frame that
+// ends out is part of that frame, as Word prints it (17.3.1.11).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo60957-2.docx: Word prints a table
+//     whose cell paragraph repeats the frame properties of the paragraphs
+//     before and after it inside their frame, between them.
+func (d *document) addTable(out *[]blockNode, b blockNode, tbl *ooxml.Element) {
+	if n := len(*out); n > 0 {
+		f := tbl.Child(w, "tr").Child(w, "tc").Child(w, "p").Child(w, "pPr").Child(w, "framePr")
+		if g := (*out)[n-1].frame; g != nil && sameFrame(g.pr, f) {
+			g.members = append(g.members, b)
+			return
+		}
+	}
+	*out = append(*out, b)
 }
 
 // breakClear returns the style of a text wrapping break, w:br of type
@@ -219,6 +280,10 @@ func (d *document) finish(bs []blockNode, flowStart bool) []*layout.Node {
 	out := make([]*layout.Node, 0, len(bs))
 	var list *layout.Node
 	for i, b := range bs {
+		if b.frame != nil {
+			// A frame's paragraphs start a flow of their own.
+			b.node.Children = d.finish(b.frame.members, true)
+		}
 		// Consecutive list items share an L structure element (ISO
 		// 32000-1, 14.8.4.3.3), a block with no box of its own.
 		switch {
@@ -492,6 +557,9 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		info := &paraInfo{style: rp.styleID, contextual: boolOf(pp.contextual), borders: pp.borders}
 		info.before, info.after = spacingOf(pp)
 		info.autoBefore, info.autoAfter, info.list = boolOf(pp.beforeAuto), boolOf(pp.afterAuto), rp.num
+		if d.framePlaced(pp.framePr) {
+			info.frame = pp.framePr
+		}
 		if hardBreak {
 			info.before = 0
 		}
