@@ -175,3 +175,30 @@ func verticalPaths(t *testing.T, mode, css, html string) string {
 	}
 	return fmt.Sprint(pxBoxes(doc)[0])
 }
+
+// TestVerticalLine_UprightGlyphsOfAFaceWithoutVerticalMetrics locks the
+// upright glyphs of a face without a vmtx table: each advances by the
+// face's rounded ascent and descent and sits the rounded ascent below the
+// top of its advance, as Chromium sets them (CSS Writing Modes 4, 5.1,
+// leaves the metrics of a synthesized vertical glyph to the user agent).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets each glyph
+//     of the table below where it has it, in vertical-rl and vertical-lr
+//     under text-orientation: upright.
+func TestVerticalLine_UprightGlyphsOfAFaceWithoutVerticalMetrics(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		css  string
+		want []string
+	}{
+		{`font: 12px 'Liberation Serif'`, []string{"A 3.667,21", "b 5,35", "g 5,49"}},
+		{`font: 16px 'Liberation Serif'`, []string{"A 3.723,24", "b 5.5,41", "g 5.5,58"}},
+		{`font: 16px 'DejaVu Sans'`, []string{"A 4.027,25", "b 4.422,44", "g 4.422,63"}},
+	} {
+		for _, mode := range []string{"vertical-rl", "vertical-lr"} {
+			wantOrigins(t, c.css+", "+mode, verticalLine(t, mode, c.css+"; text-orientation: upright", `Abg`), c.want...)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package text
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"unicode"
@@ -693,6 +694,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		}
 	}
 	it.glyphs = make([]shapedGlyph, len(out.Glyphs))
+	plainVertical := it.upright && out.Face != nil && !out.Face.HasVerticalMetrics()
 	n := len(p.text)
 	punctuated := false
 	for k, g := range out.Glyphs {
@@ -717,6 +719,9 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			it.glyphs[k].xoff = st.toPoints(-g.YOffset)
 			it.glyphs[k].yoff = center + st.toPoints(-g.XOffset)
 			it.glyphs[k].advance = st.toPoints(-g.Advance)
+			if plainVertical {
+				uprightWithoutVmtx(&it.glyphs[k], out.Face, g.GlyphID, it.ascent, it.descent, style.Size)
+			}
 			continue
 		}
 		if end-start == 1 && cjkPunctuation(p.text[start]) {
@@ -1172,4 +1177,32 @@ var cursiveScripts = []*unicode.RangeTable{
 //     and Thai.
 func cursive(r rune) bool {
 	return unicode.In(r, cursiveScripts...)
+}
+
+// uprightWithoutVmtx sets the upright glyph g of a face that has no
+// vertical metrics (no vmtx table, OpenType 1.9, which OpenType's vertical
+// layout otherwise reads) as Chromium sets it: its vertical advance the
+// face's ascent and descent and its horizontal origin the ascent below the
+// pen, each rounded to whole CSS pixels, where HarfBuzz centres the glyph's
+// ink in the face's height. ascent and descent are the face's at size
+// points, which HarfBuzz scales gid's vertical origin to.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 advances the
+//     upright letters of Liberation Sans, Liberation Serif and DejaVu Sans
+//     at 12, 16 and 23 px by the rounded ascent plus the rounded descent and
+//     sets each baseline the rounded ascent below the top of its advance,
+//     in vertical-rl and vertical-lr under text-orientation: upright.
+func uprightWithoutVmtx(g *shapedGlyph, face *gofont.Face, gid gofont.GID, ascent, descent, size float64) {
+	px := func(v float64) float64 {
+		return float64(math.Floor(float64(v*cssPixelsPerPoint)+0.5) / cssPixelsPerPoint)
+	}
+	a, d := px(ascent), px(descent)
+	if upem := float64(face.Upem()); upem > 0 {
+		_, oy := face.GlyphVOrigin(gid)
+		g.xoff -= float64(float64(oy) * size / upem)
+	}
+	g.xoff += a
+	g.advance = a + d
 }
