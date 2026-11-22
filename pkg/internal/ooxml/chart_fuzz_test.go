@@ -19,6 +19,15 @@ func FuzzChartFromElement(f *testing.F) {
 	f.Add([]byte(full[:len(full)/2]))
 	f.Add([]byte(chartXML("", "", `<c:pieChart>`+ser(0, "P", `<c:dLbls><c:showPercent val="1"/><c:dLblPos val="bestFit"/></c:dLbls>`, "1", "2", "3")+`</c:pieChart>`)))
 	f.Add([]byte(bubbleXML))
+	// A 3-D column chart with rows and a titled series axis, turned at
+	// the ends of the view's ranges, and a 3-D pie seen edge on.
+	f.Add([]byte(chartXML("", `<c:view3D><c:rotX val="-90"/><c:hPercent val="500"/><c:rotY val="360"/><c:depthPercent val="2000"/><c:rAngAx val="0"/><c:perspective val="240"/></c:view3D>`,
+		`<c:bar3DChart><c:barDir val="col"/><c:grouping val="standard"/>`+ser(0, "A", "", "1", "-2", "3")+ser(1, "B", "", "4", "5")+
+			`<c:gapDepth val="500"/><c:shape val="cone"/><c:axId val="1"/><c:axId val="2"/><c:axId val="3"/></c:bar3DChart>`+
+			`<c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>`+
+			`<c:serAx><c:axId val="3"/><c:title><c:tx><c:rich><a:p><a:r><a:t>Rows</a:t></a:r></a:p></c:rich></c:tx></c:title><c:majorTickMark val="out"/><c:crossAx val="2"/></c:serAx>`)))
+	f.Add([]byte(chartXML("", `<c:view3D><c:rotX val="90"/><c:hPercent val="5"/><c:rotY val="179"/><c:perspective val="0"/></c:view3D>`,
+		`<c:pie3DChart>`+ser(0, "P", "", "1", "2", "3")+`</c:pie3DChart>`)))
 	fonts, err := text.NewFonts(context.Background(), nil, []string{filepath.Join("..", "layout", "testdata")})
 	if err != nil {
 		f.Fatal(err)
