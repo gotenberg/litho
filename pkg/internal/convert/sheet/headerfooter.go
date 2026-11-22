@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -25,6 +26,36 @@ import (
 const (
 	headerFamily = "Liberation Sans"
 	headerSize   = 10
+)
+
+// excelHeaderInset and excelFooterInset are how far inside the header and
+// footer margins Excel sets the parts of a header and of a footer, in
+// points: each part on its own, the top of a header part's first line 8
+// printer pixels below the header margin, the bottom of a footer part's
+// last line 15 above the footer margin, so that a part in a taller font
+// takes more room into the page. The specification gives the margins
+// alone (ECMA-376 Part 1, 18.3.1.62 pageMargins header and footer); the
+// insets are Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: the 37 paper-grid and margins_centering references, on
+//     every paper and header margin from 0 to 2.5 inches, set the
+//     baseline of a Calibri 11 header 96 printer pixels below the header
+//     margin (8 and an ascent of 87.6) and of a Calibri 11 footer 40 above
+//     the footer margin (15 and a descent of 24.7).
+//   - litho/xlsx: headers_footers_codes sets its Times New Roman Italic 11
+//     centre part 94 pixels below the margin (8, a line gap of 3.9 and an
+//     ascent of 82), and its Calibri 8 right footer part 32.75 above the
+//     margin (15 and 18) beside a Calibri 11 one at 40.75.
+//   - probe, xlsx: a Cambria 11 header part is set 95 pixels below the
+//     margin (8 and 87.4).
+//   - litho/xlsx: real_budget, fitted to its page's width at 68%, sets its
+//     Calibri 11 header, drawn at 7.56 points, 68 pixels below the margin
+//     (8 whole and an ascent of 60).
+const (
+	excelHeaderInset = 8 * excelPixel
+	excelFooterInset = 15 * excelPixel
 )
 
 // hfFields are the values of a page's header and footer fields.
@@ -95,6 +126,9 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 	st.WhiteSpace = css.PreWrap
 	st.OverflowWrap = css.BreakWord
 	st.LineHeight = css.Dimension{Kind: css.Number, Value: b.m.lineHeight(base) / base.size}
+	if b.doc.ExcelRules {
+		st.LineHeight = css.Dimension{Kind: css.Number}
+	}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	empty := true
 	for _, s := range spans {
@@ -112,6 +146,10 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 		rs.Display = css.Inline
 		rs.WhiteSpace = css.PreWrap
 		rs.LineHeight = st.LineHeight
+		if b.doc.ExcelRules {
+			// Excel sets a header line by the fonts of its runs alone.
+			rs.LineHeight = css.Dimension{Kind: css.Number, Value: b.m.lineHeight(fnt) / math.Max(fnt.size, 0.01)}
+		}
 		n.Children = append(n.Children, &layout.Node{
 			Kind: layout.Element, Style: rs,
 			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: t}},
@@ -180,12 +218,20 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		if fromBottom {
 			y = height - top - h
 		}
+		excel := p.sp.g.doc.ExcelRules
 		for i, n := range nodes {
 			box := b.style()
 			box.Position = css.Absolute
 			box.Left = css.Pts(left)
 			box.Width = css.Pts(areaW)
 			box.Top = css.Pts(y + float64(max(h-heights[i], 0)/2))
+			if excel {
+				// The insets are kept whole at any print scale.
+				box.Top = css.Pts(top + excelHeaderInset/z)
+				if fromBottom {
+					box.Top = css.Pts(height - top - excelFooterInset/z - heights[i])
+				}
+			}
 			tree.Children = append(tree.Children, &layout.Node{Kind: layout.Element, Style: box, Children: []*layout.Node{n}})
 		}
 	}

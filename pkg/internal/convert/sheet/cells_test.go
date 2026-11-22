@@ -570,3 +570,38 @@ func TestConvert_ExcelBaselines(t *testing.T) {
 	}
 }
 
+// TestConvert_ExcelHeaderFooterInsets locks where Excel sets the parts of
+// a header and a footer: each part on its own, its first line 8 printer
+// pixels below the header margin, its last line 15 above the footer
+// margin, so that the baseline of a footer part in a smaller font sits
+// lower.
+func TestConvert_ExcelHeaderFooterInsets(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+	doc := excelDoc(sh)
+	sh.Page.Margin = [4]float64{54, 50, 54, 50}
+	sh.Page.HeaderTop, sh.Page.FooterBottom = 21.6, 21.6
+	cal := func(size float64) *Font { return &Font{Families: []string{"Carlito"}, Size: size} }
+	sh.HeaderFooter.Odd.Header = [3][]Span{{{Text: "left", Font: cal(11)}}, {{Text: "centre", Font: cal(20)}}}
+	sh.HeaderFooter.Odd.Footer = [3][]Span{{{Text: "foot", Font: cal(11)}}, nil, {{Text: "small", Font: cal(8)}}}
+	pg := convert(t, doc, office.Options{}).Pages[0]
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	baseline := func(s string) float64 { return pg.Height - find(t, pg, s).y }
+	for _, tc := range []struct {
+		text string
+		size float64
+	}{{"left", 11}, {"centre", 20}} {
+		f := font{families: []string{"Carlito"}, size: tc.size}
+		if got, want := baseline(tc.text), 21.6+0.96+m.lineHeight(f)-m.descent(f); !near(got, want, 0.01) {
+			t.Errorf("header part %q: baseline %.3f from the top, want %.3f", tc.text, got, want)
+		}
+	}
+	for _, tc := range []struct {
+		text string
+		size float64
+	}{{"foot", 11}, {"small", 8}} {
+		f := font{families: []string{"Carlito"}, size: tc.size}
+		if got, want := baseline(tc.text), pg.Height-21.6-1.8-m.descent(f); !near(got, want, 0.01) {
+			t.Errorf("footer part %q: baseline %.3f from the top, want %.3f", tc.text, got, want)
+		}
+	}
+}
