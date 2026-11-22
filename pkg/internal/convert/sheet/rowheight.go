@@ -225,12 +225,15 @@ func (b *builder) excelDrops(g *grid) {
 				continue
 			}
 			budget--
+			// A script counts at its full size, the size its baseline is
+			// set from ([pageBuilder.excelScriptShift]).
 			f := resolveFont(g.style(ri, c.Column, c).Font, b.doc.Default.Font)
-			f.excel = true
+			f.excel, f.script = true, Baseline
 			deep = max(deep, b.m.descent(f)+b.m.lineGap(f))
 			for _, r := range c.Runs {
 				if r.Font != nil {
 					rf := overlay(f, r.Font)
+					rf.script = Baseline
 					deep = max(deep, b.m.descent(rf)+b.m.lineGap(rf))
 				}
 			}

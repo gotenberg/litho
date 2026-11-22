@@ -723,6 +723,24 @@ func TestConvert_ExcelScripts(t *testing.T) {
 	if got := baseline("2") - line; !near(got, 2.2, 0.01) {
 		t.Errorf("subscript run lowered %.3f, want 2.2", got)
 	}
+	// Top-aligned: a superscript stays on its own ascent under the inset,
+	// a subscript sits a fifth of the size below the full-size top
+	// baseline.
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	full := font{families: []string{"Carlito"}, size: 11}
+	ascent := func(f font) float64 { return m.lineHeight(f) - m.descent(f) }
+	supTop := &Style{Font: sup.Font, Align: Alignment{Vertical: VTop}}
+	subTop := &Style{Font: sub.Font, Align: Alignment{Vertical: VTop}}
+	top := &Sheet{Name: "T", DefaultColumnWidth: 40, Rows: []Row{{Index: 0, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "up", supTop), textCell(1, "down", subTop)}}}}
+	pg = convert(t, excelDoc(top), office.Options{}).Pages[0]
+	script := full
+	script.size = 11 * 2.0 / 3
+	if got, want := pg.Height-find(t, pg, "up").y, 36+0.96+ascent(script); !near(got, want, 0.01) {
+		t.Errorf("top-aligned superscript baseline %.3f, want %.3f", got, want)
+	}
+	if got, want := pg.Height-find(t, pg, "down").y, 36+0.96+ascent(full)+2.2; !near(got, want, 0.01) {
+		t.Errorf("top-aligned subscript baseline %.3f, want %.3f", got, want)
+	}
 }
 
 // TestConvert_ExcelWrappedPitch locks how far apart Excel sets wrapped
@@ -755,6 +773,8 @@ func TestConvert_ExcelFitRowsBaseline(t *testing.T) {
 	sh := &Sheet{Name: "S", Rows: []Row{
 		{Index: 0, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "alone", nil)}},
 		{Index: 1, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "beside", nil), textCell(1, "big", c14)}},
+		// A superscript counts at its full size.
+		{Index: 2, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "by a script", nil), textCell(1, "sup", &Style{Font: Font{Families: []string{"Carlito"}, Size: 14, Script: Superscript}})}},
 	}}
 	m := newMeasurer(context.Background(), pinnedFonts(t), "")
 	c11, f14 := font{families: []string{"Carlito"}, size: 11}, font{families: []string{"Carlito"}, size: 14}
@@ -769,6 +789,9 @@ func TestConvert_ExcelFitRowsBaseline(t *testing.T) {
 		}
 		if !near(rise, want, 0.01) {
 			t.Errorf("FitRows %v: the label beside 14 point text %.3f points higher, want %.3f", fit, rise, want)
+		}
+		if got := find(t, pg, "by a script").y - find(t, pg, "alone").y + 60; !near(got, want, 0.01) {
+			t.Errorf("FitRows %v: the label beside a 14 point superscript %.3f points higher, want %.3f", fit, got, want)
 		}
 	}
 }

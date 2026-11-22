@@ -445,8 +445,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		if len(d.runs) == 0 {
 			// A cell whose own font is a script moves its line: a text node
 			// takes no vertical-align of the block it fills.
-			_, up := f.scriptShape()
-			shift -= float64(f.size * up)
+			shift += b.excelScriptShift(st.Align.Vertical, f)
 		}
 		if shift > 0 {
 			// The box moved down runs past the row's bottom, where the
@@ -494,6 +493,38 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		para.Role = "Link"
 	}
 	return n, cx0, cx1
+}
+
+// excelScriptShift returns how far down Excel moves the text of a cell
+// whose font f is a superscript or a subscript from where the script's
+// own line sets it: raised half the size or lowered a fifth from the
+// baseline the full-size font takes ([font.scriptShape]), a top-aligned
+// superscript kept below the cell's top inset, where its own line starts.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: in rows of 36 points Excel for the web sets top-aligned
+//     Calibri superscripts of 11 and 20 points on their own ascent under
+//     the inset (62 and 110 printer pixels below the fill's top), and
+//     subscripts a fifth of the size below the full-size font's top
+//     baseline (110 and 196: 92 and 163, and 18 and 33); bottom-aligned
+//     superscripts half the size above the row's bottom baseline.
+func (b *pageBuilder) excelScriptShift(v VAlign, f font) float64 {
+	_, up := f.scriptShape()
+	if up == 0 {
+		return 0
+	}
+	if v != VTop {
+		return -float64(f.size * up)
+	}
+	if up > 0 {
+		return 0
+	}
+	full := f
+	full.script = Baseline
+	own := b.m.lineGap(f) + b.m.lineHeight(f) - b.m.descent(f)
+	at := b.m.lineGap(full) + b.m.lineHeight(full) - b.m.descent(full)
+	return float64(at-own) - float64(f.size*up)
 }
 
 // excelShift returns how far down Excel sets a cell's text from where its
