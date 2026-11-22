@@ -744,3 +744,31 @@ func TestConvert_ExcelWrappedPitch(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_ExcelFitRowsBaseline locks where Excel sets bottom-aligned
+// text in a row it measures (FitRows): above the deepest descent of the
+// row's fonts, a Calibri 11 label beside Calibri 14 text set 0.84 points
+// higher than alone; a book whose fonts Excel knows sets it on the
+// Default font's baseline.
+func TestConvert_ExcelFitRowsBaseline(t *testing.T) {
+	c14 := &Style{Font: Font{Families: []string{"Carlito"}, Size: 14}}
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "alone", nil)}},
+		{Index: 1, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "beside", nil), textCell(1, "big", c14)}},
+	}}
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	c11, f14 := font{families: []string{"Carlito"}, size: 11}, font{families: []string{"Carlito"}, size: 14}
+	for _, fit := range []bool{false, true} {
+		doc := excelDoc(sh)
+		doc.StandardScreenRow, doc.FitRows = 20, fit
+		pg := convert(t, doc, office.Options{}).Pages[0]
+		rise := find(t, pg, "beside").y - find(t, pg, "alone").y + 30
+		want := 0.0
+		if fit {
+			want = m.descent(f14) + m.lineGap(f14) - m.descent(c11) - m.lineGap(c11)
+		}
+		if !near(rise, want, 0.01) {
+			t.Errorf("FitRows %v: the label beside 14 point text %.3f points higher, want %.3f", fit, rise, want)
+		}
+	}
+}

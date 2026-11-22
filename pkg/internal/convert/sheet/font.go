@@ -445,6 +445,30 @@ func (m *measurer) printedLine(f font) float64 {
 	return h
 }
 
+// screenLine returns the line GDI gives f on a screen of 96 pixels an
+// inch, in pixels, with the 2 pixels of a cell's insets: its face's ascent
+// and descent each rounded to a pixel at f's size in whole pixels, and its
+// line gap truncated, as the standard row sums them (xlsx standardRow).
+func (m *measurer) screenLine(f font) float64 {
+	k := "s\x00" + m.key(f)
+	if h, ok := m.lineCache[k]; ok {
+		return h
+	}
+	ts := f.textStyle(m.lang, m.fallback)
+	em := math.Round(float64(ts.Size * 96 / 72))
+	h := 2 + math.Round(float64(m.lineHeight(f)*96/72))
+	if fc := m.fonts.Match(ts); fc != nil {
+		mt := fc.Metrics(1)
+		if px := math.Round(float64(mt.Ascent*em)) + math.Round(float64(mt.Descent*em)) + math.Floor(float64(mt.LineGap*em)+1e-9); px > 0 {
+			h = 2 + px
+		}
+	}
+	if len(m.lineCache) < maxMeasureCache {
+		m.lineCache[k] = h
+	}
+	return h
+}
+
 // lineGap returns the line gap of f's face at f's size: the external
 // leading GDI adds above a line's ascent, which Excel sets above the text
 // of a cell and of a header part ([pageBuilder.excelShift]).

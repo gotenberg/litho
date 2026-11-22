@@ -555,3 +555,30 @@ func TestRead_StandardRowHeights(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_KnownFonts checks which books Excel measures as it opens them:
+// one whose fonts part lacks x14ac:knownFonts (sheet.Document.FitRows),
+// and, in either, a row without a height under a custom default keeps the
+// default, unmeasured.
+func TestRead_KnownFonts(t *testing.T) {
+	t.Parallel()
+	fonts := pinnedFonts(t)
+	known := strings.Replace(minimalStyles, "<fonts>", `<fonts xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" x14ac:knownFonts="1">`, 1)
+	for _, tc := range []struct {
+		styles string
+		fit    bool
+	}{{minimalStyles, true}, {known, false}} {
+		xml := `<sheetFormatPr defaultRowHeight="16.5" customHeight="1"/><sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="2" ht="20"><c r="A2"><v>1</v></c></row></sheetData>`
+		data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: xml}}, tc.styles, "", "", nil))
+		doc, _, err := load(context.Background(), bytes.NewReader(data), fonts, office.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.FitRows != tc.fit {
+			t.Errorf("knownFonts %v: FitRows %v, want %v", !tc.fit, doc.FitRows, tc.fit)
+		}
+		if rows := doc.Sheets[0].Rows; !rows[0].CustomHeight || rows[1].CustomHeight {
+			t.Errorf("knownFonts %v: custom rows %v and %v, want the row without a height custom", !tc.fit, rows[0].CustomHeight, rows[1].CustomHeight)
+		}
+	}
+}

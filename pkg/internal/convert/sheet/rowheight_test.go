@@ -87,3 +87,38 @@ func TestFont_Substitute(t *testing.T) {
 		t.Errorf("an unknown family measures %v, Noto Sans %v", unknown, noto)
 	}
 }
+
+// TestOptimalHeights_ExcelFitRows locks the rows of a book Excel measures
+// as it opens it (FitRows): a row without a custom height fits the tallest
+// font of its cells on the screen, at 121 printer pixels a 20-pixel
+// standard row, an empty styled cell's font included, Calibri 14 at 25
+// pixels, 151; a row stored shorter than its text, 14.45 points, prints
+// at its fit; a row of smaller text keeps the default; a custom row keeps
+// its height.
+func TestOptimalHeights_ExcelFitRows(t *testing.T) {
+	c14 := &Style{Font: Font{Families: []string{"Carlito"}, Size: 14}}
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "label", nil), textCell(1, "fourteen", c14)}},
+		{Index: 1, Height: 116 * excelPixel, Cells: []Cell{textCell(0, "stored", nil)}},
+		{Index: 2, Cells: []Cell{textCell(0, "label", nil), {Column: 1, Style: c14}}},
+		{Index: 3, Height: 116 * excelPixel, CustomHeight: true, Cells: []Cell{textCell(0, "custom", c14)}},
+		// Text smaller than the Normal font keeps the default row.
+		{Index: 4, Cells: []Cell{textCell(0, "small", &Style{Font: Font{Families: []string{"Carlito"}, Size: 8}})}},
+	}}
+	for _, fit := range []bool{false, true} {
+		doc := excelDoc(sh)
+		doc.StandardScreenRow, doc.FitRows = 20, fit
+		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+		g := newGrid(t.Context(), doc, sh)
+		b.heightsOf(t, g)
+		want := []float64{121, 116, 121, 116, 121}
+		if fit {
+			want = []float64{151, 121, 151, 116, 121}
+		}
+		for r, w := range want {
+			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {
+				t.Errorf("FitRows %v: row %d %v printer pixels, want %v", fit, r, got, w)
+			}
+		}
+	}
+}

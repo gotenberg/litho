@@ -438,6 +438,10 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			pitch = b.excelLine(f)
 		}
 		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, padBottom)
+		if st.Align.Vertical == VBottom {
+			// A row Excel measures sets its text above its deepest font.
+			shift -= b.g.drops[u.lastR]
+		}
 		if len(d.runs) == 0 {
 			// A cell whose own font is a script moves its line: a text node
 			// takes no vertical-align of the block it fills.

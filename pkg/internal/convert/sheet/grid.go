@@ -45,6 +45,9 @@ type grid struct {
 	// heights holds the height of every row the builder grew to fit its
 	// text, by index.
 	heights map[int]float64
+	// drops holds how much higher Excel sets the bottom-aligned text of a
+	// row it measures ([builder.excelDrops]).
+	drops map[int]float64
 	// merges maps the top-left cell of each merge to it; covered marks
 	// every other cell of a merge.
 	merges  map[[2]int]Range
@@ -88,7 +91,7 @@ func newGrid(ctx context.Context, doc *Document, sh *Sheet) *grid {
 func newPlainGrid(doc *Document, sh *Sheet) *grid {
 	g := &grid{
 		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
-		rows: map[int]*Row{}, heights: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
+		rows: map[int]*Row{}, heights: map[int]float64{}, drops: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
 	}
 	if !numeric.Positive(g.defW) || g.defW > maxSide {
 		g.defW = defaultColumnWidth

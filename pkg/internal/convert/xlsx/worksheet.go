@@ -72,6 +72,10 @@ type sheetReader struct {
 	// noteRuns holds the rich text of each note by cell, read for a sheet
 	// that prints its notes as displayed.
 	noteRuns map[[2]int][]text.Run
+	// customDefault reports a default row height marked custom (18.3.1.81
+	// sheetFormatPr customHeight): a row without a height of its own keeps
+	// it, unmeasured (sheet.Document.FitRows).
+	customDefault bool
 }
 
 // maxCachedFormulas caps the formulas with a cached result a workbook
@@ -211,6 +215,7 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 		px := math.Round(float64(min(v, maxRowHeight) * screenPixelsPerPoint))
 		if h := r.rowHeight(v); h > 0 && (boolAttr(f, "customHeight") || math.Abs(px-r.standardScreen) > standardSlack) {
 			sh.DefaultRowHeight = h
+			w.customDefault = boolAttr(f, "customHeight")
 		}
 	}
 }
@@ -316,6 +321,9 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden")}
 		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && numeric.PositiveFinite(v) {
 			row.Height = r.rowHeight(v)
+		} else if w.customDefault {
+			// A custom default height is the row's own.
+			row.CustomHeight = true
 		}
 		if boolAttr(re, "customFormat") {
 			row.Style = r.style(intAttr(re, "s", 0))

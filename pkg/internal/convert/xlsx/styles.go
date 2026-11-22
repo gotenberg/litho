@@ -94,6 +94,10 @@ type borderSet struct {
 	diagonalUp, diagonalDown bool
 }
 
+// nsX14ac is the namespace of the Excel 2010 attributes of the styles and
+// rows (MS-XLSX, CT_Fonts knownFonts).
+const nsX14ac = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"
+
 // styleSheet is the workbook's resolved styles part (ECMA-376 Part 1,
 // 18.8).
 type styleSheet struct {
@@ -107,6 +111,10 @@ type styleSheet struct {
 	// normalXf is the cell style record of the Normal style (18.8.7
 	// cellStyle builtinId 0).
 	normalXf int
+	// knownFonts reports the fonts part's x14ac:knownFonts ([MS-XLSX]
+	// 2.6.1): Excel knows the book's fonts and prints its rows at the
+	// heights it stores, without measuring them (sheet.Document.FitRows).
+	knownFonts bool
 	// resolved caches the style of each cell format.
 	resolved map[int]*sheet.Style
 	// tables holds the table styles read: the workbook's own, then the
@@ -182,7 +190,13 @@ func (r *reader) readStyles(main string) error {
 			s.numFmts[id] = code
 		}
 	}
-	for _, c := range root.Child(nsMain, "fonts").Kids() {
+	fonts := root.Child(nsMain, "fonts")
+	// [MS-XLSX] CT_Fonts knownFonts, in the Excel 2010 extensions'
+	// namespace.
+	if v, ok := fonts.AttrNS(nsX14ac, "knownFonts"); ok {
+		s.knownFonts = v == "1" || v == "true"
+	}
+	for _, c := range fonts.Kids() {
 		if len(s.fonts) >= maxStyleRecords {
 			break
 		}

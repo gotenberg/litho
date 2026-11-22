@@ -37,6 +37,18 @@ type Document struct {
 	// in that font, and the row in which the baseline of bottom-aligned
 	// text is set ([pageBuilder.excelShift]). 0 when the reader gives none.
 	StandardRowHeight float64
+	// StandardScreenRow is, under ExcelRules, the standard row in screen
+	// pixels of 96 an inch: a row Excel measures on the screen prints its
+	// pixels times StandardRowHeight over StandardScreenRow
+	// ([builder.screenFit]). 0 when the reader gives none.
+	StandardScreenRow float64
+	// FitRows, under ExcelRules, marks a book whose fonts Excel does not
+	// know, which Excel measures as it opens it: every row without a
+	// custom height is fitted to the fonts of its cells, and a row's
+	// bottom-aligned text sits above the deepest of them
+	// ([builder.excelDrops]). The XLSX reader sets it for a styles part
+	// without x14ac:knownFonts.
+	FitRows bool
 }
 
 // Sheet is one worksheet (ECMA-376 Part 1, 18.3; ODF 1.3 Part 3, 9.1.2,
