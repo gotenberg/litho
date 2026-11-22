@@ -232,6 +232,33 @@ func box(st *css.Style, w, h float64) *layout.Node {
 	return &layout.Node{Kind: layout.Element, Style: bs}
 }
 
+// linkPlaceholder returns the box Word prints for a picture that only
+// links to its file (ECMA-376 Part 1, 20.1.8.13 blip link with no embed):
+// the extent filled white inside a black frame a quarter of a point wide.
+// Word adds an icon and a notice that the linked image cannot be
+// displayed, drawn as glyph outlines a few points tall, which the box
+// leaves out.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/linked-picture.docx: Word prints the
+//     150 by 75 point extent of its linked picture filled white, framed by
+//     a 0.25 point black line inside its edge.
+//   - libreoffice/docx ooxmlexport/FileWithInvalidImageLink.docx and
+//     litho/docx images-svg-linked: Word prints the same frame for a
+//     linked picture whose file cannot be found.
+func linkPlaceholder(st *css.Style, w, h float64) *layout.Node {
+	n := box(st, w, h)
+	n.Style.BoxSizing = css.BorderBox
+	n.Style.BackgroundColor = css.Color{R: 1, G: 1, B: 1, A: 1}
+	for i := range n.Style.Border {
+		n.Style.Border[i] = css.Border{Width: 0.25, Style: css.Solid, Color: css.Color{A: 1}}
+	}
+	// Word strokes the frame as a line, not a filled band.
+	strokeBorders(n.Style)
+	return n
+}
+
 // picture builds a picture of size w by h points (0 for its natural size)
 // from its reference: a Figure replaced box, cropped, rotated and flipped
 // as the reference says.
@@ -256,6 +283,9 @@ func (d *document) picture(s *story, ref ooxml.PictureRef, st *css.Style, w, h f
 	}
 	if pic == nil {
 		if w > 0 && h > 0 {
+			if ref.Link != "" && ref.Embed == "" && ref.SVG == "" {
+				return linkPlaceholder(st, w, h)
+			}
 			return box(st, w, h)
 		}
 		return nil

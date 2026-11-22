@@ -640,3 +640,27 @@ func TestTextBox_FitToText(t *testing.T) {
 		}
 	}
 }
+
+// TestPicture_LinkPlaceholder checks that a picture that only links to its
+// file prints Word's placeholder, its extent framed, and that an embedded
+// picture whose part is missing keeps its room unframed.
+func TestPicture_LinkPlaceholder(t *testing.T) {
+	t.Parallel()
+	pic := func(blip string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><wp:docPr id="1" name="p"/>` +
+			strings.Replace(graphic(""), `<a:blip r:embed="rIda"/>`, blip, 1) + `</wp:inline></w:drawing></w:r></w:p>`
+	}
+	b := build(t, pic(`<a:blip r:link="rIdLinked"/>`)+pic(`<a:blip r:embed="rIdMissing"/>`), nil)
+	boxes := find(b.root, func(n *layout.Node) bool {
+		return n.Kind == layout.Element && n.Style != nil && n.Style.Display == css.InlineBlock && n.Style.Width == css.Pts(100)
+	})
+	if len(boxes) != 2 {
+		t.Fatalf("%d picture boxes, want 2", len(boxes))
+	}
+	if st := boxes[0].Style; st.Border[css.Top].Width != 0.25 || !st.StrokeBorders || st.BackgroundColor.A != 1 {
+		t.Errorf("linked picture box %+v, want a white box framed at 0.25 points", st.Border)
+	}
+	if st := boxes[1].Style; st.Border[css.Top].Width != 0 {
+		t.Errorf("missing embedded picture framed: %+v", st.Border)
+	}
+}
