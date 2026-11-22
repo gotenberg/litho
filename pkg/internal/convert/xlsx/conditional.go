@@ -569,7 +569,10 @@ func (r *reader) dxfElementStyle(e *ooxml.Element) *sheet.Style {
 // percent by default; the extension (MS-XLSX, 2.6.29 x14:dataBar) gives
 // the axis, automatic by default, the gradient and the negative colour,
 // and the lengths stay the dataBar element's. showValue false draws the
-// bar without the cell's value (ECMA-376 Part 1, 18.3.1.28).
+// bar without the cell's value (ECMA-376 Part 1, 18.3.1.28). The
+// extension's border, its colours (the bar's by default, the negative one
+// the positive one's unless negativeBarBorderColorSameAsPositive says 0),
+// the axis colour and the direction are read for Excel's drawing.
 //
 // # Corpus evidence
 //
@@ -592,6 +595,13 @@ func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml
 		rule.BarAxis = sheet.BarAxisNone
 		return
 	}
+	// Excel draws the extension's lengths (MS-XLSX, 2.6.29 x14:dataBar
+	// minLength and maxLength, 10 and 90 by default).
+	rule.BarMinLength = float64(max(0, min(intAttr(ext, "minLength", 10), 100))) / 100
+	rule.BarMaxLength = float64(max(0, min(intAttr(ext, "maxLength", 90), 100))) / 100
+	if rule.BarMinLength == 0 && rule.BarMaxLength == 0 {
+		rule.BarMaxLength = 0.001
+	}
 	switch attr(ext, "axisPosition") {
 	case "middle":
 		rule.BarAxis = sheet.BarAxisMiddle
@@ -604,6 +614,23 @@ func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml
 	if c, ok := color(ext.Child(nsX14, "negativeFillColor")); ok {
 		rule.BarNegative = c
 	}
+	if boolAttr(ext, "border") {
+		rule.BarBorder = rule.Bar
+		if c, ok := color(ext.Child(nsX14, "borderColor")); ok {
+			rule.BarBorder = c
+		}
+		rule.BarNegativeBorder = rule.BarBorder
+		if !boolOrTrue(ext, "negativeBarBorderColorSameAsPositive") {
+			rule.BarNegativeBorder = rule.BarNegative
+			if c, ok := color(ext.Child(nsX14, "negativeBorderColor")); ok {
+				rule.BarNegativeBorder = c
+			}
+		}
+	}
+	if c, ok := color(ext.Child(nsX14, "axisColor")); ok {
+		rule.BarAxisColor = c
+	}
+	rule.BarRightToLeft = attr(ext, "direction") == "rightToLeft"
 }
 
 // iconSet reads the icon set of a rule (ECMA-376 Part 1, 18.3.1.49

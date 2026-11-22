@@ -152,6 +152,15 @@ type Rule struct {
 	// BarOnly hides the value of a cell a RuleDataBar draws a bar in
 	// (ECMA-376 Part 1, 18.3.1.28 dataBar showValue).
 	BarOnly bool
+	// BarBorder and BarNegativeBorder are the colours of the outline of a
+	// RuleDataBar's bars, above and below the axis, the zero Color for
+	// none; BarAxisColor is the colour of its axis, the zero Color for
+	// black; BarRightToLeft draws its bars from the cell's right edge
+	// (MS-XLSX, 2.6.29 x14:dataBar border, borderColor,
+	// negativeBorderColor, axisColor and direction).
+	BarBorder, BarNegativeBorder css.Color
+	BarAxisColor                 css.Color
+	BarRightToLeft               bool
 	// Icons is the icon set of a RuleIconSet by its SpreadsheetML name
 	// ("3Arrows", "4Rating", "5Quarters", ...; ECMA-376 Part 1, 18.18.42
 	// ST_IconSetType, which ODF's calcext:icon-set-type spells alike), its

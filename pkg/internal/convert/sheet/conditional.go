@@ -843,7 +843,7 @@ func (g *grid) condStyle(r, c int, cell *Cell, base *Style) *Style {
 
 // dataBar returns the data bar of the cell at (r, c): where zero sits and
 // the bar's signed length, each a fraction (zero of the cell, the length
-// of zero's side), its colour, and whether it is painted solid; false for
+// of zero's side), its colour, and the rule that draws it; false for
 // none. Calc's rules by the rule's axis (ScDataBarFormat::GetDataBarInfo):
 // automatic puts zero between the thresholds, a positive range's at the
 // left edge; middle at half, each side the larger magnitude, the bar at
@@ -858,18 +858,18 @@ func (g *grid) condStyle(r, c int, cell *Cell, base *Style) *Style {
 //     threshold, 1 paints nothing and 4 the whole width; a middle axis
 //     over 1 to 4 paints 4 across 90% of the right half, 1 a quarter of
 //     that.
-func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Color, solid, ok bool) {
+func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Color, rule *Rule, ok bool) {
 	if g.cond == nil {
-		return 0, 0, css.Color{}, false, false
+		return 0, 0, css.Color{}, nil, false
 	}
 	res := g.cond.evaluate(g, r, c, cell)
 	if res == nil || res.bar == nil {
-		return 0, 0, css.Color{}, false, false
+		return 0, 0, css.Color{}, nil, false
 	}
-	rule := res.bar
+	rule = res.bar
 	th, ok := thresholds(rule.Values, 2, res.barF.statistics(g))
 	if !ok || !ordered(th[0], th[1]) {
-		return 0, 0, css.Color{}, false, false
+		return 0, 0, css.Color{}, nil, false
 	}
 	lo, hi := th[0], th[1]
 	minL, maxL := rule.BarMinLength, rule.BarMaxLength
@@ -891,7 +891,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 		zero = 0.5
 		absMax := max(math.Abs(lo), math.Abs(hi))
 		if absMax == 0 {
-			return 0, 0, css.Color{}, false, false
+			return 0, 0, css.Color{}, nil, false
 		}
 		switch {
 		case v < 0 && lo < 0:
@@ -924,7 +924,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 		}
 	}
 	if !numeric.Finite(length) || length == 0 {
-		return 0, 0, css.Color{}, false, false
+		return 0, 0, css.Color{}, nil, false
 	}
 	col = rule.Bar
 	if col.A == 0 {
@@ -936,7 +936,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 			col = negativeBar
 		}
 	}
-	return zero, length, col, rule.BarSolid, true
+	return zero, length, col, rule, true
 }
 
 // drawDataBar paints the data bar of the unit u, if any, as Calc draws it
@@ -944,10 +944,15 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 // the cell inset from its edges, from zero across its share of zero's
 // side, a gradient from the bar's colour at zero to transparent at the
 // value's end or a flat fill, with the zero axis over it when zero is
-// inside the cell.
+// inside the cell. Under Excel's rules the bar is drawn as Excel prints
+// it ([pageBuilder.drawExcelBar]).
 func (b *pageBuilder) drawDataBar(u *unit) {
-	zero, length, col, solid, ok := b.g.dataBar(u.r, u.c, u.cell)
+	zero, length, col, rule, ok := b.g.dataBar(u.r, u.c, u.cell)
 	if !ok {
+		return
+	}
+	if b.g.doc.ExcelRules {
+		b.drawExcelBar(u, zero, length, col, rule)
 		return
 	}
 	x0 := u.x + dataBarInset
@@ -968,7 +973,7 @@ func (b *pageBuilder) drawDataBar(u *unit) {
 		left, right := min(a, z), max(a, z)
 		c := colorOf(col)
 		fill := &typeset.Fill{Color: c}
-		if !solid {
+		if !rule.BarSolid {
 			clear := c
 			clear.A = 0
 			fill = &typeset.Fill{Shading: &typeset.Shading{
@@ -983,6 +988,106 @@ func (b *pageBuilder) drawDataBar(u *unit) {
 		stroke := dataBarAxis
 		b.fills = append(b.fills, &typeset.Path{Ops: lineOps(at, y, at, y+h), Stroke: &stroke})
 	}
+}
+
+// Excel's data bar: the room it leaves at the cell's left, top and bottom
+// edges and at its right edge, the width of its outline and of its axis,
+// the dash and gap of the axis, and the share of the way to white the
+// far end of a gradient bar takes, each in printer pixels of 1/600 inch
+// but the last.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: cf_data_bars, 73.32-point cells of 14.52-point rows,
+//     prints bars 10.704 points high from 1.92 below the row's top, from
+//     1.92 right of the cell's left edge, the longest of a rule from 0 to
+//     100% ending 0.96 short of its right edge; an outlined bar's outline
+//     0.96 wide inside the bar; the axis a black line 0.96 wide dashed
+//     2.88 on and 0.96 off, the bars starting at its edges; a gradient
+//     bar of 638EC6 shaded to E7EEF6 and of 63C384 to E7F6EC across its
+//     length, the right-to-left bars shaded from their right end.
+//   - libreoffice/xlsx: sc/databar.xlsx, rows of 12.36 points, prints
+//     bars 8.52 points high and the axis dashed alike.
+const (
+	excelBarInset      = 16 * excelPixel
+	excelBarInsetRight = 8 * excelPixel
+	excelBarLine       = 8 * excelPixel
+	excelBarDash       = 24 * excelPixel
+	excelBarGap        = 8 * excelPixel
+	excelBarFade       = 0.85
+)
+
+// drawExcelBar paints the data bar of the unit u as Excel prints it: in
+// the cell less [excelBarInset] at its left, top and bottom and
+// [excelBarInsetRight] at its right, mirrored for a right-to-left rule;
+// solid, or shaded from the bar's colour at the axis to that colour
+// [excelBarFade] of the way to white, both opaque; outlined inside in the
+// rule's border colour; the axis a dashed line [excelBarLine] wide whose
+// edges the bars start from.
+func (b *pageBuilder) drawExcelBar(u *unit, zero, length float64, col css.Color, rule *Rule) {
+	x0 := u.x + excelBarInset
+	w := u.w - excelBarInset - excelBarInsetRight
+	y := u.y + excelBarInset
+	h := u.h - 2*excelBarInset
+	if w <= 0 || h <= 0 {
+		return
+	}
+	dir := 1.0
+	if rule.BarRightToLeft {
+		x0, dir = x0+w, -1
+	}
+	axis := zero > 0 && zero < 1
+	at := x0 + float64(dir*w*zero)
+	side := float64(w * (1 - zero))
+	if length < 0 {
+		side = float64(w * zero)
+	}
+	a, z := at, at+float64(dir*side*length)
+	if axis {
+		// The bar starts at the axis's edge on its side.
+		a = at + math.Copysign(excelBarLine/2, z-at)
+	}
+	if (z-a)*(z-at) > 0 && math.Abs(z-a) > epsilon {
+		left, right := min(a, z), max(a, z)
+		c := colorOf(col)
+		fill := &typeset.Fill{Color: c}
+		if !rule.BarSolid {
+			far := colorOf(fade(col, excelBarFade))
+			fill = &typeset.Fill{Shading: &typeset.Shading{
+				Kind: typeset.Axial, From: typeset.Point{X: a, Y: y}, To: typeset.Point{X: z, Y: y},
+				Stops:     []typeset.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: far}},
+				Transform: typeset.Identity,
+			}}
+		}
+		b.fills = append(b.fills, &typeset.Path{Ops: rectOps(left, y, right-left, h), Fill: fill})
+		border := rule.BarBorder
+		if length < 0 {
+			border = rule.BarNegativeBorder
+		}
+		if border.A > 0 && right-left > excelBarLine && h > excelBarLine {
+			stroke := typeset.Stroke{Color: colorOf(border), Width: excelBarLine}
+			half := excelBarLine / 2
+			b.fills = append(b.fills, &typeset.Path{Ops: rectOps(left+half, y+half, right-left-excelBarLine, h-excelBarLine), Stroke: &stroke})
+		}
+	}
+	if axis {
+		c := rule.BarAxisColor
+		if c.A == 0 {
+			c = css.Color{A: 1}
+		}
+		stroke := typeset.Stroke{Color: colorOf(c), Width: excelBarLine, Dash: []float64{excelBarDash, excelBarGap}}
+		b.fills = append(b.fills, &typeset.Path{Ops: lineOps(at, u.y, at, u.y+u.h), Stroke: &stroke})
+	}
+}
+
+// fade returns c the share f of the way to white, each channel a whole
+// level of 255 cut down, as Excel shades a data bar.
+func fade(c css.Color, f float64) css.Color {
+	ch := func(v float64) float64 {
+		v8 := math.Round(v * 255)
+		return math.Floor(v8+float64((255-v8)*f)) / 255
+	}
+	return css.Color{R: ch(c.R), G: ch(c.G), B: ch(c.B), A: 1}
 }
 
 // RangeNumbers returns the numbers of the cells of sh in the ranges,

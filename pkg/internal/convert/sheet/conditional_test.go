@@ -404,6 +404,98 @@ func TestConvert_ConditionalDrawing(t *testing.T) {
 	}
 }
 
+// TestConvert_ExcelDataBars locks the data bars Excel prints: inset 16
+// printer pixels at the left, top and bottom and 8 at the right, shaded
+// opaque from the bar's colour to 85% of the way to white across the
+// bar, outlined 8 pixels inside, right to left from the right inset,
+// and a dashed axis 8 pixels wide whose edges the bars start from.
+func TestConvert_ExcelDataBars(t *testing.T) {
+	c8 := func(r, g, b float64) css.Color { return css.Color{R: r / 255, G: g / 255, B: b / 255, A: 1} }
+	bar := c8(0x63, 0x8E, 0xC6)
+	type drawn struct {
+		x0, x1, y0, y1 float64
+		from, to       typeset.Color
+		stroke         *typeset.Stroke
+	}
+	draw := func(rule Rule, v float64) []drawn {
+		sh := &Sheet{Name: "S", Page: a4(), Columns: []Column{{First: 0, Last: 0, Width: 73.32}}, Rows: []Row{{Index: 0, Height: 14.52, Cells: []Cell{numCell(0, v, nil)}}}}
+		sh.Rows = append(sh.Rows, Row{Index: 1, Height: 14.52, Cells: []Cell{numCell(0, -100, nil)}}, Row{Index: 2, Height: 14.52, Cells: []Cell{numCell(0, 100, nil)}})
+		rule.Kind, rule.Bar = RuleDataBar, bar
+		sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 2}}, Rules: []Rule{rule}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = true
+		out := convert(t, doc, office.Options{})
+		var got []drawn
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch p := f.(type) {
+				case *typeset.Path:
+					if len(p.Ops) < 2 {
+						continue
+					}
+					d := drawn{x0: p.Ops[0].P[0].X, y0: p.Ops[0].P[0].Y, x1: p.Ops[1].P[0].X, y1: p.Ops[1].P[0].Y, stroke: p.Stroke}
+					if len(p.Ops) > 2 {
+						d.y1 = p.Ops[2].P[0].Y
+					}
+					switch {
+					case p.Fill != nil && p.Fill.Shading != nil:
+						d.from, d.to = p.Fill.Shading.Stops[0].Color, p.Fill.Shading.Stops[1].Color
+						if p.Fill.Shading.From.X > p.Fill.Shading.To.X {
+							d.from, d.to = d.to, d.from
+						}
+					case p.Fill != nil:
+						d.from = p.Fill.Color
+					}
+					if p.Stroke != nil || (p.Fill != nil && (p.Fill.Shading != nil || p.Fill.Color == colorOf(bar))) {
+						got = append(got, d)
+					}
+				case *typeset.Group:
+					walk(p.Content)
+				}
+			}
+		}
+		walk(out.Pages[0].Content)
+		return got
+	}
+	px := excelPixel
+	// A gradient bar from the left: 0..100 over the room, 50 half of it.
+	g := draw(Rule{Values: []Value{num(0), num(100)}, BarMaxLength: 1, BarAxis: BarAxisNone}, 50)
+	if len(g) == 0 {
+		t.Fatal("no bar drawn")
+	}
+	room := 73.32 - 24*px
+	if b := g[0]; !near(b.x0, 16*px, 1e-6) || !near(b.x1, 16*px+room/2, 1e-6) || !near(b.y0, 16*px, 1e-6) || !near(b.y1, 14.52-16*px, 1e-6) {
+		t.Errorf("bar %+v, want x %v..%v", b, 16*px, 16*px+room/2)
+	}
+	if b := g[0]; b.from != colorOf(bar) || b.to != colorOf(c8(231, 238, 246)) {
+		t.Errorf("shaded %v to %v", b.from, b.to)
+	}
+	// Right to left, solid and outlined.
+	g = draw(Rule{Values: []Value{num(0), num(100)}, BarMaxLength: 1, BarAxis: BarAxisNone, BarSolid: true, BarRightToLeft: true, BarBorder: red}, 50)
+	if len(g) < 2 || !near(max(g[0].x0, g[0].x1), 73.32-8*px, 1e-6) || !near(min(g[0].x0, g[0].x1), 73.32-8*px-room/2, 1e-6) {
+		t.Fatalf("right-to-left bar %+v", g)
+	}
+	if s := g[1].stroke; s == nil || s.Color != colorOf(red) || !near(s.Width, 8*px, 1e-9) {
+		t.Errorf("outline %+v", g[1])
+	}
+	// An automatic axis over -100..100 sits halfway, dashed.
+	g = draw(Rule{Values: []Value{str("min"), str("max")}, BarAxis: BarAxisAuto, BarSolid: true}, 50)
+	var axis *drawn
+	for i := range g {
+		if g[i].stroke != nil && len(g[i].stroke.Dash) == 2 {
+			axis = &g[i]
+		}
+	}
+	mid := 16*px + room/2
+	if axis == nil || !near(axis.x0, mid, 1e-6) || !near(axis.stroke.Dash[0], 24*px, 1e-9) || !near(axis.stroke.Width, 8*px, 1e-9) {
+		t.Fatalf("axis %+v", axis)
+	}
+	if !near(g[0].x0, mid+4*px, 1e-6) {
+		t.Errorf("bar starts at %v, want the axis's edge %v", g[0].x0, mid+4*px)
+	}
+}
+
 // TestThreshold locks the thresholds a reader resolves.
 func TestThreshold(t *testing.T) {
 	nums := []float64{1, 2, 3, 4}

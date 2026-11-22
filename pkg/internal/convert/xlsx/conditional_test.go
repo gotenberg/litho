@@ -177,6 +177,35 @@ func TestRead_ErrorAndDeviationRules(t *testing.T) {
 	}
 }
 
+// TestRead_DataBarExtension reads what Excel draws of a data bar's Excel
+// 2010 extension (MS-XLSX, 2.6.29 x14:dataBar): its lengths over the
+// dataBar element's, its outline colours, its axis colour and direction.
+func TestRead_DataBarExtension(t *testing.T) {
+	ws := `<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>` +
+		`<conditionalFormatting sqref="A1:A4"><cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar>` +
+		`<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="` + nsX14 + `"><x14:id>{1}</x14:id></ext></extLst></cfRule>` +
+		`<cfRule type="dataBar" priority="2"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF63C384"/></dataBar>` +
+		`<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="` + nsX14 + `"><x14:id>{2}</x14:id></ext></extLst></cfRule></conditionalFormatting>` +
+		`<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="` + nsX14 + `"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="` + nsXM + `">` +
+		`<x14:cfRule type="dataBar" id="{1}"><x14:dataBar minLength="0" maxLength="100" border="1" direction="rightToLeft" negativeBarBorderColorSameAsPositive="0">` +
+		`<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/><x14:borderColor rgb="FF00FF00"/><x14:negativeFillColor rgb="FFFF0000"/><x14:negativeBorderColor rgb="FF0000FF"/><x14:axisColor rgb="FF000080"/></x14:dataBar></x14:cfRule>` +
+		`<x14:cfRule type="dataBar" id="{2}"><x14:dataBar border="1"><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule>` +
+		`<xm:sqref>A1:A4</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`
+	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, "", "", "", nil)))
+	rules := doc.Sheets[0].Conditional[0].Rules
+	if len(rules) != 2 {
+		t.Fatalf("%d rules, want 2", len(rules))
+	}
+	r := rules[0]
+	if r.BarMinLength != 0 || r.BarMaxLength != 1 || !r.BarRightToLeft || r.BarBorder != rgb(0x00FF00) || r.BarNegativeBorder != rgb(0x0000FF) || r.BarAxisColor != rgb(0x000080) {
+		t.Errorf("first extension %+v", r)
+	}
+	r = rules[1]
+	if r.BarMinLength != 0.1 || r.BarMaxLength != 0.9 || r.BarRightToLeft || r.BarBorder != rgb(0x63C384) || r.BarNegativeBorder != r.BarBorder {
+		t.Errorf("second extension, the defaults %+v", r)
+	}
+}
+
 // TestRead_IconSets locks the reading of an icon set rule and of its
 // Excel 2010 extension: the set, the thresholds over the range, the gte
 // flags, reverse, showValue and the custom icons.
