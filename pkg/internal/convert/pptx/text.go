@@ -359,6 +359,8 @@ func (r *reader) paragraphs(tb *ooxml.Element, ts *textStyles) []slides.Paragrap
 //   - libreoffice/pptx: sd/tdf102261_testParaTabStopDefaultDistance's
 //     paragraphs of defTabSz 457200 and 1828800 print their tabbed digits
 //     every 36 and 144 points.
+//   - libreoffice/pptx: sd/n778859.pptx's tab opening a paragraph of
+//     margin 27 and indent -27 points ends at the margin, 27 points in.
 func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	ppr := p.Child(ooxml.NSA, "pPr")
 	lvl, _ := intAttr(ppr, "lvl")
@@ -410,6 +412,12 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 				out.TabStops = append(out.TabStops, max(0, v))
 			}
 		}
+	}
+	if out.Indent < 0 && out.MarginLeft > 0 && len(out.TabStops) < maxTabStops {
+		// A hanging indent is a tab stop (ECMA-376 Part 1, 21.1.2.2.7 marL
+		// and indent): a tab on the first line before the margin goes to
+		// the margin, as PowerPoint prints it.
+		out.TabStops = append(out.TabStops, out.MarginLeft)
 	}
 	// The interval of the default stops past the last explicit one,
 	// from the paragraph, its list levels, the master's text style or the

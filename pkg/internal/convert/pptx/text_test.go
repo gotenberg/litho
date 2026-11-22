@@ -150,11 +150,18 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 			}
 		}},
 		{"spacing, alignment, tabs, direction", `<a:p><a:pPr algn="ctr" rtl="1" marR="12700"><a:lnSpc><a:spcPct val="150000"/></a:lnSpc><a:spcBef><a:spcPts val="600"/></a:spcBef><a:spcAft><a:spcPct val="50%"/></a:spcAft><a:tabLst><a:tab pos="914400"/></a:tabLst></a:pPr><a:r><a:t>x</a:t></a:r><a:br/><a:r><a:t>y</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
-			if p.Align != css.AlignCenter || !p.RightToLeft || p.MarginRight != 1 || p.LineSpacing != 1.5 || p.SpaceBefore != 6 || p.SpaceAfterPct != 0.5 || !slices.Equal(p.TabStops, []float64{72}) {
+			if p.Align != css.AlignCenter || !p.RightToLeft || p.MarginRight != 1 || p.LineSpacing != 1.5 || p.SpaceBefore != 6 || p.SpaceAfterPct != 0.5 || !slices.Equal(p.TabStops, []float64{72, 27}) {
 				t.Errorf("paragraph %+v", p)
 			}
 			if len(p.Runs) != 3 || !p.Runs[1].Break {
 				t.Errorf("runs %+v", p.Runs)
+			}
+		}},
+		// Only a hanging indent makes a stop (the master's 27 points does
+		// in the case above).
+		{"no hanging indent, no stop", `<a:p><a:pPr marL="0" indent="0"/><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
+			if len(p.TabStops) != 0 {
+				t.Errorf("tab stops %v", p.TabStops)
 			}
 		}},
 		{"a bullet of several characters draws the first", `<a:p><a:pPr><a:buChar char="••"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
