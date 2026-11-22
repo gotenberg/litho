@@ -150,6 +150,28 @@ func (w *sheetReader) drawing(id string) error {
 	return nil
 }
 
+// drawingLink returns the external target of the hyperlink a drawing's
+// cNvPr carries (ECMA-376 Part 1, 20.1.2.2.23 hlinkClick, its r:id naming
+// a relationship of the drawing part), as Excel writes it ([linkURL]), ""
+// for none or for a place in the workbook.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/image_hyperlink.xlsx: Excel writes a link to
+//     https://www.google.com/ over the picture that carries it;
+//     sc/chart_hyperlink.xlsx: one over each chart frame, on every page a
+//     chart split by a page break prints on.
+func (w *sheetReader) drawingLink(part string, nv *ooxml.Element) string {
+	id, ok := nv.Child(ooxml.NSA, "hlinkClick").AttrNS(ooxml.NSR, "id")
+	if !ok {
+		return ""
+	}
+	if rel, ok := w.r.pkg.RelationshipByID(w.r.ctx, part, id); ok && rel.External {
+		return linkURL(rel.Target)
+	}
+	return ""
+}
+
 // anchorOf reads a from or to marker (ECMA-376 Part 1, 20.5.2.15
 // CT_Marker): the cell and the offset into it, the offsets in EMU.
 func anchorOf(m *ooxml.Element) sheet.Anchor {
@@ -226,6 +248,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			nv := obj.Find(nsXDR, "cNvPr")
 			d.Name = attr(nv, "name")
 			d.Alt, d.Decorative = ooxml.Describe(nv)
+			d.Href = w.drawingLink(part, nv)
 			data := obj.Find(ooxml.NSA, "graphicData")
 			switch ooxml.GraphicURI(data) {
 			case uriChart:
@@ -272,6 +295,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			nv := obj.Find(nsXDR, "cNvPr")
 			d.Name = attr(nv, "name")
 			d.Alt, d.Decorative = ooxml.Describe(nv)
+			d.Href = w.drawingLink(part, nv)
 			var leaves []leaf
 			w.leaves(part, obj, 0, 0, 1, 1, 0, &leaves)
 			if len(leaves) == 1 {

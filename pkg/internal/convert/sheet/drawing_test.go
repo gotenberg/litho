@@ -68,3 +68,31 @@ func TestConvert_LineDrawings(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_DrawingLinks locks the link a drawing carries: one link
+// annotation over the drawing's box on each page it prints on, each in a
+// Link element, the first holding the drawing's Figure.
+func TestConvert_DrawingLinks(t *testing.T) {
+	sh := &Sheet{Name: "S", Drawings: []Drawing{{
+		From: Anchor{}, Width: 300, Height: 1200, Name: "Chart 1", Href: "https://example.com/",
+		Chart: &chart.Chart{Title: &chart.Title{Text: "Sales", Style: chart.TextStyle{Size: 14}}},
+	}}}
+	out := convert(t, excelDoc(sh), office.Options{})
+	if len(out.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(out.Pages))
+	}
+	for i, pg := range out.Pages {
+		if len(pg.Links) != 1 {
+			t.Fatalf("page %d: %d links, want 1", i+1, len(pg.Links))
+		}
+		l := pg.Links[0]
+		if l.URI != "https://example.com/" || l.Rect.Width < 200 || l.Rect.Height < 200 {
+			t.Errorf("page %d: link %+v", i+1, l)
+		}
+		if l.Parent == nil || l.Parent.Role != "Link" {
+			t.Errorf("page %d: link parent %+v, want a Link", i+1, l.Parent)
+		} else if i == 0 && (len(l.Parent.Kids) != 1 || l.Parent.Kids[0].Role != "Figure") {
+			t.Errorf("page 1: link kids %+v, want the Figure", l.Parent.Kids)
+		}
+	}
+}

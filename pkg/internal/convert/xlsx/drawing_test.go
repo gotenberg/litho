@@ -32,10 +32,11 @@ const drawingNS = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/s
 // TestRead_Drawings checks the three anchors, a picture, a chart frame,
 // shapes and a group drawn as one picture, a hidden shape left out, and
 // what each says to a reader: a description, else a title, and the
-// decorative flag.
+// decorative flag; and an external link a drawing carries, a link to a
+// place in the workbook left out.
 func TestRead_Drawings(t *testing.T) {
 	t.Parallel()
-	pic := `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo" descr="Company logo" title="Logo"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdImg"/></xdr:blipFill>` +
+	pic := `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo" descr="Company logo" title="Logo"><a:hlinkClick r:id="rIdLink"/></xdr:cNvPr><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdImg"/></xdr:blipFill>` +
 		`<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="127000" cy="63500"/></a:xfrm><a:prstGeom prst="rect"/></xdr:spPr></xdr:pic>`
 	shape := func(name, geom, extra string) string {
 		return `<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="` + name + `"` + extra + `/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm>` +
@@ -45,7 +46,7 @@ func TestRead_Drawings(t *testing.T) {
 		`<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>1</xdr:col><xdr:colOff>12700</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>25400</xdr:rowOff></xdr:from>` +
 		`<xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` + pic + `<xdr:clientData/></xdr:twoCellAnchor>` +
 		`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="254000" cy="127000"/>` +
-		`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="4" name="Chart 1" title=" Sales "/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
+		`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="4" name="Chart 1" title=" Sales "><a:hlinkClick r:id="rIdHere"/></xdr:cNvPr><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
 		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rIdChart"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>` +
 		`<xdr:absoluteAnchor><xdr:pos x="127000" y="254000"/><xdr:ext cx="127000" cy="127000"/>` + shape("Oval", "ellipse", "") + `<xdr:clientData/></xdr:absoluteAnchor>` +
 		`<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="127000" cy="127000"/>` + shape("Gone", "rect", ` hidden="1"`) + `<xdr:clientData/></xdr:absoluteAnchor>` +
@@ -61,7 +62,9 @@ func TestRead_Drawings(t *testing.T) {
 			"xl/drawings/drawing1.xml": drawing,
 			"xl/drawings/_rels/drawing1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
 				`<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>` +
-				`<Relationship Id="rIdChart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>`,
+				`<Relationship Id="rIdChart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>` +
+				`<Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="file:///C:\TEMP\a.xlsx" TargetMode="External"/>` +
+				`<Relationship Id="rIdHere" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#S!A1"/></Relationships>`,
 			"xl/media/image1.png":  pngBytes(t),
 			"xl/charts/chart1.xml": `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"/>`,
 		})
@@ -86,6 +89,9 @@ func TestRead_Drawings(t *testing.T) {
 	}
 	if ds[0].Alt != "Company logo" || ds[0].Decorative || ds[1].Alt != "Sales" || ds[2].Alt != "" || !ds[3].Decorative {
 		t.Errorf("descriptions %q %q %q, decorative %v %v", ds[0].Alt, ds[1].Alt, ds[2].Alt, ds[0].Decorative, ds[3].Decorative)
+	}
+	if ds[0].Href != "file:///C:/TEMP/a.xlsx" || ds[1].Href != "" {
+		t.Errorf("links %q %q, want the picture's external one alone", ds[0].Href, ds[1].Href)
 	}
 	if d := ds[3]; d.Name != "Group" || d.Picture == nil {
 		t.Errorf("group %+v", d)

@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"cmp"
 	"context"
 	"strings"
 
@@ -26,11 +27,13 @@ func (b *builder) chartPicture(d *Drawing, rc typeset.Rect) *layout.Picture {
 // each picture over the cells its anchors place it on, clipped to the
 // region, in the coordinates of the page's cells. It also returns the
 // Figure element of each drawing the page prints, in the order the sheet
-// lists them ([figureOf]).
-func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.StructElem) {
+// lists them ([figureOf]), and a link over the part of each region a
+// drawing that carries one covers, its Figure inside a Link element.
+func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.StructElem, []typeset.Link) {
 	g := b.g
 	var out []typeset.Fragment
 	var figs []*typeset.StructElem
+	var links []typeset.Link
 	for i := range g.sh.Drawings {
 		d := &g.sh.Drawings[i]
 		rc := g.drawingRect(d)
@@ -47,7 +50,11 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 			continue
 		}
 		fig := figureOf(d, b.opts.DerivedAltText, b.lang)
-		drawn := false
+		var link *typeset.StructElem
+		if d.Href != "" {
+			link = &typeset.StructElem{Role: "Link"}
+		}
+		drawn, linked := false, false
 		for _, rg := range regs {
 			// The drawing's box in the region's coordinates.
 			x := rg.x0 + rc.X - g.layoutColX(rg.cols.first)
@@ -70,6 +77,14 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 			if fig != nil && adopt(content, fig) {
 				drawn = true
 			}
+			if link != nil {
+				x0, y0 := max(x, rg.x0), max(y, rg.y0)
+				x1, y1 := min(x+rc.Width, rg.x0+rg.w), min(y+rc.Height, rg.y0+rg.h)
+				if x1 > x0 && y1 > y0 {
+					links = append(links, typeset.Link{Rect: typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, URI: d.Href, Parent: link, Contents: cmp.Or(d.Alt, d.Href)})
+					linked = true
+				}
+			}
 			out = append(out, &typeset.Group{
 				Transform: typeset.Identity,
 				Clip:      &typeset.Path{Ops: rectOps(rg.x0, rg.y0, rg.w, rg.h), Fill: &typeset.Fill{}},
@@ -77,11 +92,17 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 				Content:   content,
 			})
 		}
-		if drawn {
+		switch {
+		case linked && drawn:
+			link.Kids = []*typeset.StructElem{fig}
+			figs = append(figs, link)
+		case linked:
+			figs = append(figs, link)
+		case drawn:
 			figs = append(figs, fig)
 		}
 	}
-	return out, figs
+	return out, figs, links
 }
 
 // before reports a drawing side ending at end, size long, before a

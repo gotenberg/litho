@@ -845,6 +845,10 @@ type Drawing struct {
 	// chart without one takes its title. A page whose only content is
 	// drawings then has an element an outline entry or a link can name.
 	Alt string
+	// Href is the external link the drawing carries, "" for none
+	// (ECMA-376 Part 1, 20.1.2.2.23 hlinkClick on its cNvPr): a link
+	// annotation covers the drawing's box on each page it prints on.
+	Href string
 	// Decorative marks a drawing the source says carries no meaning (the
 	// decorative flag of Office 2019, adec:decorative): it is drawn as an
 	// artifact, outside the structure tree.

@@ -134,8 +134,9 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 	b.tagTable(table, res.Structure, frags, links)
 	frags = append(frags, b.gridPaths...)
 	frags = append(frags, b.circles...)
-	drawn, figs := b.drawings(regs)
+	drawn, figs, drawnLinks := b.drawings(regs)
 	frags = append(frags, drawn...)
+	links = append(links, drawnLinks...)
 	st := res.Structure
 	if len(figs) > 0 {
 		// The Figures read after the cells they lie over.
