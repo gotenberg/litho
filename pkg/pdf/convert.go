@@ -199,9 +199,18 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //     as its EXIF orientation says; an image that cannot be read is
 //     replaced by its alt text. @font-face reads TrueType, OpenType, WOFF
 //     and WOFF2.
-//   - Form controls draw as the text they show. Embedded documents and
-//     audio are left out; a video draws its poster, which loads as an
-//     image does, and neither its frames nor its controls.
+//   - Form controls draw with the widgets a browser gives them: text
+//     fields, text areas, buttons, check boxes, radio buttons, drop-down
+//     and list boxes, sliders, progress bars, meters, colour wells and
+//     file controls, in the light or the dark colours of color-scheme
+//     and the accent of accent-color. A control whose author styles its
+//     border or its background draws that box in the widget's place. A
+//     date or time field shows its value in the en-US form.
+//   - A frame, an object or an embed draws the first viewport of its
+//     document, an HTML document, a picture or a plain text file, which
+//     loads as an image does. Audio is left out; a video draws its
+//     poster, which loads as an image does, and neither its frames nor
+//     its controls.
 //
 // A construct that is not drawn as the document means it is reported in
 // [models.ConvertReport.Warnings].
