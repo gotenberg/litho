@@ -148,19 +148,23 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	}
 }
 
-// TestRead_ErrorAndDeviationRules reads the error rules and an
-// aboveAverage rule's standard deviations (ECMA-376 Part 1, 18.18.12
-// ST_CfType containsErrors and notContainsErrors, 18.3.1.10 stdDev),
-// capped.
+// TestRead_ErrorAndDeviationRules reads the error rules, an aboveAverage
+// rule's standard deviations, capped, and a time period rule (ECMA-376
+// Part 1, 18.18.12 ST_CfType containsErrors, notContainsErrors and
+// timePeriod, 18.3.1.10 stdDev and timePeriod).
 func TestRead_ErrorAndDeviationRules(t *testing.T) {
 	ws := `<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>` +
 		`<conditionalFormatting sqref="A1:A4"><cfRule type="containsErrors" priority="1"><formula>ISERROR(A1)</formula></cfRule>` +
 		`<cfRule type="notContainsErrors" priority="2"><formula>NOT(ISERROR(A1))</formula></cfRule>` +
-		`<cfRule type="aboveAverage" priority="3" stdDev="2"/><cfRule type="aboveAverage" priority="4" aboveAverage="0" stdDev="4000000000"/></conditionalFormatting>`
+		`<cfRule type="aboveAverage" priority="3" stdDev="2"/><cfRule type="aboveAverage" priority="4" aboveAverage="0" stdDev="4000000000"/>` +
+		`<cfRule type="timePeriod" priority="5" timePeriod="last7Days"><formula>AND(TODAY()-FLOOR(A1,1)&lt;=6,FLOOR(A1,1)&lt;=TODAY())</formula></cfRule></conditionalFormatting>`
 	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, "", "", "", nil)))
 	rules := doc.Sheets[0].Conditional[0].Rules
-	if len(rules) != 4 {
-		t.Fatalf("%d rules, want 4", len(rules))
+	if len(rules) != 5 {
+		t.Fatalf("%d rules, want 5", len(rules))
+	}
+	if r := rules[4]; r.Kind != sheet.RuleTimePeriod || r.Operator != "last7Days" || r.Formula != "" {
+		t.Errorf("time period %+v", r)
 	}
 	if rules[0].Kind != sheet.RuleErrors || rules[1].Kind != sheet.RuleNoErrors {
 		t.Errorf("error rules %v, %v", rules[0].Kind, rules[1].Kind)

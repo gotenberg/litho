@@ -232,6 +232,11 @@ const (
 	// or any other one, an empty cell included.
 	RuleErrors
 	RuleNoErrors
+	// RuleTimePeriod holds for a date in the period Operator names
+	// ("today", "last7Days", "thisWeek", ... as ECMA-376 Part 1, 18.18.82
+	// ST_TimePeriod spells them) around the conversion's print date, for
+	// none without one (office.Options.PrintDate).
+	RuleTimePeriod
 )
 
 // Column is a range of columns sharing a width, a style or a hidden flag

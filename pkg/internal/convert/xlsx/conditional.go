@@ -188,6 +188,8 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 		rule.Kind = sheet.RuleBlanks
 	case "notContainsBlanks":
 		rule.Kind = sheet.RuleNoBlanks
+	case "timePeriod":
+		rule.Kind, rule.Operator = sheet.RuleTimePeriod, attr(e, "timePeriod")
 	case "containsErrors":
 		rule.Kind = sheet.RuleErrors
 	case "notContainsErrors":

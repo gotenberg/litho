@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -197,6 +198,64 @@ func TestConditional_ExcelRules(t *testing.T) {
 			t.Errorf("Excel's rules %v: fill %v, want %v", excel, got, want)
 		}
 	}
+}
+
+// TestConditional_TimePeriods locks the time period rules around the print
+// date, a week from Sunday, and that none holds without a print date.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: cf_rule_types, printed by Excel on Thursday 2026-11-12,
+//     highlights among 30 September and 2, 8, 9, 10, 12 November and 9
+//     December: 12 November for today, 8 to 12 November for last7Days and
+//     thisWeek, 2 to 12 November for thisMonth, none for yesterday,
+//     tomorrow and lastMonth.
+func TestConditional_TimePeriods(t *testing.T) {
+	day := func(m time.Month, d int) Cell {
+		return numCell(0, time.Date(2026, m, d, 0, 0, 0, 0, time.UTC).Sub(nullDate).Hours()/24+0.5, nil)
+	}
+	days := []Cell{day(time.September, 30), day(time.November, 2), day(time.November, 8), day(time.November, 9), day(time.November, 10), day(time.November, 12), day(time.December, 9), day(time.November, 1), day(time.October, 31), day(time.November, 15)}
+	fill := &Style{Fill: Fill{Color: green}}
+	tests := []struct {
+		period string
+		want   []bool
+	}{
+		{"today", []bool{false, false, false, false, false, true, false, false, false, false}},
+		{"yesterday", []bool{false, false, false, false, false, false, false, false, false, false}},
+		{"last7Days", []bool{false, false, true, true, true, true, false, false, false, false}},
+		{"thisWeek", []bool{false, false, true, true, true, true, false, false, false, false}},
+		{"lastWeek", []bool{false, true, false, false, false, false, false, true, false, false}},
+		{"nextWeek", []bool{false, false, false, false, false, false, false, false, false, true}},
+		{"thisMonth", []bool{false, true, true, true, true, true, false, true, false, true}},
+		{"lastMonth", []bool{false, false, false, false, false, false, false, false, true, false}},
+		{"nextMonth", []bool{false, false, false, false, false, false, true, false, false, false}},
+	}
+	for _, tc := range tests {
+		for _, dated := range []bool{false, true} {
+			sh := column(days...)
+			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: len(days) - 1}}, Rules: []Rule{{Kind: RuleTimePeriod, Operator: tc.period, Style: fill}}}}
+			g := newGrid(t.Context(), newDoc(sh), sh)
+			if dated {
+				g.cond.setToday(time.Date(2026, time.November, 12, 18, 30, 0, 0, time.FixedZone("", -5*3600)))
+			}
+			for i, want := range tc.want {
+				if got := g.style(i, 0, g.cell(i, 0)).Fill.Color == green; got != (want && dated) {
+					t.Errorf("%s, dated %v: row %d restyled %v", tc.period, dated, i+1, got)
+				}
+			}
+			if n := unevaluated(g); n != 1-btoi(dated) {
+				t.Errorf("%s, dated %v: %d rules reported", tc.period, dated, n)
+			}
+		}
+	}
+}
+
+// btoi returns 1 for true.
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // TestConditional_ColorScale locks the colour scale's interpolation and

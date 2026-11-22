@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -119,6 +120,72 @@ type conditions struct {
 	doc   *Document
 	sheet int
 	eval  *formulaEval
+	// today is the print date's serial day, which the time period rules
+	// compare with when dated is set ([conditions.setToday]).
+	today float64
+	dated bool
+}
+
+// maxSerialDay is the last day a serial number names, 9999-12-31 (ECMA-376
+// Part 1, 18.17.4.1): a time period rule holds for no number past it.
+const maxSerialDay = 2958465
+
+// nullDate is the day serial numbers count from ([Value]).
+var nullDate = time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
+
+// setToday makes the day of t, in its own location, the day the time
+// period rules compare with.
+func (cs *conditions) setToday(t time.Time) {
+	y, m, d := t.Date()
+	cs.today = math.Round(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Sub(nullDate).Hours() / 24)
+	cs.dated = true
+}
+
+// inPeriod reports whether the serial number v names a day of the period
+// op around the print date (ECMA-376 Part 1, 18.18.82 ST_TimePeriod): a
+// week runs from Sunday, as the formulas Excel writes for these rules
+// count it (WEEKDAY with its default return type).
+func (cs *conditions) inPeriod(op string, v float64) bool {
+	if !cs.dated || !numeric.Finite(v) || v < 0 || v > maxSerialDay {
+		return false
+	}
+	day, t := math.Floor(v), cs.today
+	date := func(n float64) time.Time { return nullDate.AddDate(0, 0, int(n)) } // fits int: within maxSerialDay, checked above
+	month := func(n float64) int {
+		y, m, _ := date(n).Date()
+		return y*12 + int(m)
+	}
+	sunday := t - float64(date(t).Weekday())
+	switch op {
+	case "today":
+		return day == t
+	case "yesterday":
+		return day == t-1
+	case "tomorrow":
+		return day == t+1
+	case "last7Days":
+		return day >= t-6 && day <= t
+	case "thisWeek":
+		return day >= sunday && day <= sunday+6
+	case "lastWeek":
+		return day >= sunday-7 && day < sunday
+	case "nextWeek":
+		return day > sunday+6 && day <= sunday+13
+	case "thisMonth":
+		return month(day) == month(t)
+	case "lastMonth":
+		return month(day) == month(t)-1
+	case "nextMonth":
+		return month(day) == month(t)+1
+	}
+	return false
+}
+
+// timePeriods are the periods a RuleTimePeriod names (ECMA-376 Part 1,
+// 18.18.82 ST_TimePeriod).
+var timePeriods = map[string]bool{
+	"today": true, "yesterday": true, "tomorrow": true, "last7Days": true, "thisWeek": true,
+	"lastWeek": true, "nextWeek": true, "thisMonth": true, "lastMonth": true, "nextMonth": true,
 }
 
 // newConditions indexes the conditional formats of sh, the rules sorted
@@ -197,6 +264,8 @@ func evaluable(r *Rule) bool {
 		return len(r.Values) > 0 && r.Values[0].Kind == Number
 	case RuleDuplicates, RuleUniques, RuleBlanks, RuleNoBlanks, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors:
 		return true
+	case RuleTimePeriod:
+		return timePeriods[r.Operator]
 	}
 	return false
 }
@@ -210,7 +279,7 @@ func unevaluated(g *grid) int {
 	for ci, c := range g.sh.Conditional {
 		for i := range c.Rules {
 			r := &c.Rules[i]
-			if !evaluable(r) {
+			if !evaluable(r) || (r.Kind == RuleTimePeriod && (g.cond == nil || !g.cond.dated)) {
 				n++
 				continue
 			}
@@ -401,7 +470,7 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 				res.icon, res.iconF, holds = rule, cr.f, true
 			}
 		case RuleCellIs, RuleText, RuleBlanks, RuleNoBlanks, RuleDuplicates, RuleUniques,
-			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors:
+			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors, RuleTimePeriod:
 			if res.style != nil {
 				continue
 			}
@@ -450,6 +519,8 @@ func cellHolds(rule *Rule, f *condFormat, g *grid, cell *Cell) bool {
 	case RuleErrors, RuleNoErrors:
 		failed := hasContent(cell) && cell.Value.Kind == Error
 		return failed == (rule.Kind == RuleErrors)
+	case RuleTimePeriod:
+		return g.cond != nil && hasContent(cell) && cell.Value.Kind == Number && g.cond.inPeriod(rule.Operator, cell.Value.Number)
 	case RuleCellIs:
 		return cellIs(rule, cell)
 	case RuleText:
