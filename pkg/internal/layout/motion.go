@@ -61,7 +61,9 @@ func motionOf(b *box, r typeset.Rect, o typeset.Point) (typeset.Matrix, bool) {
 // motionFrame returns the rectangle an offset path other than path() is
 // laid in, in the frame of r, and its border radii: the <coord-box> of the
 // box whose containing block holds b (CSS Motion Path 1, 2.1), or the
-// top-most box's border box for the initial containing block.
+// containing block itself when no box generates it, the initial
+// containing block or the page area of a fixed box, which has no border,
+// padding or radii.
 //
 // # Corpus evidence
 //
@@ -69,17 +71,22 @@ func motionOf(b *box, r typeset.Rect, o typeset.Point) (typeset.Matrix, bool) {
 //     circle(), inset() and a <coord-box> alone in the border box of the
 //     element whose content box holds the moving box, by default, on
 //     screen and in print.
+//   - probe, html: for an absolutely positioned box of the initial
+//     containing block, a ray of offset-position normal from the centre of
+//     the A4 page area, 720 by 1048.56 pixels, content-box and inset(50px)
+//     around that area and ray(180deg sides) to its bottom edge.
 func motionFrame(b *box, r typeset.Rect) (typeset.Rect, [4][2]float64) {
-	a := cbGenerator(b)
-	if a == nil {
-		a = b
-		for a.parent != nil {
-			a = a.parent
-		}
-	}
 	// r holds b's own relative offset, which moves b and not the box
 	// whose containing block holds it.
 	ox, oy := offset(b)
+	a := cbGenerator(b)
+	if a == nil {
+		var cb typeset.Rect
+		if b.moved != nil && b.moved.motionCB != nil {
+			cb = *b.moved.motionCB
+		}
+		return typeset.Rect{X: r.X - ox + cb.X - b.x, Y: r.Y - oy + cb.Y - b.y, Width: cb.Width, Height: cb.Height}, [4][2]float64{}
+	}
 	f := typeset.Rect{X: r.X - ox + a.x - b.x, Y: r.Y - oy + a.y - b.y, Width: a.borderW(), Height: a.borderH()}
 	radii := radiiOf(a, f.Width, f.Height)
 	switch b.st.Motion().Path.Box {

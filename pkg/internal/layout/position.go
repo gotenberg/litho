@@ -391,6 +391,9 @@ func (e *engine) layoutAbs(b *box) {
 	b.laidOut = true
 	cb := e.containerOf(b)
 	b.cbBox = cb.box
+	if cb.box == nil {
+		b.setMotionCB(typeset.Rect{X: cb.x, Y: cb.y, Width: cb.w, Height: cb.h})
+	}
 	b.fixed = cb.page
 	if cb.anchored {
 		b.pageAnchored, b.anchorPage = true, cb.anchorPage

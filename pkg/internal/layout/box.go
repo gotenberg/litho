@@ -344,6 +344,24 @@ type boxMove struct {
 	// stickyX and stickyY are the offset of a sticky box at the initial
 	// scroll position ([engine.placeSticky]).
 	stickyX, stickyY float64
+	// motionCB, when set, is the containing block a box's offset path is
+	// laid in when no box generates it: the initial containing block or
+	// the page area, in flow coordinates ([motionFrame]).
+	motionCB *typeset.Rect
+}
+
+// setMotionCB records r, the containing block no box generates, for a box
+// whose offset path is laid in its containing block ([motionFrame]); a
+// box without one records nothing.
+func (b *box) setMotionCB(r typeset.Rect) {
+	m := b.st.Motion()
+	if m == nil || m.Path.Kind == css.OffsetNone || m.Path.Kind == css.OffsetURL || m.Path.Kind == css.OffsetShape && m.Path.Shape != nil && m.Path.Shape.Kind == css.ShapePath {
+		return
+	}
+	if b.moved == nil {
+		b.moved = &boxMove{}
+	}
+	b.moved.motionCB = &r
 }
 
 // colPin returns the box's pin to a later column, 0 for none

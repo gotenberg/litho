@@ -130,3 +130,43 @@ func TestMotion_Bounded(t *testing.T) {
 		t.Errorf("empty path: %v %v", p, dir)
 	}
 }
+
+// TestMotion_InitialContainingBlock lays the path of an absolutely
+// positioned box whose containing block is the initial containing block
+// in that block, the page area (CSS Motion Path 1, 2.1), not in the root's
+// box: a ray of offset-position normal starts at its centre, a box alone
+// runs round its edges.
+func TestMotion_InitialContainingBlock(t *testing.T) {
+	for name, tc := range map[string]struct {
+		m    *css.MotionPath
+		x, y float64
+	}{
+		// 400 by 300 page: centre (200, 150); farthest side 200; a
+		// quarter of it to the right, the anchor (the 0 0 origin) there.
+		"ray from the centre": {&css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetRay, Ray: &css.Ray{Angle: math.Pi / 2, Size: css.RayFarthestSide}}, Distance: css.Dimension{Kind: css.Percent, Value: 0.25}}, 250, 150},
+		// Perimeter 1400: 30% is 420, past the top edge of 400 and 20
+		// down the right one.
+		"content-box": {&css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetBox, Box: css.GeoContent}, Distance: css.Dimension{Kind: css.Percent, Value: 0.3}, Rotate: css.OffsetRotate{Fixed: true}}, 400, 20},
+	} {
+		st := sty(func(s *css.Style) {
+			s.Position = css.Absolute
+			s.Left, s.Top = css.Pts(px(30)), css.Pts(px(40))
+			s.Width, s.Height = css.Pts(px(10)), css.Pts(px(10))
+			s.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
+			s.MotionPath = tc.m
+		})
+		root := boxes(t, doc(el(st)), page(400, 300))
+		b := styled(root, st)
+		if b == nil {
+			t.Fatal("box not found")
+		}
+		mat, _, ok := transformOf(b, typeset.Rect{X: b.x, Y: b.y, Width: b.borderW(), Height: b.borderH()})
+		if !ok {
+			t.Fatalf("%s: singular transform", name)
+		}
+		x, y := float64(mat.A*b.x)+float64(mat.C*b.y)+mat.E, float64(mat.B*b.x)+float64(mat.D*b.y)+mat.F
+		if math.Abs(x/css.Pt-tc.x) > 0.01 || math.Abs(y/css.Pt-tc.y) > 0.01 {
+			t.Errorf("%s: anchor at (%.2f, %.2f) px, want (%v, %v)", name, x/css.Pt, y/css.Pt, tc.x, tc.y)
+		}
+	}
+}

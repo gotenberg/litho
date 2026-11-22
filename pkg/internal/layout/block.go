@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // cblock is a containing block: the content box edges a box resolves its
@@ -674,6 +675,7 @@ func (e *engine) shrinkToFit(b *box, avail float64) float64 {
 // page area (CSS 2.1, 10.1), as tall as [Options.ViewportHeight] when set.
 func (e *engine) layoutRoot(rb *box) {
 	cb := cblock{x: 0, w: e.pageW, h: e.icbHeight(), hDefinite: true}
+	rb.setMotionCB(typeset.Rect{Width: cb.w, Height: cb.h})
 	bc := &bfc{}
 	mc := &marginState{}
 	// The root is laid out once a pass.
