@@ -115,10 +115,25 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 }
 
 // entry builds the legend entry of series s, or of its point j.
+//
+// # Corpus evidence
+//
+//   - litho/docx: charts-line-area's 3-D line chart, Word, and litho/pptx
+//     chart-3d's, PowerPoint: each series keys as a square of the legend's
+//     key size, 4.94 and 6.48 pt, filled with the line's colour and
+//     outlined with the line, 2.25 pt wide.
 func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle, maxW float64) legendEntry {
 	e := legendEntry{label: rd.measure(name, st, maxW), fill: rd.fillOf(g, s, j), border: rd.borderOf(g, s, j)}
 	if g.Kind == Unsupported {
 		e.circleKey, e.border = true, nil
+		return e
+	}
+	if g.Kind == Line && rd.threeD(g) != nil {
+		// A line drawn as a ribbon keys as a box filled and outlined
+		// with its line, as Office keys it.
+		if e.border != nil && !e.border.None {
+			e.fill = &Paint{Color: e.border.Color}
+		}
 		return e
 	}
 	if lined(g.Kind) && (g.Kind != Radar || !g.Filled) {

@@ -300,3 +300,28 @@ func TestRender_TurnedHoldsExtremeViews(t *testing.T) {
 		})
 	}
 }
+
+// TestLegend_RibbonKeysAsBox keys a three-dimensional line series as a
+// box filled and outlined with its line, as Office does, where a flat
+// line keys as a line.
+func TestLegend_RibbonKeysAsBox(t *testing.T) {
+	for _, threeD := range []bool{true, false} {
+		c := turned3D()
+		g := c.Groups[0]
+		g.Kind, g.ThreeD = Line, threeD
+		g.Series[0].Fill = nil
+		g.Series[0].Border = &Stroke{Color: blue, Width: 2.25}
+		g.Series[0].Name = "A"
+		c.Legend = &Legend{Position: LegendRight}
+		rd := &renderer{ctx: context.Background(), c: c}
+		es := rd.legendEntries(TextStyle{Size: 10}, 0)
+		if len(es) != 1 {
+			t.Fatalf("%d entries, want 1", len(es))
+		}
+		e := es[0]
+		boxed := !e.lineKey && e.fill != nil && e.fill.Color == blue
+		if boxed != threeD {
+			t.Errorf("3-D %v: entry %+v, want a box key %v", threeD, e, threeD)
+		}
+	}
+}
