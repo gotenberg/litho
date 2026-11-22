@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-22T13:23:52Z",
+  "captured_at": "2026-11-22T13:42:10Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -38576,7 +38576,7 @@
               "text_f1": 1
             },
             "sd/smartart-composite-infer-right.pptx": {
-              "layout": 0.946,
+              "layout": 0.9719,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
