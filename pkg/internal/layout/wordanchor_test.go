@@ -142,3 +142,59 @@ func TestWordAnchor_FromColumn(t *testing.T) {
 		t.Errorf("lines %s, want %s", got, want)
 	}
 }
+
+// TestWordAnchor_Align moves a float of css.WordAnchor AlignX and AlignY
+// left and up by those fractions of its own size, laid out: its bottom
+// right corner at its offsets for 1, its middle for 0.5.
+func TestWordAnchor_Align(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		ax, ay float64
+		want   [4]float64
+	}{
+		{"corner", 1, 1, [4]float64{40, 40, 20, 20}},
+		{"middle", 0.5, 0.5, [4]float64{50, 50, 20, 20}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			align := func(s *css.Style) { s.WordAnchor.AlignX, s.WordAnchor.AlignY = tt.ax, tt.ay }
+			rb := boxes(t, doc(wpara("a", wordFloat(css.FrameWrapBoth, 60, 60, 20, 20, align))), page(100, 200))
+			if got := rect(kid(t, rb, 0, 0, 0)); got != tt.want {
+				t.Errorf("float at %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWordAnchor_TallFloatBreaks lays a float of css.Office.WordAnchor
+// without PageClamp that is taller than its page out across the pages it
+// reaches, a line that would cross a page's end moved to the next, where
+// one with PageClamp is laid out whole on its anchor's page.
+func TestWordAnchor_TallFloatBreaks(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		clamp bool
+		want  float64
+	}{
+		// Lines of 10 px on pages of 95 px: past each page's end, the line
+		// that would cross it starts the next page.
+		{"breaks", false, 250},
+		{"whole", true, 240},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := make([]*Node, 0, 25)
+			for range 25 {
+				lines = append(lines, el(sty(), txt(sty(), "X")))
+			}
+			f := el(sty(func(s *css.Style) {
+				s.Float = css.FloatLeft
+				s.WordAnchor = css.WordAnchor{Set: true}
+				s.PageClamp = tt.clamp
+			}, width(20)), lines...)
+			rb := boxes(t, doc(wpara("a", f)), page(100, 95))
+			fb := kid(t, rb, 0, 0, 0)
+			if got := rect(kid(t, fb, 24))[1]; got != tt.want {
+				t.Errorf("last line at %v px, want %v", got, tt.want)
+			}
+		})
+	}
+}

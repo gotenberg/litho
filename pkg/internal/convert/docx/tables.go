@@ -480,6 +480,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		d.warn(warn.LimitReached, warn.Omitted, "a table nested too deep is left out")
 		return nil
 	}
+	anchorless := d.anchorless
 	direct := d.parseTableProps(t.Child(w, "tblPr"))
 	chain := d.styles.tableStyle(direct.style)
 	var tp tableProps
@@ -581,6 +582,12 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if tp.ind != nil {
 		indent = *tp.ind
 	}
+	firstLeft := cellMar["left"]
+	if cells := placed[0].cells; len(cells) > 0 {
+		if m, ok := cells[0].props.margins["left"]; ok {
+			firstLeft = m
+		}
+	}
 	if d.settings.compat < 15 && tp.ind != nil && d.inCell == 0 {
 		// Before Word 2013 an indent places the first cell's text, so the
 		// table's edge sits its left margin further out, as LibreOffice
@@ -588,13 +595,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		// indent keeps its edge at the margin. Word places a nested
 		// table's edge at its indent from the cell's text whatever the
 		// mode (see [tableIndent]).
-		left := cellMar["left"]
-		if cells := placed[0].cells; len(cells) > 0 {
-			if m, ok := cells[0].props.margins["left"]; ok {
-				left = m
-			}
-		}
-		indent -= left
+		indent -= firstLeft
 	}
 	tableSt.Margin[css.Left] = css.Pts(indent)
 	// Only the table's own alignment (17.4.28) places it: Word prints a
@@ -611,10 +612,22 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if boolOf(tp.bidi) {
 		tableSt.Direction = css.RTL
 	}
-	if tp.floating != nil {
+	// A floating table in a section of several columns stays a float of
+	// its column. One no paragraph follows has no paragraph to anchor it
+	// and stays in the flow.
+	floating := tp.floating != nil && !anchorless
+	anchored := floating && d.pageAnchors() && !d.columned
+	if floating && !anchored {
 		d.floatTable(tableSt, tp.floating)
 	}
 	tbl := &layout.Node{Kind: layout.Element, Style: tableSt, Role: "Table"}
+	if anchored {
+		outdent := 0.0
+		if d.settings.compat < 15 {
+			outdent = firstLeft
+		}
+		d.anchorTable(tbl, tp.floating, outdent)
+	}
 	for _, g := range grid {
 		cs := d.blockOf()
 		cs.Display = css.TableColumn
@@ -1039,6 +1052,92 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 		if v, ok := ooxml.Twips(attrOr(f, name)); ok {
 			st.Margin[side] = css.Pts(max(0, v))
 		}
+	}
+}
+
+// anchorTable places the floating table tbl of the body by its w:tblpPr f
+// (17.4.58) as Word places an anchored drawing that wraps the text on
+// both sides ([document.placeWord]): its left edge tblpX right of the
+// start of the area horzAnchor names, the text column when it names none,
+// or aligned in it by tblpXSpec; its top edge tblpY below the top of the
+// area vertAnchor names, or aligned in it by tblpYSpec. A table anchored
+// to the text is offset from where the flow stands, and aligned in the
+// margins, the area Word aligns it in. The text keeps the table's
+// topFromText, rightFromText, bottomFromText and leftFromText from it.
+// The table's indent does not apply. Word sets the table's edge at its
+// offset, where before Word 2013 the offset places the first cell's text,
+// the edge outdent further out, as an indent does ([document.table]).
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-floating: Word sets a table of tblpX 1800 and
+//     tblpY 7200 from the page with its left edge at 90 points and its top
+//     at 360; one of tblpXSpec right from the margin against the right
+//     margin, 5 points (tblpY 100) below its paragraph's top; one of tblpX
+//     -500 from the text 25 points left of the margin; one of tblpXSpec
+//     center and tblpYSpec bottom from the margin centred on the page with
+//     its bottom edge at the bottom margin.
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/cover_page/coverpage1.docx
+//     prints a table of tblpYSpec bottom and no vertAnchor with its bottom
+//     edge at the bottom margin, and one of vertAnchor and horzAnchor page
+//     and tblpYSpec top at the page's top-left corner.
+//   - libreoffice/docx: ooxmlexport/fdo68607.docx, of compatibility mode
+//     14, prints a table of horzAnchor margin and no tblpX with its first
+//     cell's text at the margin, its edge 5.4 points (108 twips) left of
+//     it.
+func (d *document) anchorTable(tbl *layout.Node, f *ooxml.Element, outdent float64) {
+	twips := func(name string) float64 {
+		v, _ := ooxml.Twips(attrOr(f, name))
+		return v
+	}
+	p := placement{wrap: "wrapSquare", posH: twips("tblpX"), posV: twips("tblpY")}
+	for i, name := range [4]string{"topFromText", "rightFromText", "bottomFromText", "leftFromText"} {
+		p.dist[i] = max(0, twips(name))
+	}
+	switch attrOr(f, "horzAnchor") {
+	case "page", "margin":
+		p.relH = attrOr(f, "horzAnchor")
+	default:
+		p.relH = "column"
+	}
+	switch v := attrOr(f, "tblpXSpec"); v {
+	case "left", "center", "right", "inside", "outside":
+		p.alignH = v
+	default:
+		p.posH -= outdent
+	}
+	switch v := attrOr(f, "tblpYSpec"); v {
+	case "top", "center", "bottom", "inside", "outside":
+		p.alignV = v
+	}
+	switch attrOr(f, "vertAnchor") {
+	case "page", "margin":
+		p.relV = attrOr(f, "vertAnchor")
+	default:
+		p.relV = "paragraph"
+		if p.alignV != "" {
+			p.relV = "margin"
+		}
+	}
+	st := tbl.Style
+	if st.Width.Kind == css.Points {
+		p.w = st.Width.Value
+	}
+	d.placeWord(p, tbl)
+	// A table taller than its page runs on across the pages it reaches,
+	// where a drawing stays on its anchor's page.
+	st.PageClamp = false
+	switch {
+	case p.alignH == "center" && st.Width.Kind != css.Points:
+		st.WordAnchor.AlignX = 0.5
+	case (p.alignH == "right" || p.alignH == "outside") && st.Width.Kind != css.Points:
+		st.WordAnchor.AlignX = 1
+	}
+	switch p.alignV {
+	case "center":
+		st.WordAnchor.AlignY = 0.5
+	case "bottom", "outside":
+		st.WordAnchor.AlignY = 1
 	}
 }
 

@@ -140,23 +140,37 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	}
 	f.anchorTop = top
 	e.noPaginate++
-	defer func() { e.noPaginate-- }()
 	if f.kind == kindReplaced {
 		f.w, f.h = e.replacedSize(f, cb)
 		f.x, f.y = x, y
 	} else {
-		if w, ok := specWidth(f, f.st.Width, cb.w); ok {
+		switch w, ok := specWidth(f, f.st.Width, cb.w); {
+		case f.tpart == partWrapper:
+			f.w = e.wrapperWidth(f, cb.w, cb.w)
+		case ok:
 			f.w = constrainWidth(f, w, cb.w)
-		} else {
+		default:
 			f.w = constrainWidth(f, e.shrinkToFit(f, cb.w), cb.w)
 		}
 		f.x, f.y = x, y
 		e.layoutOwnContext(f, cb)
+		if a.AlignX != 0 || a.AlignY != 0 {
+			f.shift(-float64(a.AlignX*f.borderW()), -float64(a.AlignY*f.borderH()))
+		}
+	}
+	e.noPaginate--
+	breaks := !f.st.PageClamp && f.kind != kindReplaced && e.paginating() && f.borderH() > e.box(page).Height
+	if breaks {
+		// A float that may break, a floating table, taller than its page
+		// runs on across the pages it reaches, laid out where it stands.
+		f.x, f.y = x, y
+		e.layoutOwnContext(f, cb)
 	}
 	switch {
-	case f.st.PageClamp && e.cols == nil:
+	case breaks:
+	case e.cols == nil:
 		e.clampToPage(f, page)
-	case f.st.PageClamp:
+	default:
 		// A column has no page box: the float stays inside the column's
 		// slice of the flow, which would else count a column more.
 		top := e.pageTop(page)

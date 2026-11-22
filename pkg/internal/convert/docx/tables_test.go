@@ -235,6 +235,16 @@ func TestTables_CellSpacing(t *testing.T) {
 	}
 }
 
+// TestTables_Floating locks where a floating table of the body is placed
+// (17.4.58 tblpPr): at its offsets or alignments in the areas its anchors
+// name, as Word places an anchored drawing; in the flow when no paragraph
+// follows it; as a float of its cell when nested.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlimport/table_width.docx ends its body with a
+//     table of vertAnchor page and tblpY 10261, which Word prints at the
+//     top margin, where the flow puts it.
 func TestTables_Floating(t *testing.T) {
 	t.Parallel()
 	table := func(tblpPr string, width int) string {
@@ -243,31 +253,46 @@ func TestTables_Floating(t *testing.T) {
 			`<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
 	}
 	// The default page is Letter with 72-point margins: 468 points of
-	// text between them.
-	const auto = -1
+	// text between them. A document without settings is of a mode
+	// before Word 2013: an offset places the first cell's text, the
+	// table's edge its 5.4-point margin further out.
 	for _, tc := range []struct {
 		name, tblpPr string
 		width        int
-		float        css.Float
-		left         float64
-		top, pageTop float64
+		want         css.WordAnchor
 	}{
-		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, 2000, css.FloatLeft, 9, 0, 0},
-		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, 2000, css.FloatRight, 0, 0, 0},
-		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, 2000, css.FloatNone, 184, 20, 0},
-		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, 2000, css.FloatNone, 184, 0, 20},
-		{"wider, centred on the margins", `<w:tblpPr w:tblpXSpec="center" w:horzAnchor="margin"/>`, 10080, css.FloatNone, -18, 0, 0},
-		{"centred on the page's width", `<w:tblpPr w:tblpXSpec="center" w:horzAnchor="page"/>`, 2000, css.FloatNone, 184, 0, 0},
+		{"below the text", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, 2000, css.WordAnchor{X: -5.4, Y: 20}},
+		{"right of the column", `<w:tblpPr w:tblpXSpec="right"/>`, 2000, css.WordAnchor{X: 368}},
+		{"centred, from the page's top", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, 2000, css.WordAnchor{X: 184, Y: -52, FromPage: true}},
+		{"wider, centred on the margins", `<w:tblpPr w:tblpXSpec="center" w:horzAnchor="margin"/>`, 10080, css.WordAnchor{X: -18}},
+		{"at the page's corner", `<w:tblpPr w:vertAnchor="page" w:horzAnchor="page" w:tblpYSpec="top"/>`, 2000, css.WordAnchor{X: -77.4, Y: -72, FromPage: true}},
+		{"at the margin's bottom", `<w:tblpPr w:tblpXSpec="center" w:tblpYSpec="bottom"/>`, 2000, css.WordAnchor{X: 184, Y: 648, AlignY: 1, FromPage: true}},
 	} {
-		b := build(t, table(tc.tblpPr, tc.width), nil)
-		tbl := role(b.root, "Table")[0].Style
-		left := tbl.Margin[css.Left].Value
-		if tbl.Margin[css.Left].Kind == css.Auto {
-			left = auto
+		b := build(t, table(tc.tblpPr, tc.width)+`<w:p/>`, nil)
+		b.secs[0].pending[0].resolve(b.secs[0])
+		st := role(b.root, "Table")[0].Style
+		got := st.WordAnchor
+		got.Set = false
+		if math.Abs(got.X-tc.want.X) > 1e-9 || math.Abs(got.Y-tc.want.Y) > 1e-9 || got.AlignX != tc.want.AlignX || got.AlignY != tc.want.AlignY || got.FromPage != tc.want.FromPage || st.Float != css.FloatLeft {
+			t.Errorf("%s: float %v at %+v, want %+v", tc.name, st.Float, got, tc.want)
 		}
-		if tbl.Float != tc.float || math.Abs(left-tc.left) > 1e-9 || tbl.Margin[css.Top].Value != tc.top || tbl.PageTop != tc.pageTop {
-			t.Errorf("%s: float %v margins %v page top %v", tc.name, tbl.Float, tbl.Margin, tbl.PageTop)
-		}
+	}
+	b := build(t, table(`<w:tblpPr w:leftFromText="180" w:rightFromText="180" w:tblpY="400"/>`, 2000)+`<w:p/>`, nil)
+	b.secs[0].pending[0].resolve(b.secs[0])
+	if gap := role(b.root, "Table")[0].Style.WrapGap; gap != [4]float64{0, 9, 0, 9} {
+		t.Errorf("wrap gap %v, want 9 points on both sides", gap)
+	}
+	// A table no paragraph follows has none to anchor it: it stays in the
+	// flow.
+	b = build(t, table(`<w:tblpPr w:vertAnchor="page" w:tblpY="10261"/>`, 2000), nil)
+	if st := role(b.root, "Table")[0].Style; st.WordAnchor.Set || st.Float != css.FloatNone || len(b.secs[0].pending) != 0 {
+		t.Errorf("unanchored table: float %v, anchor %+v; want it in the flow", st.Float, st.WordAnchor)
+	}
+	// A table nested in a cell is a float of the cell.
+	nested := `<w:tbl><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>` + table(`<w:tblpPr w:tblpXSpec="right"/>`, 2000) + `<w:p/></w:tc></w:tr></w:tbl>`
+	b = build(t, nested, nil)
+	if inner := role(b.root, "Table")[1].Style; inner.WordAnchor.Set || inner.Float != css.FloatRight {
+		t.Errorf("nested table: float %v, anchor %+v; want a right float", inner.Float, inner.WordAnchor)
 	}
 }
 

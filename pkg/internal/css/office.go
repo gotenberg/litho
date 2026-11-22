@@ -318,12 +318,23 @@ type Office struct {
 // staying where it was placed when its paragraph moves. With
 // NoOverlap, a replaced float that would overlap the border box of an
 // earlier float of WordAnchor moves right of it, or below it when the
-// containing block has no room there.
+// containing block has no room there. The float is laid out whole on
+// its anchor's page, moved up to end inside the page box when it reaches
+// past it; one without [Office.PageClamp] that is taller than its page
+// box, a floating table (17.4.58), breaks across the pages it reaches
+// instead.
+//
+// AlignX and AlignY move the float left and up by those fractions of its
+// own border box's width and height, laid out: 1 sets its right or bottom
+// edge at X or Y, 0.5 its middle, for a float aligned in an area the
+// converter knows and of a size it does not (ECMA-376 Part 1, 17.4.58
+// tblpXSpec and tblpYSpec of a table, which its content sizes).
 type WordAnchor struct {
-	Set       bool
-	X, Y      float64
-	FromPage  bool
-	NoOverlap bool
+	Set            bool
+	X, Y           float64
+	AlignX, AlignY float64
+	FromPage       bool
+	NoOverlap      bool
 }
 
 // WrapPoint is a point of an [Office.WrapPolygon], in fractions of the

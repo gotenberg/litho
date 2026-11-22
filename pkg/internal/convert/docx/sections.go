@@ -124,6 +124,28 @@ func (d *document) pageOf(e *ooxml.Element) *section {
 	return s
 }
 
+// columned reports whether the w:sectPr e sets its text in more than one
+// column (17.6.4 cols).
+func columned(e *ooxml.Element) bool {
+	c := e.Child(w, "cols")
+	if c == nil {
+		return false
+	}
+	if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
+		return true
+	}
+	if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) {
+		n := 0
+		for _, col := range c.Kids() {
+			if col.Is(w, "col") {
+				n++
+			}
+		}
+		return n > 1
+	}
+	return false
+}
+
 // parseSection reads a w:sectPr (17.6.17), headers and footers it does not
 // name inherited from prev (17.10.5).
 func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
@@ -416,20 +438,23 @@ func (d *document) body(root *ooxml.Element) []*section {
 		grids = append(grids, linePitch(body.Child(w, "sectPr")))
 		sects = append(sects, body.Child(w, "sectPr"))
 		next := func() {
-			d.linePitch, d.page = 0, nil
+			d.linePitch, d.page, d.columned = 0, nil, false
 			if len(secs) < len(grids) {
 				d.linePitch = grids[len(secs)]
 				d.page = d.pageOf(sects[len(secs)])
+				d.columned = columned(sects[len(secs)])
 			}
 		}
 		next()
-		for _, e := range mergeDeleted(body.Kids()) {
+		kids := mergeDeleted(body.Kids())
+		for i, e := range kids {
 			if d.ctx.Err() != nil {
 				break
 			}
 			if e.Is(w, "sectPr") {
 				continue
 			}
+			d.bodyFollows = holdsParagraph(kids[i+1:])
 			sp := e.Child(w, "pPr").Child(w, "sectPr")
 			if !e.Is(w, "p") {
 				sp = nil
@@ -447,8 +472,8 @@ func (d *document) body(root *ooxml.Element) []*section {
 		}
 	}
 	closeSection(body.Child(w, "sectPr"))
-	d.inBody = false
-	d.linePitch, d.page = 0, nil
+	d.inBody, d.bodyFollows = false, false
+	d.linePitch, d.page, d.columned = 0, nil, false
 	// Name the pages: a continuous break keeps the page when its size
 	// does not change; any other break starts a page, where the first
 	// paragraph keeps only the part of its space before that the last

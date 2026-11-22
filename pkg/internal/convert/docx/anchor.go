@@ -459,16 +459,16 @@ func (a pendingAnchor) resolveWord(s *section) {
 	p, st := a.p, a.st
 	left := s.margin[css.Left] + s.gutter
 	top := math.Abs(s.margin[css.Top])
-	if p.simple {
+	ax, ay := st.WordAnchor.AlignX, st.WordAnchor.AlignY
+	switch {
+	case p.simple:
 		st.WordAnchor = css.WordAnchor{Set: true, X: p.simpleX - left, Y: p.simpleY - top, FromPage: true, NoOverlap: p.noOverlap}
-		return
+	case !fromPageV(p.relV):
+		st.WordAnchor = css.WordAnchor{Set: true, X: hPos(s, p) - left, Y: p.posV, NoOverlap: p.noOverlap}
+	default:
+		st.WordAnchor = css.WordAnchor{Set: true, X: hPos(s, p) - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
 	}
-	x := hPos(s, p)
-	if !fromPageV(p.relV) {
-		st.WordAnchor = css.WordAnchor{Set: true, X: x - left, Y: p.posV, NoOverlap: p.noOverlap}
-		return
-	}
-	st.WordAnchor = css.WordAnchor{Set: true, X: x - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
+	st.WordAnchor.AlignX, st.WordAnchor.AlignY = ax, ay
 }
 
 // hPos returns the left edge, from the page's, of a drawing of placement

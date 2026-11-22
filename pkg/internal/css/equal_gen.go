@@ -2391,6 +2391,12 @@ func equalWordAnchor(a, b *WordAnchor) bool {
 	if math.Float64bits(a.Y) != math.Float64bits(b.Y) {
 		return false
 	}
+	if math.Float64bits(a.AlignX) != math.Float64bits(b.AlignX) {
+		return false
+	}
+	if math.Float64bits(a.AlignY) != math.Float64bits(b.AlignY) {
+		return false
+	}
 	if a.FromPage != b.FromPage {
 		return false
 	}
@@ -2405,6 +2411,8 @@ func hashWordAnchor(h uint64, x *WordAnchor) uint64 {
 	h = mixBool(h, x.Set)
 	h = mix(h, math.Float64bits(x.X))
 	h = mix(h, math.Float64bits(x.Y))
+	h = mix(h, math.Float64bits(x.AlignX))
+	h = mix(h, math.Float64bits(x.AlignY))
 	h = mixBool(h, x.FromPage)
 	h = mixBool(h, x.NoOverlap)
 	return h
