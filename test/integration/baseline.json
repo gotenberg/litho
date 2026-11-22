@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-22T21:55:20Z",
+  "captured_at": "2026-11-22T22:29:41Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9330,8 +9330,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 216,
-          "mismatched": 67,
+          "matched": 228,
+          "mismatched": 55,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9373,7 +9373,7 @@
               "text_f1": 1
             },
             "layout/hidden-para-separator.docx": {
-              "layout": 0.4887,
+              "layout": 0.7557,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9413,7 +9413,7 @@
               "text_f1": 0.3727
             },
             "layout/tdf109077.docx": {
-              "layout": 0.9897,
+              "layout": 0.9905,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9493,7 +9493,7 @@
               "text_f1": 1
             },
             "layout/tdf124423.docx": {
-              "layout": 0,
+              "layout": 0.9383,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9581,7 +9581,7 @@
               "text_f1": 1
             },
             "layout/tdf134685.docx": {
-              "layout": 0.4469,
+              "layout": 0.9424,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9685,7 +9685,7 @@
               "text_f1": 0.9231
             },
             "ooxmlexport/CT-with-frame.docx": {
-              "layout": 0.8723,
+              "layout": 0.9513,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9765,7 +9765,7 @@
               "text_f1": 1
             },
             "ooxmlexport/FDO76312.docx": {
-              "layout": 0.4937,
+              "layout": 0.5022,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9773,7 +9773,7 @@
               "text_f1": 0.878
             },
             "ooxmlexport/FDO78590.docx": {
-              "layout": 0.6432,
+              "layout": 0.4838,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9789,7 +9789,7 @@
               "text_f1": 1
             },
             "ooxmlexport/FileWithInvalidImageLink.docx": {
-              "layout": 0.8773,
+              "layout": 0.9129,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9797,7 +9797,7 @@
               "text_f1": 1
             },
             "ooxmlexport/ImageCrop.docx": {
-              "layout": 0.9835,
+              "layout": 0.9863,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10133,7 +10133,7 @@
               "text_f1": 1
             },
             "ooxmlexport/btlr-textbox.docx": {
-              "layout": 0.4743,
+              "layout": 0.946,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10429,7 +10429,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-shape-fillbitmapcrop.docx": {
-              "layout": 0.8879,
+              "layout": 0.8942,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10461,7 +10461,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-solidfill-alpha.docx": {
-              "layout": 0.9786,
+              "layout": 0.9856,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10533,11 +10533,11 @@
               "text_f1": 1
             },
             "ooxmlexport/effect-extent-inline.docx": {
-              "layout": 0.2578,
+              "layout": 0.9953,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/effect-extent.docx": {
@@ -10589,12 +10589,12 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo38414.docx": {
-              "layout": 0.1964,
+              "layout": 0.8125,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8485
+              "strict": 1,
+              "text_f1": 0.9697
             },
             "ooxmlexport/fdo43093.docx": {
               "layout": 0.9372,
@@ -10701,7 +10701,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo60957-2.docx": {
-              "layout": 0,
+              "layout": 0.9803,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10845,7 +10845,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo69636.docx": {
-              "layout": 0,
+              "layout": 0.8975,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10861,7 +10861,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo70457.docx": {
-              "layout": 0,
+              "layout": 0.9923,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11069,12 +11069,12 @@
               "text_f1": 0.9032
             },
             "ooxmlexport/fdo76249.docx": {
-              "layout": 0,
+              "layout": 0.8262,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0
             },
             "ooxmlexport/fdo76586.docx": {
               "layout": 0.0391,
@@ -11101,7 +11101,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76597.docx": {
-              "layout": 0.8908,
+              "layout": 0.8906,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11245,7 +11245,7 @@
               "text_f1": 1
             },
             "ooxmlimport/btlr-frame-vml.docx": {
-              "layout": 0.0055,
+              "layout": 0.9366,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11261,11 +11261,11 @@
               "text_f1": 1
             },
             "ooxmlimport/fdo43641.docx": {
-              "layout": 0,
+              "layout": 0.9423,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlimport/fdo75722-dml.docx": {
@@ -11461,11 +11461,11 @@
               "text_f1": 1
             },
             "ooxmlimport/strict-lockedcanvas.docx": {
-              "layout": 0,
+              "layout": 0.8969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlimport/table_width.docx": {
@@ -54508,8 +54508,8 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 148,
-          "mismatched": 15,
+          "matched": 150,
+          "mismatched": 13,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -54871,7 +54871,7 @@
               "text_f1": 1
             },
             "images-formats": {
-              "layout": 0.8113,
+              "layout": 0.8129,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55431,7 +55431,7 @@
               "text_f1": 0.9866
             },
             "para-dropcap-frames": {
-              "layout": 0.579,
+              "layout": 0.8485,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55583,11 +55583,11 @@
               "text_f1": 1
             },
             "sections-valign": {
-              "layout": 0.2419,
+              "layout": 0.7206,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "shapes-effects-3d": {
@@ -55655,11 +55655,11 @@
               "text_f1": 0.9916
             },
             "sink-report": {
-              "layout": 0.748,
+              "layout": 0.9457,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.8,
+              "strict": 1,
               "text_f1": 0.9959
             },
             "smartart": {
@@ -55751,7 +55751,7 @@
               "text_f1": 1
             },
             "tables-merged": {
-              "layout": 0.8937,
+              "layout": 0.9122,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -83792,8 +83792,8 @@
     "openxmlsdk/docx": {
       "features": {
         "diff": {
-          "matched": 169,
-          "mismatched": 30,
+          "matched": 170,
+          "mismatched": 29,
           "skipped": 50,
           "metrics": {
             "convert_error": 0,
@@ -83811,11 +83811,11 @@
               "text_f1": 1
             },
             "O14ISOStrict/Graphics/AlphaMod_-_Parent_Cont_-_Enum_tree.docx": {
-              "layout": 0,
+              "layout": 0.5502,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "O14ISOStrict/Word/AbbreviatedCaseNumber-Abbreviated_Case_Number.docx": {
@@ -83851,7 +83851,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/bdr-Text_Border-themeColor-text1.docx": {
-              "layout": 0,
+              "layout": 0.5346,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84091,7 +84091,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/rPr-bdr-Text_Border-val_dotDash_color_auto.docx": {
-              "layout": 0.1523,
+              "layout": 0.8325,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84427,7 +84427,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment035.docx": {
-              "layout": 0.9115,
+              "layout": 0.9138,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84619,12 +84619,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/ForTestCase/Bug201775_testfile.docx": {
-              "layout": 0,
+              "layout": 0.8844,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 1
+              "text_f1": 0.7702
             },
             "v2FxTestFiles/ForTestCase/Bug242602_SDT_-_unknown.docx": {
               "layout": 0.9552,
@@ -84843,7 +84843,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtContent.docx": {
-              "layout": 0.9888,
+              "layout": 0.9905,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84883,7 +84883,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/bookmark/bookmark-pic.docx": {
-              "layout": 0.9655,
+              "layout": 0.9578,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -85139,7 +85139,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/endnote.docx": {
-              "layout": 0.9381,
+              "layout": 0.9419,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -85147,7 +85147,7 @@
               "text_f1": 0.9841
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/endnote_at_end_of_section_and_restart_for_each_section.docx": {
-              "layout": 0.9144,
+              "layout": 0.9185,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -85155,7 +85155,7 @@
               "text_f1": 0.9831
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/footnote.docx": {
-              "layout": 0.9573,
+              "layout": 0.9624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -85163,7 +85163,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_at_bottom_of_paget_and_resart_for_each_page.docx": {
-              "layout": 0.9578,
+              "layout": 0.9628,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -85171,7 +85171,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_below_text_and_resart_for_each_section.docx": {
-              "layout": 0.8037,
+              "layout": 0.809,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -100793,11 +100793,11 @@
               "text_f1": 1
             },
             "document/checkboxes.docx": {
-              "layout": 0.2601,
+              "layout": 0.4764,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "document/comment.docx": {
@@ -100889,7 +100889,7 @@
               "text_f1": 1
             },
             "document/form_footnotes.docx": {
-              "layout": 0.4191,
+              "layout": 0.4196,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -101001,7 +101001,7 @@
               "text_f1": 1
             },
             "integration/stress003.docx": {
-              "layout": 0.7602,
+              "layout": 0.7604,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -101073,7 +101073,7 @@
               "text_f1": 1
             },
             "openxml4j/TestPackageThumbnail.docx": {
-              "layout": 0.9487,
+              "layout": 0.9595,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -101081,7 +101081,7 @@
               "text_f1": 1
             },
             "openxml4j/sample.docx": {
-              "layout": 0.9487,
+              "layout": 0.9595,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
