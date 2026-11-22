@@ -736,7 +736,8 @@ func TestChartFromElement_InvertIfNegative(t *testing.T) {
 		extra string
 		want  *typeset.Color
 	}{
-		{"", nil},
+		{"", &typeset.Color{R: 1, G: 1, B: 1, A: 1}},
+		{`<c:invertIfNegative val="0"/>`, nil},
 		{inv, &typeset.Color{R: 1, G: 1, B: 1, A: 1}},
 		{ext, &typeset.Color{R: 1, A: 1}},
 	} {

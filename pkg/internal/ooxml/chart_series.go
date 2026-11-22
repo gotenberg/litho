@@ -348,7 +348,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	if g.Kind == chart.Line || g.Kind == chart.Scatter || g.Kind == chart.Radar {
 		s.Marker = p.marker(e.Child(NSChart, "marker"), lineMarkers)
 	}
-	if g.Kind == chart.Bar && boolVal(e, "invertIfNegative", false) {
+	if g.Kind == chart.Bar && boolVal(e, "invertIfNegative", unstatedInvert) {
 		s.Invert = p.invertFill(e)
 	}
 	s.Smooth = boolVal(e, "smooth", g.Kind == chart.Line && !p.mso2007)
@@ -766,6 +766,17 @@ func markerSymbol(name string) (chart.MarkerSymbol, bool) {
 	}
 	return chart.MarkerAuto, false
 }
+
+// unstatedInvert is whether a bar series that states no invertIfNegative
+// inverts its negative bars: ECMA-376 Part 1, 21.2.2.86 leaves the absent
+// element to the application, and Office inverts them.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: ten column charts whose series of -4 to 5 states no
+//     invertIfNegative and no fill print their bar of -4 white with a black
+//     outline in Excel, the others in the automatic colour.
+const unstatedInvert = true
 
 // nsChart14 is the namespace of Office 2010's chart extensions (MS-ODRAWXML,
 // 2.3.1 c14).
