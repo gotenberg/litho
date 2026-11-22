@@ -3,6 +3,7 @@ package xlsx
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -402,7 +403,7 @@ func (r *reader) fontProps(e *ooxml.Element, f *sheet.Font) {
 			scheme = strings.TrimSpace(val)
 		case "name", "rFont":
 			if has && strings.TrimSpace(val) != "" {
-				f.Families = []string{strings.TrimSpace(val)}
+				f.Families = []string{scriptFace(strings.TrimSpace(val))}
 			}
 		case "sz":
 			if v, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil && v > 0 {
@@ -747,4 +748,31 @@ func intAttr(e *ooxml.Element, local string, def int) int {
 		}
 	}
 	return def
+}
+
+// scriptFaces are the faces Windows serves under a script's name (the
+// FontSubstitutes of every Windows install: Arial Cyr, Arial CE, Times New
+// Roman Greek and the like), which Excel draws and measures as the face
+// itself.
+var scriptFaces = []string{"Arial", "Courier New", "Times New Roman"}
+
+// scriptSuffixes are the script names Windows appends to those faces.
+var scriptSuffixes = []string{"baltic", "ce", "cyr", "greek", "tur"}
+
+// scriptFace returns the face Windows serves the family name under, name
+// itself when it names no script face.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/orderOfCNumFmtElements.xlsx, whose Normal font is
+//     Arial Cyr 10, prints its rows 103 printer pixels apart, Arial 10's
+//     standard row, its text in Arial.
+func scriptFace(name string) string {
+	for _, face := range scriptFaces {
+		rest, ok := strings.CutPrefix(strings.ToLower(name), strings.ToLower(face)+" ")
+		if ok && slices.Contains(scriptSuffixes, rest) {
+			return face
+		}
+	}
+	return name
 }

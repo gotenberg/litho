@@ -336,3 +336,22 @@ func TestTint_ExcelColours(t *testing.T) {
 		}
 	}
 }
+
+// TestScriptFace checks the faces Windows serves under a script's name:
+// Arial Cyr is Arial, Times New Roman CE is Times New Roman; any other
+// name is kept.
+func TestScriptFace(t *testing.T) {
+	for in, want := range map[string]string{
+		"Arial Cyr":          "Arial",
+		"Arial CYR":          "Arial",
+		"Times New Roman CE": "Times New Roman",
+		"Courier New Baltic": "Courier New",
+		"Arial Narrow":       "Arial Narrow",
+		"Arial Unicode MS":   "Arial Unicode MS",
+		"Calibri":            "Calibri",
+	} {
+		if got := scriptFace(in); got != want {
+			t.Errorf("scriptFace(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
