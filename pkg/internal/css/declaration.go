@@ -152,7 +152,7 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 //     none of them.
 var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
-	"resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
+	"resize": true, "scroll-behavior": true, "caret-color": true,
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
 	"scrollbar-gutter": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,

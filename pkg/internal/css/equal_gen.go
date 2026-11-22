@@ -152,6 +152,18 @@ func equalStyle(a, b *Style) bool {
 	if a.FieldSizing != b.FieldSizing {
 		return false
 	}
+	if a.Appearance != b.Appearance {
+		return false
+	}
+	if a.AuthorBorder != b.AuthorBorder {
+		return false
+	}
+	if a.AuthorBackground != b.AuthorBackground {
+		return false
+	}
+	if a.AccentColor != b.AccentColor {
+		return false
+	}
 	if a.OuterInline != b.OuterInline {
 		return false
 	}
@@ -887,6 +899,10 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mixBool(h, x.MotionPath != nil)
 	h = mixBool(h, x.GlyphPaint != nil)
 	h = mix(h, uint64(x.FieldSizing))
+	h = mix(h, uint64(x.Appearance))
+	h = mixBool(h, x.AuthorBorder)
+	h = mixBool(h, x.AuthorBackground)
+	h = mixBool(h, x.AccentColor != nil)
 	h = mixBool(h, x.OuterInline)
 	h = hashDimension(h, &x.Width)
 	h = hashDimension(h, &x.Height)

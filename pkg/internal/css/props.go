@@ -296,6 +296,8 @@ const (
 	pOffsetAnchor
 	pOffsetPosition
 	pFieldSizing
+	pAppearance
+	pAccentColor
 	numProps
 )
 
@@ -1176,6 +1178,10 @@ func init() {
 	props[pFieldSizing] = enumProp("field-sizing", false, func(s *Style) *FieldSizing { return &s.FieldSizing }, map[string]FieldSizing{
 		"fixed": FieldFixed, "content": FieldContent,
 	})
+	// appearance: none | auto | <compat-auto> | textfield |
+	// menulist-button (CSS Basic User Interface 4, 7.2).
+	props[pAppearance] = enumProp("appearance", false, func(s *Style) *Appearance { return &s.Appearance }, appearanceKeywords)
+	props[pAccentColor] = accentColorProp()
 	anchorLengths()
 	longhandByName = map[string]propID{}
 	for i := range props {

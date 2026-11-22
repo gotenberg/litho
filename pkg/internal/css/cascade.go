@@ -1139,6 +1139,14 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	// declaration needs it.
 	var below []layerState
 	revertsLayer := slices.ContainsFunc(cands, func(c cand) bool { return c.d.revertLayer })
+	// styled holds, for each longhand of [authorStyledProps], whether its
+	// winning declaration is an author's or a user's.
+	var styled [numProps]bool
+	written := func(c cand, id propID) {
+		if authorStyledProps[id] != 0 {
+			styled[id] = originOf(c.rank) != UserAgent
+		}
+	}
 	for i, c := range cands {
 		for _, w := range c.d.warns {
 			cs.warns.add(w)
@@ -1192,11 +1200,13 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			for _, id := range longhandsOf(c.d.Property) {
 				winners[side(c.d, id)] = pendingRef{c.d}
 				imp[side(c.d, id)] = c.d.Important
+				written(c, side(c.d, id))
 			}
 		default:
 			for _, e := range c.d.entries {
 				winners[side(c.d, e.id)] = e.v
 				imp[side(c.d, e.id)] = c.d.Important
+				written(c, side(c.d, e.id))
 			}
 		}
 	}
@@ -1236,11 +1246,23 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	if only == nil && cs.animates(winners[pAnimationName], parentStyle) {
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
-	st := cs.computeStyle(&winners, &imp, vars, parentStyle, isRoot)
+	st := cs.computeStyle(&winners, &imp, vars, parentStyle, isRoot, authorStyledBits(&styled))
 	if reuse {
 		cs.remember(key, cands, st)
 	}
 	return st, vars
+}
+
+// authorStyledBits returns the bits of [authorStyledProps] of the
+// longhands styled marks as set by an author or a user.
+func authorStyledBits(styled *[numProps]bool) uint8 {
+	var bits uint8
+	for id, on := range styled {
+		if on {
+			bits |= authorStyledProps[id]
+		}
+	}
+	return bits
 }
 
 // sortedByLayer returns xs ordered by the layer positions pos, one per
@@ -1369,9 +1391,10 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 // value take the parent's, the others their initial value. It returns the
 // style of the tree equal to the result when there is one, so elements
 // styled alike share one [Style].
-func (cs *computeState) computeStyle(winners *[numProps]any, imp *[numProps]bool, vars map[string][]token, parent *Style, isRoot bool) *Style {
+func (cs *computeState) computeStyle(winners *[numProps]any, imp *[numProps]bool, vars map[string][]token, parent *Style, isRoot bool, styled uint8) *Style {
 	st := &cs.scratch
 	cs.computeInto(st, winners, parent, isRoot)
+	st.AuthorBorder, st.AuthorBackground = styled&authorBorder != 0, styled&authorBackground != 0
 	cs.attachTries(st, winners, imp, vars, parent, isRoot)
 	shared, adopted := cs.styles.shareCopy(st)
 	if adopted {

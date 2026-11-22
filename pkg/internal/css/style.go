@@ -1100,6 +1100,19 @@ type Style struct {
 	// FieldSizing sizes a form control by its content or by its default
 	// size (CSS Form Control Styling 1, 7.1).
 	FieldSizing FieldSizing
+	// Appearance says whether a form control is drawn as its widget (CSS
+	// Basic User Interface 4, 7.2).
+	Appearance Appearance
+	// AuthorBorder and AuthorBackground report that an author's or a
+	// user's declaration set the element's border (its widths, styles,
+	// colours, radii or image) or its background: a form control drawn as
+	// its widget is then drawn as its CSS box, as Chromium draws it. Not
+	// inherited.
+	AuthorBorder, AuthorBackground bool
+	// AccentColor is the accent-color of a form control's widget (CSS
+	// Basic User Interface 4, 6.2), nil for auto. Shared and never
+	// mutated.
+	AccentColor *Color
 	// OuterInline reports a box whose display was inline-level before CSS
 	// 2.1, 9.7 blockified it: an absolutely positioned box's static
 	// position is then where its inline box would have sat on the line
