@@ -147,11 +147,15 @@ func (p *Paragraph) combine(it *shapedItem, em float64) {
 	// The em box's left edge on the page is the frame's far side of the
 	// central baseline; each glyph sits that far from it.
 	left := center + float64(em/2) - float64((em-float64(width*k))/2)
+	// The em box is filled along the line by the face's ascent and
+	// descent, centred in it, as Chromium sets a combined run; CSS
+	// Writing Modes 4, 9.1.2 leaves the placement to the user agent.
+	baseline := float64(em/2) + float64((wholePixels(it.ascent)-wholePixels(it.descent))/2)
 	pen := 0.0
 	for i := range it.glyphs {
 		g := &it.glyphs[i]
 		x := float64((pen + g.xoff) * k)
-		g.xoff, g.yoff = it.emAscent+g.yoff, left-x
+		g.xoff, g.yoff = baseline+g.yoff, left-x
 		pen += g.advance
 		g.advance = 0
 	}

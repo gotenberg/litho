@@ -326,3 +326,20 @@ func TestVertical_OrthogonalPercentageOfTheInitialContainingBlock(t *testing.T) 
 		t.Errorf("horizontal box %q, want 0,0+210x30", got)
 	}
 }
+
+// TestVerticalLine_CombinedRunOnTheAscentAndDescent locks where a run of
+// text-combine-upright sits along its line: its face's rounded ascent and
+// descent centred in the em it fills (CSS Writing Modes 4, 9.1.2 leaves it
+// to the user agent).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets each glyph
+//     of the table below where it has it, in vertical-rl and vertical-lr.
+func TestVerticalLine_CombinedRunOnTheAscentAndDescent(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"vertical-rl", "vertical-lr"} {
+		gs := verticalLine(t, mode, `font: 16px 'Noto Sans CJK JP'`, `年<span style="text-combine-upright: all">12</span>月<span style="text-combine-upright: all">3</span>日`)
+		wantOrigins(t, mode, gs, "年 4,24.08", "1 4,41", "2 12,41", "月 4,56.08", "3 7.547,73", "日 4,88.08")
+	}
+}

@@ -1195,14 +1195,17 @@ func cursive(r rune) bool {
 //     sets each baseline the rounded ascent below the top of its advance,
 //     in vertical-rl and vertical-lr under text-orientation: upright.
 func uprightWithoutVmtx(g *shapedGlyph, face *gofont.Face, gid gofont.GID, ascent, descent, size float64) {
-	px := func(v float64) float64 {
-		return float64(math.Floor(float64(v*cssPixelsPerPoint)+0.5) / cssPixelsPerPoint)
-	}
-	a, d := px(ascent), px(descent)
+	a, d := wholePixels(ascent), wholePixels(descent)
 	if upem := float64(face.Upem()); upem > 0 {
 		_, oy := face.GlyphVOrigin(gid)
 		g.xoff -= float64(float64(oy) * size / upem)
 	}
 	g.xoff += a
 	g.advance = a + d
+}
+
+// wholePixels returns v points rounded to whole CSS pixels, halves up, as
+// Blink rounds a face's ascent and descent.
+func wholePixels(v float64) float64 {
+	return float64(math.Floor(float64(v*cssPixelsPerPoint)+0.5) / cssPixelsPerPoint)
 }
