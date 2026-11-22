@@ -76,6 +76,40 @@ type sheetReader struct {
 	// sheetFormatPr customHeight): a row without a height of its own keeps
 	// it, unmeasured (sheet.Document.FitRows).
 	customDefault bool
+	// arrays are the ranges of the array formulas read so far that reach
+	// the row being read (18.3.1.40 f, t array, ref).
+	arrays []sheet.Range
+}
+
+// maxArrayFormulas caps the array formula ranges a sheet keeps while its
+// rows are read. Anti-DoS guard, not spec-mandated: a range is dropped
+// once the rows pass it, and a sheet holds a few at a time.
+const maxArrayFormulas = 1 << 12
+
+// arrayMember reports whether the cell at row and col lies in the range
+// of an array formula read before it, outside its anchor cell.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx spreadsheet/66365.xlsx: B2, in the range B1:B2 of the
+//     array formula {=A1:A2} and stored as the shared string "Bob",
+//     prints as #VALUE!; so did litho/xlsx dynamic_arrays's spilled text
+//     cells while the fixture stored them as shared strings, where Excel's
+//     own files store them as formula strings (t="str"), which print.
+func (w *sheetReader) arrayMember(row, col int) bool {
+	keep := w.arrays[:0]
+	in := false
+	for _, a := range w.arrays {
+		if a.LastRow < row {
+			continue
+		}
+		keep = append(keep, a)
+		if row >= a.FirstRow && col >= a.FirstColumn && col <= a.LastColumn && (row != a.FirstRow || col != a.FirstColumn) {
+			in = true
+		}
+	}
+	w.arrays = keep
+	return in
 }
 
 // maxCachedFormulas caps the formulas with a cached result a workbook
@@ -419,18 +453,32 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 		}
 	}
 	v := c.Child(nsMain, "v")
+	if f := c.Child(nsMain, "f"); attr(f, "t") == "array" && len(w.arrays) < maxArrayFormulas {
+		if a, ok := rangeRef(attr(f, "ref")); ok && a.FirstRow == row.Index && a.FirstColumn == col {
+			w.arrays = append(w.arrays, a)
+		}
+	}
 	switch t := attr(c, "t"); t {
-	case "s":
+	case "s", "inlineStr":
+		if (v != nil || c.Child(nsMain, "is") != nil) && w.arrayMember(row.Index, col) {
+			// A cell of an array formula's range holds the formula's
+			// result; Excel prints one that stores a string constant
+			// there as #VALUE!.
+			cell.Value = sheet.Value{Kind: sheet.Error, Text: "#VALUE!"}
+			break
+		}
+		if t == "inlineStr" {
+			rt := r.inlineText(c)
+			cell.Value = sheet.Value{Kind: sheet.Text, Text: rt.text}
+			cell.Runs = rt.runs
+			break
+		}
 		if v != nil {
 			if rt, ok := r.sharedText(v.Text); ok {
 				cell.Value = sheet.Value{Kind: sheet.Text, Text: rt.text}
 				cell.Runs = rt.runs
 			}
 		}
-	case "inlineStr":
-		rt := r.inlineText(c)
-		cell.Value = sheet.Value{Kind: sheet.Text, Text: rt.text}
-		cell.Runs = rt.runs
 	case "str":
 		if v != nil {
 			rt := r.richTextOf(v.Text)

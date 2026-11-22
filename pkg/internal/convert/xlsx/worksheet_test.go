@@ -625,3 +625,29 @@ func TestRead_ColumnScreenPixels(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_ArrayRangeStrings checks a cell of an array formula's range
+// that stores a string constant read as #VALUE!, its anchor's cached
+// string and a formula string kept.
+func TestRead_ArrayRangeStrings(t *testing.T) {
+	t.Parallel()
+	data := `<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Alice</t></is></c><c r="B1" t="str"><f t="array" ref="B1:B3">A1:A3</f><v>Alice</v></c></row>` +
+		`<row r="2"><c r="A2" t="inlineStr"><is><t>Bob</t></is></c><c r="B2" t="inlineStr"><is><t>Bob</t></is></c></row>` +
+		`<row r="3"><c r="B3" t="str"><v>Eve</v></c><c r="C3" t="inlineStr"><is><t>out</t></is></c></row></sheetData>`
+	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: data}}, minimalStyles, "", "", nil)))
+	sh := doc.Sheets[0]
+	for _, tc := range []struct {
+		row, col int
+		want     sheet.Value
+	}{
+		{0, 1, sheet.Value{Kind: sheet.Text, Text: "Alice"}},
+		{1, 0, sheet.Value{Kind: sheet.Text, Text: "Bob"}},
+		{1, 1, sheet.Value{Kind: sheet.Error, Text: "#VALUE!"}},
+		{2, 1, sheet.Value{Kind: sheet.Text, Text: "Eve"}},
+		{2, 2, sheet.Value{Kind: sheet.Text, Text: "out"}},
+	} {
+		if c, _ := cellAt(sh, tc.row, tc.col); c.Value != tc.want {
+			t.Errorf("cell %d,%d = %+v, want %+v", tc.row, tc.col, c.Value, tc.want)
+		}
+	}
+}
