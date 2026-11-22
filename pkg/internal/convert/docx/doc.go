@@ -51,8 +51,8 @@
 //
 // # Sections and pages
 //
-// A document without a styles part prints in Calibri 11, as LibreOffice
-// imports it. The lines of a section with a document grid of lines are
+// A document that states no default run properties prints in Calibri 12,
+// as Word prints it. The lines of a section with a document grid of lines are
 // counted in pitches of the grid, the glyphs centred, as Word lays them out.
 //
 // Each section is a named page with its size, orientation, margins,

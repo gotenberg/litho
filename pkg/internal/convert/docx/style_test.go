@@ -376,9 +376,9 @@ func TestEmptyParagraphKeepsALine(t *testing.T) {
 		name string
 		size float64
 	}{
-		// Without a styles part the default is Calibri 11, as LibreOffice
-		// imports such a document.
-		{"default mark", 11},
+		// Without a styles part the default is Calibri 12, as Word prints
+		// such a document.
+		{"default mark", 12},
 		{"24-point mark", 24},
 	}
 	for i, tt := range tests {
@@ -561,8 +561,11 @@ func TestDefaults_WithoutStylesPart(t *testing.T) {
 		size   float64
 		family string
 	}{
-		{"no styles part", nil, 11, "Calibri"},
-		{"styles without defaults", map[string]string{"word/styles.xml": stylesPart(``)}, defaultFontSize, ""},
+		{"no styles part", nil, 12, "Calibri"},
+		{"styles without docDefaults", map[string]string{"word/styles.xml": `<w:styles ` + nsDecl + `/>`}, 12, "Calibri"},
+		{"docDefaults without rPrDefault", map[string]string{"word/styles.xml": `<w:styles ` + nsDecl + `><w:docDefaults><w:pPrDefault/></w:docDefaults></w:styles>`}, 12, "Calibri"},
+		{"rPrDefault without a size", map[string]string{"word/styles.xml": `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Test Sans" w:hAnsi="Test Sans"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`}, defaultFontSize, "Test Sans"},
+		{"styles with defaults", map[string]string{"word/styles.xml": stylesPart(``)}, defaultFontSize, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

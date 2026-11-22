@@ -55,13 +55,25 @@ type styleSheet struct {
 // parseStyles reads the styles part's root, w:styles; nil yields the
 // built-in defaults alone.
 //
+// A document that states no default run properties, no styles part, no
+// docDefaults or no w:rPrDefault in it, prints in Calibri 12 as Word
+// prints it: ECMA-376 Part 1, 17.7.5.5 leaves those defaults to the
+// application.
+//
 // # Corpus evidence
 //
 //   - libreoffice/docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
-//     tdf108806.docx, layout/tdf117188.docx and
-//     ooxmlimport/linked-picture.docx, which have no styles part, print in
-//     Carlito 11; the documents whose styles part lacks docDefaults print
-//     in Liberation Serif.
+//     tdf108806.docx, tdf108849.docx, layout/tdf117188.docx,
+//     ooxmlimport/linked-picture.docx and
+//     ooxmlexport/customxml-two-data-stores.docx, which have no styles
+//     part, print their unstyled runs in Calibri 12; so do
+//     ooxmlimport/tdf104167.docx and ooxmlexport/fdo59273.docx, whose
+//     styles part has no docDefaults.
+//   - poi/docx: document/Bug60341.docx, Bug66263-paragraph.docx,
+//     Bug66263-table.docx and openxml4j/TestCreatePackageOUTPUT.docx, with
+//     no styles part, the same.
+//   - libreoffice/docx ooxmlexport/NumberedList.docx: an rPrDefault naming
+//     a font and no size prints at 10 points, the size of 17.3.2.38.
 //   - probe, docx: a 24 pt line of Calibri, with and without w:kern, in
 //     six documents: no styles part, a styles part without docDefaults, an
 //     empty docDefaults, docDefaults with pPrDefault alone, an empty
@@ -71,18 +83,15 @@ type styleSheet struct {
 //     kern it too.
 func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 	s := &styleSheet{byID: map[string]*style{}}
-	if root == nil {
-		// A document without a styles part prints in Calibri 11, Word
-		// 2007's defaults, as LibreOffice imports it.
+	if root == nil || root.Child(w, "docDefaults").Child(w, "rPrDefault") == nil {
 		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
-		s.defRun.size = new(11.0)
+		s.defRun.size = new(12.0)
 		s.defRun.kern = new(unstatedKern)
+	}
+	if root == nil {
 		return s
 	}
 	dd := root.Child(w, "docDefaults")
-	if dd.Child(w, "rPrDefault") == nil {
-		s.defRun.kern = new(unstatedKern)
-	}
 	if dd != nil {
 		if r := dd.Child(w, "rPrDefault").Child(w, "rPr"); r != nil {
 			s.defRun = *d.parseRunProps(r)

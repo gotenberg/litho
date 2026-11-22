@@ -130,7 +130,8 @@ func TestNumbering_LabelWiderThanHangPushesTheText(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			body := `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="` + strconv.Itoa(tc.num) + `"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>`
-			b := build(t, body, map[string]string{"word/numbering.xml": numbering, "word/settings.xml": settings})
+			styles := `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`
+			b := build(t, body, map[string]string{"word/numbering.xml": numbering, "word/settings.xml": settings, "word/styles.xml": styles})
 			items := find(b.root, func(n *layout.Node) bool { return n.Marker != nil })
 			if len(items) != 1 {
 				t.Fatalf("%d items", len(items))
