@@ -541,3 +541,23 @@ func TestConvert_ExcelPaper(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_ExcelCentredPage locks where Excel centres a page's cells:
+// the cells and the grid line closing them in the area less the grid
+// line's room, 8 printer pixels up and left of the area's middle.
+func TestConvert_ExcelCentredPage(t *testing.T) {
+	at := func(centre bool) run {
+		sh := &Sheet{Name: "S", DefaultColumnWidth: 50, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+		doc := excelDoc(sh)
+		sh.Page = PageSetup{Width: 600, Height: 720, Margin: [4]float64{72, 60, 72, 60}, CenterHorizontally: centre, CenterVertically: centre}
+		return find(t, convert(t, doc, office.Options{}).Pages[0], "cell")
+	}
+	plain, centred := at(false), at(true)
+	// One row of 14.52 points in one column of 50: the area is 480 by 576.
+	if got, want := centred.x-plain.x, (480-50)/2-8*excelPixel; !near(got, want, 1e-6) {
+		t.Errorf("centred %.3f points right of the margin, want %.3f", got, want)
+	}
+	if got, want := plain.y-centred.y, (576-14.52)/2-8*excelPixel; !near(got, want, 1e-6) {
+		t.Errorf("centred %.3f points below the margin, want %.3f", got, want)
+	}
+}

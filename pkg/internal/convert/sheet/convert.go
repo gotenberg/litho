@@ -423,6 +423,22 @@ func excelPaper(v float64) float64 {
 	return math.Round(v/excelPixel) * excelPixel
 }
 
+// excelCentring is how much further up and left than the middle of its
+// area Excel centres a page's cells (ECMA-376 Part 1, 18.3.1.70
+// horizontalCentered and verticalCentered): it centres the cells and the
+// grid line that closes them, [excelGridLine] more, in the area less the
+// grid line's room ([sheetPlan.docArea]), at any print scale.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: five A4 sheets of six rows of Calibri 11, centred both
+//     ways, down, across, both ways with grid lines and not at all, print
+//     their text 1.00 point higher and 0.97 left of the middle of their
+//     areas in Excel for the web where centred.
+//   - litho/xlsx: margins_centering centres its rows 1 point higher than
+//     the middle of the area.
+const excelCentring = excelGridLine
+
 // excelMargin returns a page margin of v points as Excel prints it: in
 // whole printer pixels, the nearest, so that rows filling the room the
 // margins leave to the pixel all print on the page. ECMA-376 Part 1,
@@ -560,11 +576,17 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 			areaH += float64((sp.margin[css.Bottom] - ps.FooterBottom) * (1 - z))
 		}
 	}
+	// Excel centres the cells with the grid line that closes them in the
+	// area less the grid line's room ([excelCentring]).
+	centring := 0.0
+	if sp.g.doc.ExcelRules {
+		centring = excelCentring
+	}
 	if ps.CenterHorizontally {
-		ox += float64((areaW - float64(pb.dataW*z)) / 2)
+		ox += float64((areaW-float64(pb.dataW*z))/2) - centring
 	}
 	if ps.CenterVertically {
-		oy += float64((areaH - float64(pb.dataH*z)) / 2)
+		oy += float64((areaH-float64(pb.dataH*z))/2) - centring
 	}
 	if !sp.single && !sp.g.doc.ExcelRules {
 		ox, oy = calcOrigin(ox, z), calcOrigin(oy, z)
