@@ -136,6 +136,14 @@ func (l diffLink) key() string {
 	return fmt.Sprintf("%d page %d", l.Page, l.DestPage)
 }
 
+// dead reports a link without a target: no URI, and a destination that
+// resolves to no page. Chromium writes one for a fragment link of a framed
+// document, naming a destination its PDF never defines, so a reader that
+// follows it goes nowhere.
+func (l diffLink) dead() bool {
+	return l.URI == "" && l.DestPage == 0
+}
+
 // normalizeLinkURI writes a URI the way a browser serialises it, so two
 // spellings of one target compare equal: the scheme and host lower-cased, and
 // an empty path of a URI with a host written "/" (WHATWG URL, the path of a
@@ -236,7 +244,8 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 //     token F1 of litho's text, every page in order, against that file
 //     instead, and the reference's text is not read.
 //   - link_recall: the share of Chromium's links, by page and target, litho
-//     writes too; 1 when Chromium writes none.
+//     writes too; 1 when Chromium writes none. A link of Chromium's whose
+//     destination its PDF does not define is not counted.
 //   - layout: how much of the ink of the two pages lies in the same place,
 //     blurred and matched band by band within a few pixels (see
 //     [layoutScore]), averaged over the pages.
@@ -856,25 +865,30 @@ func tokenF1(golden, got string) float64 {
 }
 
 // linkRecall is the share of the golden's links, matched by page and target
-// as multisets, that litho's pages carry; 1 when the golden has none.
+// as multisets, that litho's pages carry; 1 when the golden has none. A
+// golden link that leads nowhere (see [diffLink.dead]) is not one to carry.
 func linkRecall(golden []diffLink, pages []diffLithoPage) float64 {
-	if len(golden) == 0 {
-		return 1
-	}
 	have := make(map[string]int)
 	for _, p := range pages {
 		for _, l := range p.links {
 			have[l.key()]++
 		}
 	}
-	found := 0
+	want, found := 0, 0
 	for _, l := range golden {
+		if l.dead() {
+			continue
+		}
+		want++
 		if have[l.key()] > 0 {
 			have[l.key()]--
 			found++
 		}
 	}
-	return float64(found) / float64(len(golden))
+	if want == 0 {
+		return 1
+	}
+	return float64(found) / float64(want)
 }
 
 // layoutScore compares where two pages put their ink, tolerating a small

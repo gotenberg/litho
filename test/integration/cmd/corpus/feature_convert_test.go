@@ -422,6 +422,13 @@ func TestLinkRecall(t *testing.T) {
 	if got := linkRecall(nil, pages); got != 1 {
 		t.Errorf("no golden link: recall %v, want 1", got)
 	}
+	dead := []diffLink{{Page: 1}, {Page: 1, DestPage: 2}, {Page: 2}}
+	if got := linkRecall(dead, pages); got != 1 {
+		t.Errorf("golden links without a target: recall %v, want 1 (they lead nowhere)", got)
+	}
+	if got := linkRecall(dead[:1], pages); got != 1 {
+		t.Errorf("only dead golden links: recall %v, want 1", got)
+	}
 }
 
 func TestLayoutScore(t *testing.T) {
