@@ -714,3 +714,28 @@ func TestUnstyledRowHeight(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_RowsCalcMeasures locks which rows Calc measures again as it
+// loads a spreadsheet: a stated height without style:use-optimal-row-height
+// is the user's, and a row of optimal height past row 200 keeps the height
+// its style states.
+func TestRead_RowsCalcMeasures(t *testing.T) {
+	row := func(style string) string {
+		return `<table:table-row table:style-name="` + style + `"><table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell></table:table-row>`
+	}
+	f := flat{
+		auto: `<style:style style:name="opt" style:family="table-row"><style:table-row-properties style:row-height="3mm" style:use-optimal-row-height="true"/></style:style>` +
+			`<style:style style:name="set" style:family="table-row"><style:table-row-properties style:row-height="3mm"/></style:style>`,
+		body: table("S", row("set")+strings.Repeat(row("opt"), 201)),
+	}
+	doc, _ := read(t, f.bytes())
+	custom := map[int]bool{}
+	for _, r := range doc.Sheets[0].Rows {
+		custom[r.Index] = r.CustomHeight
+	}
+	for ri, want := range map[int]bool{0: true, 1: false, 200: false, 201: true} {
+		if custom[ri] != want {
+			t.Errorf("row %d custom %v, want %v", ri, custom[ri], want)
+		}
+	}
+}

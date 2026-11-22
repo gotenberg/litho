@@ -525,6 +525,12 @@ func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, de
 //   - libreoffice/ods: sc/tdf121040.ods prints its rows, whose style says
 //     style:use-optimal-row-height false and sets no height, as tall as
 //     their content.
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, rows whose style
+//     states 3 mm without style:use-optimal-row-height print 3 mm tall
+//     under text of 10 to 24 points.
+//   - libreoffice/ods: sc/lostRowStyle.fods prints its rows of 1 cm and
+//     2 cm, whose style says nothing of an optimal height, at those
+//     heights.
 func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	n := repeat(el, "number-rows-repeated", maxRows-ts.row)
 	styleName := el.A(odf.NSTable, "style-name")
@@ -533,17 +539,22 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		Hidden: hidden || el.A(odf.NSTable, "visibility") == "collapse" || el.A(odf.NSTable, "visibility") == "filter",
 		Style:  r.cellStyle(el.A(odf.NSTable, "default-cell-style-name")),
 	}
-	// style:use-optimal-row-height false keeps the height the user set
-	// (ODF 1.3, Part 3, 20.391).
-	optimal := props.Get("style:use-optimal-row-height") != "false"
+	// A row whose style states its height keeps it unless
+	// style:use-optimal-row-height says true (ODF 1.3, Part 3, 20.391):
+	// Calc sets the height it reads as the user's own.
+	optimal := props.Get("style:use-optimal-row-height") == "true"
 	if h, ok := odf.Length(props.Get("style:row-height")); ok && h > 0 {
+		// Calc measures again, as it loads the file, only the rows of
+		// optimal height up to recalcRowLimit; past it, a row whose style
+		// states its height keeps it.
+		measured := optimal && ts.row+n-1 <= recalcRowLimit
 		h = calcTwips(h)
-		if optimal {
+		if measured {
 			h = r.optimalFloor(h)
 		}
 		tmpl.Height = h
 		ts.lastRowHeight = h
-		tmpl.CustomHeight = !optimal
+		tmpl.CustomHeight = !measured
 	} else {
 		// A row whose style sets no height, or that names no style, is
 		// Calc's standard height, whatever the rows before it are, and
@@ -637,6 +648,22 @@ func hasValue(cells []sheet.Cell) bool {
 	}
 	return false
 }
+
+// recalcRowLimit is the last row index, from 0, of the rows of optimal
+// height Calc measures again as it loads a spreadsheet when the row's
+// style states a height: a table:table-row element whose last row lies
+// past it keeps the height it stores (ScXMLTableRowContext, its "first
+// 200 rows" rule, sc/source/filter/xml/xmlrowi.cxx). A row whose style
+// states no height is measured wherever it lies.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, 600 rows of optimal
+//     height stored 3 mm tall, alternating Liberation Sans 14 and 10
+//     point text, print rows 0 to 200 at their measured heights and
+//     every row after at 3 mm; without the stored height, every row is
+//     measured; marked not optimal, none is.
+const recalcRowLimit = 200
 
 // optimalFloor returns the height h of a row of optimal height raised to
 // Calc's standard row height when the document's default font is Calc's
