@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"context"
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -418,6 +419,30 @@ func (m *measurer) descent(f font) float64 {
 		m.lineCache[k] = d
 	}
 	return d
+}
+
+// printedLine returns the line GDI gives f on Excel's printer, in points:
+// its face's ascent and descent each rounded to a printer pixel at f's
+// size in whole pixels, and its line gap truncated, as the standard row
+// sums them (xlsx standardRow).
+func (m *measurer) printedLine(f font) float64 {
+	k := "p\x00" + m.key(f)
+	if h, ok := m.lineCache[k]; ok {
+		return h
+	}
+	ts := f.textStyle(m.lang, m.fallback)
+	h := m.lineHeight(f)
+	if fc := m.fonts.Match(ts); fc != nil {
+		mt := fc.Metrics(1)
+		em := math.Round(ts.Size / excelPixel)
+		if px := math.Round(float64(mt.Ascent*em)) + math.Round(float64(mt.Descent*em)) + math.Floor(float64(mt.LineGap*em)+1e-9); px > 0 {
+			h = px * excelPixel
+		}
+	}
+	if len(m.lineCache) < maxMeasureCache {
+		m.lineCache[k] = h
+	}
+	return h
 }
 
 // lineGap returns the line gap of f's face at f's size: the external

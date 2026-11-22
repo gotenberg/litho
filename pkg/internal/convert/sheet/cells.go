@@ -435,7 +435,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	}
 	if b.doc.ExcelRules && !rotated && !st.Align.Stacked {
 		if d.wrap {
-			pitch = b.excelPitch(lineH)
+			pitch = b.excelLine(f)
 		}
 		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, padBottom)
 		if len(d.runs) == 0 {
@@ -490,28 +490,6 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		para.Role = "Link"
 	}
 	return n, cx0, cx1
-}
-
-// excelPitch returns how far apart Excel sets the lines of a wrapped cell
-// whose font's line is lineH points: the standard row of the Default
-// font a line, scaled by the font's line against the Default font's when
-// it is taller, as Excel fits a row to its wrapped lines ([excelHeight]).
-//
-// # Corpus evidence
-//
-//   - litho/xlsx: alignment sets the three wrapped Calibri 11 lines of
-//     each of its wrapped cells 14.52 points apart, a standard row, where
-//     their font's line is 13.43 points.
-func (b *pageBuilder) excelPitch(lineH float64) float64 {
-	std := b.doc.StandardRowHeight
-	if !numeric.Positive(std) {
-		return lineH
-	}
-	defLine := b.m.lineHeight(resolveFont(Font{}, b.doc.Default.Font))
-	if defLine > 0 && lineH > defLine {
-		return float64(std * lineH / defLine)
-	}
-	return std
 }
 
 // excelShift returns how far down Excel sets a cell's text from where its

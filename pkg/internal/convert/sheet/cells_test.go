@@ -724,3 +724,23 @@ func TestConvert_ExcelScripts(t *testing.T) {
 		t.Errorf("subscript run lowered %.3f, want 2.2", got)
 	}
 }
+
+// TestConvert_ExcelWrappedPitch locks how far apart Excel sets wrapped
+// lines in a font other than the Normal one: the font's own printed line
+// under the top inset, Calibri 14 150 printer pixels and Calibri 20 212,
+// as Excel for the web prints them in a Calibri 11 book.
+func TestConvert_ExcelWrappedPitch(t *testing.T) {
+	for _, tc := range []struct {
+		size, want float64
+	}{{14, 150 * excelPixel}, {20, 212 * excelPixel}, {11, 14.52}} {
+		st := &Style{Font: Font{Families: []string{"Carlito"}, Size: tc.size}, Align: Alignment{Wrap: true, Vertical: VTop}}
+		sh := &Sheet{Name: "S", DefaultColumnWidth: 4 * tc.size, Rows: []Row{
+			{Index: 0, Height: 200, CustomHeight: true, Cells: []Cell{textCell(0, "alpha beta gamma", st)}},
+		}}
+		pg := convert(t, excelDoc(sh), office.Options{}).Pages[0]
+		one, two := find(t, pg, "alpha "), find(t, pg, "beta ")
+		if got := one.y - two.y; !near(got, tc.want, 1e-6) {
+			t.Errorf("Calibri %v: wrapped lines %.3f apart, want %.3f", tc.size, got, tc.want)
+		}
+	}
+}

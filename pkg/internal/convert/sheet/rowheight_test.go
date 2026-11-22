@@ -41,8 +41,7 @@ func TestOptimalHeights_ExcelRules(t *testing.T) {
 		{Index: 1, Height: 5.76, Cells: []Cell{textCell(0, "Short", nil)}},
 		{Index: 2, Cells: []Cell{textCell(0, "one two three four five six seven eight", &Style{Align: Alignment{Wrap: true}})}},
 	}}
-	doc := newDoc(sh)
-	doc.ExcelRules = true
+	doc := excelDoc(sh)
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 	g := newGrid(t.Context(), doc, sh)
 	b.heightsOf(t, g)

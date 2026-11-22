@@ -1,12 +1,12 @@
 package sheet
 
 import (
-	"cmp"
 	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // screenPixel is the length of a pixel of the screen Calc computes a
@@ -45,7 +45,6 @@ const maxMeasuredCells = 1 << 16
 func (b *builder) optimalHeights(g *grid) error {
 	pb := &pageBuilder{builder: b, g: g}
 	excel := b.doc.ExcelRules
-	defLine := b.m.lineHeight(resolveFont(Font{}, b.doc.Default.Font))
 	budget := maxMeasuredCells
 	for k, ri := range g.rowOrder {
 		if k%rowsPerCheck == 0 {
@@ -109,7 +108,13 @@ func (b *builder) optimalHeights(g *grid) error {
 				}
 			}
 			if excel {
-				need = max(need, excelHeight(cmp.Or(b.doc.StandardRowHeight, g.defH), lineH, defLine, lines))
+				pitch := b.excelLine(d.font)
+				for _, r := range d.runs {
+					if r.Font != nil {
+						pitch = max(pitch, b.excelLine(overlay(d.font, r.Font)))
+					}
+				}
+				need = max(need, excelHeight(pitch, lines))
 				continue
 			}
 			if rot := u.st.Align.Rotation; rot != 0 && !u.st.Align.Stacked {
@@ -132,11 +137,10 @@ func (b *builder) optimalHeights(g *grid) error {
 const rowsPerCheck = 4096
 
 // excelHeight returns the height Excel gives a row without a height of
-// its own whose wrapped text takes a count of lines of lineH points: a line of
-// the standard row height defH for each, scaled by the line of the
-// text's font against the default font's defLine, in whole printer pixels.
-// Excel fits such a row as it opens a workbook, and leaves a row whose
-// text is merely taller than the default unfitted.
+// its own whose wrapped text takes a count of lines set pitch points
+// apart ([builder.excelLine]), in whole printer pixels. Excel fits such a
+// row as it opens a workbook, and leaves a row whose text is merely taller
+// than the default unfitted.
 //
 // # Corpus evidence
 //
@@ -145,12 +149,31 @@ const rowsPerCheck = 4096
 //     row of 14 point text without a height 14.52 points tall.
 //   - libreoffice/xlsx: sc/tdf139934.xlsx prints its rows of two wrapped
 //     lines of Arial 10 24.72 points tall, two rows of 12.36.
-func excelHeight(defH, lineH, defLine, lines float64) float64 {
-	per := defH
-	if defLine > 0 && lineH > defLine {
-		per = defH * lineH / defLine
+func excelHeight(pitch, lines float64) float64 {
+	return math.Round(pitch*max(lines, 1)/excelPixel) * excelPixel
+}
+
+// excelLine returns how far apart Excel sets the wrapped lines of a cell
+// in the font f, in points: the line GDI gives the font in printer pixels
+// ([measurer.printedLine]) under the cell's top inset, the standard row
+// at least, so that lines of the Normal font are a standard row apart; the
+// line of f's own face when no standard row is known.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: alignment sets the three wrapped Calibri 11 lines of
+//     each of its wrapped cells 14.52 points apart, a standard row, where
+//     their font's line is 13.43 points.
+//   - probe, xlsx: Excel for the web sets wrapped Calibri 14 lines 18.00
+//     points apart (150 printer pixels: 8, an ascent of 111 and a descent
+//     of 31) and Calibri 20 lines 25.44 (212: 8, 159 and 45), top, centre
+//     and bottom aligned, in a Calibri 11 book.
+func (b *builder) excelLine(f font) float64 {
+	std := b.doc.StandardRowHeight
+	if !numeric.Positive(std) {
+		return b.m.lineHeight(f)
 	}
-	return math.Round(per*max(lines, 1)/excelPixel) * excelPixel
+	return max(std, b.doc.Default.Padding[css.Top]+b.m.printedLine(f))
 }
 
 // excelPixel is the printer pixel Excel lays a printed sheet out in, in
