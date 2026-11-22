@@ -96,6 +96,9 @@ type reader struct {
 	drawings int
 	// sparks counts the sparklines placed, against maxSparklines.
 	sparks int
+	// names maps a named range's name, in lower case, to the cell it
+	// starts at as a link target in the book ("Sheet.A1").
+	names map[string]string
 	// keepFormulas keeps the formulas of the cells for the builder to
 	// compute; off, under models.RecalculateNever, a cell shows the value
 	// the file stores.
@@ -189,9 +192,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 				noPrint = append(noPrint, c.A(odf.NSTable, "print") == "false" && len(sh.Page.PrintAreas) == 0)
 			}
 		case c.Is(odf.NSTable, "named-expressions"):
-			if len(c.Children) > 0 {
-				r.warn("named-expressions", warn.ContentUnsupported, warn.Approximated, "named ranges and expressions are not read")
-			}
+			r.namedRanges(c)
 		case c.Is(odf.NSTable, "data-pilot-tables"):
 			r.warn("data-pilot", warn.ContentUnsupported, warn.Approximated, "pivot tables are shown as the cells the file stores")
 		case c.Is(odf.NSTable, "content-validations"):
@@ -204,7 +205,78 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 		}
 	}
 	hidePrintless(r.doc.Sheets, noPrint)
+	r.linkNames()
 	return r.doc
+}
+
+// maxNames caps the named ranges read. Anti-DoS guard, not
+// spec-mandated: a spreadsheet names a few hundred ranges at most.
+const maxNames = 4096
+
+// namedRanges reads the table:named-range elements of a
+// table:named-expressions (ODF 1.3, Part 3, 9.4.12) as link targets: the
+// first cell of each range. Named expressions and the names in formulas
+// are not evaluated.
+func (r *reader) namedRanges(el *odf.Element) {
+	if len(el.Children) > 0 {
+		r.warn("named-expressions", warn.ContentUnsupported, warn.Approximated, "named ranges and expressions are not evaluated in formulas")
+	}
+	for _, c := range el.Children {
+		if !c.Is(odf.NSTable, "named-range") || len(r.names) >= maxNames {
+			continue
+		}
+		name := strings.ToLower(c.A(odf.NSTable, "name"))
+		addr, _, _ := strings.Cut(c.A(odf.NSTable, "cell-range-address"), ":")
+		addr = strings.ReplaceAll(addr, "$", "")
+		if name == "" || addr == "" {
+			continue
+		}
+		if r.names == nil {
+			r.names = map[string]string{}
+		}
+		if _, ok := r.names[name]; !ok {
+			r.names[name] = addr
+		}
+	}
+}
+
+// linkNames points the cells' links to a named range ("#Name") at the
+// range's first cell, a link that names a sheet keeping it; a link no
+// name matches stays as it is.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf118086.ods links "#Kameras_Anfang" and
+//     "#Kameras_Ende", ranges of one cell on the first sheet, which
+//     LibreOffice exports as links to page 1.
+func (r *reader) linkNames() {
+	if len(r.names) == 0 {
+		return
+	}
+	for _, sh := range r.doc.Sheets {
+		for i := range sh.Rows {
+			for j := range sh.Rows[i].Cells {
+				c := &sh.Rows[i].Cells[j]
+				target, ok := strings.CutPrefix(c.Href, "#")
+				if !ok || r.sheetNamed(target) {
+					continue
+				}
+				if addr, ok := r.names[strings.ToLower(target)]; ok {
+					c.Href = "#" + addr
+				}
+			}
+		}
+	}
+}
+
+// sheetNamed reports a link target that names a sheet of the book.
+func (r *reader) sheetNamed(target string) bool {
+	for _, sh := range r.doc.Sheets {
+		if strings.EqualFold(sh.Name, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // hidePrintless hides the sheets that print nothing: table:print false
@@ -353,9 +425,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	for _, c := range el.Children {
 		switch {
 		case c.Is(odf.NSTable, "named-expressions"):
-			if len(c.Children) > 0 {
-				r.warn("named-expressions", warn.ContentUnsupported, warn.Approximated, "named ranges and expressions are not read")
-			}
+			r.namedRanges(c)
 		case c.Is(nsCalcExt, "conditional-formats"):
 			r.conditionalFormats(sh, c)
 			calcext = true

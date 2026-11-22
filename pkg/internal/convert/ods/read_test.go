@@ -763,3 +763,21 @@ func TestRead_NamedStyleOverColumn(t *testing.T) {
 		t.Errorf("empty cell of 18 points = %+v, want listed", c)
 	}
 }
+
+// TestRead_LinkToNamedRange locks a cell's link to a named range: it
+// points at the range's first cell, and a link to a sheet of that name
+// keeps the sheet.
+func TestRead_LinkToNamedRange(t *testing.T) {
+	link := func(href string) string {
+		return `<table:table-cell office:value-type="string"><text:p><text:a xlink:href="` + href + `">go</text:a></text:p></table:table-cell>`
+	}
+	f := flat{body: table("S", `<table:table-row>`+link("#Start")+link("#T")+link("#missing")+`</table:table-row>`) + table("T", "") +
+		`<table:named-expressions><table:named-range table:name="start" table:base-cell-address="$T.$A$1" table:cell-range-address="$T.$B$4:.$C$9"/>` +
+		`<table:named-range table:name="T" table:cell-range-address="$S.$A$1"/></table:named-expressions>`}
+	doc, _ := read(t, f.bytes())
+	for col, want := range []string{"#T.B4", "#T", "#missing"} {
+		if c := cellAt(doc.Sheets[0], 0, col); c == nil || c.Href != want {
+			t.Errorf("link %d = %+v, want %q", col, c, want)
+		}
+	}
+}
