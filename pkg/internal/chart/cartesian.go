@@ -459,6 +459,8 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		key := g.YAxis
 		if a := c.axisAt(key); a == nil || a.Kind != ValueAxis {
 			key = g0.YAxis
+		} else if g != g0 && rd.officeSharesAxis(a, c.axisAt(g0.YAxis)) {
+			key = g0.YAxis
 		}
 		y := byAxis[key]
 		if y == nil {

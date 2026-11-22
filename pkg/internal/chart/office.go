@@ -536,3 +536,20 @@ func officeLabelLine(lineH float64) float64 {
 func officeClampIntervals(n float64) int {
 	return int(math.Max(1, math.Min(n, maxAutoTicks)))
 }
+
+// officeSharesAxis reports a group Office draws against first, the value
+// axis of the chart's first group, in place of own, its value axis: one
+// the file deletes (ECMA-376 Part 1, 21.2.2.40 delete) while first is
+// shown. The group's values join that axis's range, and no scale of its
+// own is resolved. LibreOffice keeps a scale of its own for the deleted
+// secondary axis.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/xlsx: O14ISOStrict/Excel/xl8galry.xlsx's "Line - Column"
+//     and "Column - Area" sheets, columns of 1 and 2 with a line or area
+//     of 4 and 3 on secondary axes both deleted, are drawn by Excel on one
+//     axis from 0 to 4.5, the line and columns at their values on it.
+func (rd *renderer) officeSharesAxis(own, first *Axis) bool {
+	return rd.office() && own.Deleted && first != nil && first.Kind == ValueAxis && !first.Deleted
+}
