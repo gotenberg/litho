@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Form controls</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+input, textarea, select { font-family: "Liberation Sans", sans-serif; font-size: 13.333px; }
+textarea { font-family: "Liberation Mono", monospace; }
+.serif { font-family: "Liberation Serif", serif; font-size: 16px; }
+p { margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<h1>Form controls at their default size</h1>
+<p>Name: <input name="name"> (size 20, the default).</p>
+<p>Postcode: <input name="postcode" size="8" value="75011"> and city: <input name="city" size="24" value="Paris"></p>
+<p>E-mail: <input type="email" class="serif" size="30" placeholder="you@example.com"></p>
+<p>Comments:<br><textarea name="comments" cols="40" rows="3">The delivery came early.
+The box was dented.
+Please call before the next one.
+This fourth line lies past the third row.</textarea></p>
+<p>Country: <select name="country"><option>France</option><option selected>United Kingdom of Great Britain</option><option>Spain</option></select></p>
+<p>Toppings: <select name="toppings" multiple><option>Cheese</option><option selected>Mushrooms</option><option>Olives</option><option selected>Peppers</option><option>Onions</option><option>Ham</option></select> and size:
+<select name="size" size="3"><optgroup label="Small"><option>Kids</option></optgroup><optgroup label="Large"><option>Family</option><option selected>Party</option></optgroup></select></p>
+<p>Notes: <select name="notes" multiple size="5"><option>One line</option><option>Another</option></select> after the list.</p>
+</body>
+</html>

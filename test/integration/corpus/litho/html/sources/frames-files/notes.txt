@@ -1,0 +1,5 @@
+Opening hours
+	Monday to Friday: 9:00 to 18:00
+	Saturday: 10:00 to 13:00
+
+The <b>office</b> closes on public holidays. A long line that wraps at the frame's right edge, as a text document lays it out in a pre that wraps.
