@@ -458,16 +458,21 @@ func TestChartsheet(t *testing.T) {
 	}
 }
 
-func TestUNCURL(t *testing.T) {
+func TestLinkURL(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{`file:///\\host\share\a%20b.docx`, "file://host/share/a%20b.docx"},
 		{`\\host\share\x`, "file://host/share/x"},
 		{"https://example.com/", "https://example.com/"},
-		{`file:///\\`, `file:///\\`},
+		{`https://example.com/a\b`, `https://example.com/a\b`},
+		{`file:///\\`, "file://///"},
+		{`..\xls\bug-fixes.xls`, "../xls/bug-fixes.xls"},
+		{`file:///C:\TEMP\test.xlsx`, "file:///C:/TEMP/test.xlsx"},
+		{`C:\TEMP\a.xlsx`, "C:/TEMP/a.xlsx"},
+		{"mailto:a@b.c", "mailto:a@b.c"},
 	}
 	for _, tc := range tests {
-		if got := uncURL(tc.in); got != tc.want {
-			t.Errorf("uncURL(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := linkURL(tc.in); got != tc.want {
+			t.Errorf("linkURL(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }

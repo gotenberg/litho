@@ -644,7 +644,7 @@ func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 		target := ""
 		if id, ok := h.AttrNS(ooxml.NSR, "id"); ok {
 			if rel, ok := r.pkg.RelationshipByID(w.r.ctx, w.part, id); ok && rel.External {
-				target = uncURL(rel.Target)
+				target = linkURL(rel.Target)
 			}
 		}
 		if loc := decodeXString(attr(h, "location")); loc != "" {
@@ -765,24 +765,51 @@ func chartSeries(c *chart.Chart) int {
 	return n
 }
 
-// uncURL returns a Windows network path, \\host\share\file or the file URL
-// Excel writes for one (file:///\\host\share\file), as the file URL
-// LibreOffice exports it as: file://host/share/file, the backslashes
-// turned to slashes; any other target unchanged.
+// linkURL returns the URI Excel writes for an external link target: a
+// Windows network path, \\host\share\file or the file URL Excel writes
+// for one (file:///\\host\share\file), as the file URL
+// file://host/share/file; any other file URL or relative path with its
+// backslashes turned to slashes; a target of another scheme unchanged.
 //
 // # Corpus evidence
 //
 //   - libreoffice/xlsx: sc/129969-min.xlsx links file:///\\ndhlis-cbut018\CBUT018\...,
-//     which LibreOffice exports as file://ndhlis-cbut018/CBUT018/....
-func uncURL(target string) string {
+//     which Excel prints as file://ndhlis-cbut018/CBUT018/....
+//   - libreoffice/xlsx: sc/tdf111876.xlsx links ..\xls\bug-fixes.xls,
+//     which Excel prints as ../xls/bug-fixes.xls; sc/chart_hyperlink.xlsx
+//     links a chart to file:///C:\TEMP\test.xlsx, which Excel prints as
+//     file:///C:/TEMP/test.xlsx.
+func linkURL(target string) string {
 	rest, ok := strings.CutPrefix(target, `file:///\\`)
 	if !ok {
 		rest, ok = strings.CutPrefix(target, `\\`)
 	}
-	if !ok || rest == "" {
+	if ok && rest != "" {
+		return "file://" + strings.ReplaceAll(rest, `\`, "/")
+	}
+	if scheme, ok := uriScheme(target); ok && !strings.EqualFold(scheme, "file") {
 		return target
 	}
-	return "file://" + strings.ReplaceAll(rest, `\`, "/")
+	return strings.ReplaceAll(target, `\`, "/")
+}
+
+// uriScheme returns the scheme of the URI s (RFC 3986, 3.1: a letter, then
+// letters, digits, "+", "-" or "."), false when s starts with none. One
+// letter before the colon is a Windows drive, not a scheme.
+func uriScheme(s string) (string, bool) {
+	i := strings.IndexByte(s, ':')
+	if i < 2 {
+		return "", false
+	}
+	for k := range i {
+		c := s[k]
+		letter := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		other := (c < '0' || c > '9') && c != '+' && c != '-' && c != '.'
+		if !letter && (k == 0 || other) {
+			return "", false
+		}
+	}
+	return s[:i], true
 }
 
 // joinLines drops the line feeds and carriage returns of the text of a
