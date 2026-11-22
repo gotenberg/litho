@@ -719,3 +719,47 @@ func TestConvert_MarginAreaFrames(t *testing.T) {
 		}
 	}
 }
+
+// TestPageBackground_Area locks where a page's fill is painted: a page
+// layout's fo:background-color alone inside the margins, a draw:fill over
+// the page unless draw:background-size says border, a stretched bitmap
+// that names no size inside the margins, and the master page's
+// drawing-page fill over the page layout's.
+func TestPageBackground_Area(t *testing.T) {
+	layout := func(name, props string) string {
+		return `<style:page-layout style:name="` + name + `"><style:page-layout-properties fo:page-width="10cm" fo:page-height="10cm" fo:margin-top="1cm" fo:margin-bottom="1cm" fo:margin-left="1cm" fo:margin-right="1cm" ` + props + `/></style:page-layout>`
+	}
+	d := doc{
+		styles: `<draw:fill-image draw:name="pic" xlink:href="Pictures/p.png"/>` +
+			`<style:style style:name="dp" style:family="drawing-page"><style:drawing-page-properties draw:fill="solid" draw:fill-color="#00ff00" draw:background-size="border"/></style:style>`,
+		autoStyles: layout("legacy", `fo:background-color="#ff0000"`) + layout("solid", `draw:fill="solid" draw:fill-color="#0000ff"`) +
+			layout("stretch", `draw:fill="bitmap" draw:fill-image-name="pic" style:repeat="stretch"`) + layout("tile", `draw:fill="bitmap" draw:fill-image-name="pic"`),
+		masters: `<style:master-page style:name="legacy" style:page-layout-name="legacy"/><style:master-page style:name="solid" style:page-layout-name="solid"/>` +
+			`<style:master-page style:name="stretch" style:page-layout-name="stretch"/><style:master-page style:name="tile" style:page-layout-name="tile"/>` +
+			`<style:master-page style:name="drawn" style:page-layout-name="solid" draw:style-name="dp"/>`,
+		body: `<text:p>a</text:p>`,
+	}
+	b := newTestBuilder(t, d)
+	m := 72 / 2.54
+	for name, want := range map[string]struct {
+		inset float64
+		color css.Color
+		image bool
+	}{
+		"legacy":  {m, css.Color{R: 1, A: 1}, false},
+		"solid":   {0, css.Color{B: 1, A: 1}, false},
+		"stretch": {m, css.Color{}, true},
+		"tile":    {0, css.Color{}, true},
+		"drawn":   {m, css.Color{G: 1, A: 1}, false},
+	} {
+		g := b.pages.buildGeom(b.styles.Master(name), false, false, false)
+		bg, in := g.box.Background, g.box.BackgroundInset
+		if bg == nil || in == nil {
+			t.Errorf("%s: no background", name)
+			continue
+		}
+		if !near(in[css.Top], want.inset, 0.01) || !near(in[css.Left], want.inset, 0.01) || bg.BackgroundColor != want.color || (bg.BackgroundImage != "") != want.image {
+			t.Errorf("%s: inset %v, colour %+v, image %q; want inset %v, colour %+v, image %v", name, *in, bg.BackgroundColor, bg.BackgroundImage, want.inset, want.color, want.image)
+		}
+	}
+}

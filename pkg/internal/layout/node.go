@@ -541,6 +541,14 @@ type PageBox struct {
 	// under the canvas: a style whose Background fields alone are read
 	// (see css.PageStyle). nil for none.
 	Background *css.Style
+	// BackgroundInset, when not nil, is how far from each page edge,
+	// indexed by [css.Side], in points, the page background is painted
+	// and its layers positioned, rather than the whole sheet painted and
+	// the layers positioned in the page area: zero insets put both on the
+	// page box, as Writer paints a page's fill of draw:background-size
+	// full, its margins as Writer paints it inside them. Each is finite
+	// and at least 0.
+	BackgroundInset *[4]float64
 	// Bleed is how far the sheet reaches past the page box on every side,
 	// in points, finite and at least 0 (CSS Page 3, 7.2): the page is
 	// laid out on the page box, the page background paints over the whole

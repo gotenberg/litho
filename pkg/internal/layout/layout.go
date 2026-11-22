@@ -802,6 +802,13 @@ func (e *engine) paintPageBackground(pg *typeset.Page, pb PageBox) {
 	whole := typeset.Rect{Width: pg.Width, Height: pg.Height}
 	w, h := areaOf(pb)
 	area := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left], Y: pb.Bleed + pb.Margin[css.Top], Width: w, Height: h}
+	if in := pb.BackgroundInset; in != nil {
+		area = typeset.Rect{X: pb.Bleed + in[css.Left], Y: pb.Bleed + in[css.Top], Width: pb.Width - in[css.Left] - in[css.Right], Height: pb.Height - in[css.Top] - in[css.Bottom]}
+		if !numeric.Positive(area.Width) || !numeric.Positive(area.Height) {
+			return
+		}
+		whole = area
+	}
 	e.paintPageLayers(pg, st, whole, func(l *css.BackgroundLayer) typeset.Rect {
 		if l.Attachment == css.AttachFixed {
 			// A fixed background is positioned in the viewport, which on

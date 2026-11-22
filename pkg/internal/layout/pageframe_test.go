@@ -112,3 +112,24 @@ func TestPageFrame_Invalid(t *testing.T) {
 		}
 	}
 }
+
+// TestPageBackground_Inset paints the page background inside the insets
+// a page box gives it, as Writer paints a page fill inside the margins,
+// the margins left blank, and over the page box with zero insets.
+func TestPageBackground_Inset(t *testing.T) {
+	bgSt := css.Initial()
+	bgSt.BackgroundColor = blue
+	inset := [4]float64{px(1), px(2), px(3), px(4)}
+	pb := PageBox{Width: px(8), Height: px(6), Margin: [4]float64{px(2), px(2), px(2), px(2)}, Background: bgSt, BackgroundInset: &inset}
+	res, err := Layout(context.Background(), doc(el(sty(height(1)))), ahem(t), Options{Page: pb})
+	if err != nil {
+		t.Fatalf("Layout: %v", err)
+	}
+	assertPixels(t, res, 1, `
+		________
+		____BB__
+		____BB__
+		________
+		________
+		________`)
+}

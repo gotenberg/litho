@@ -83,6 +83,9 @@ type builder struct {
 	// data reads the data styles of table cells' values, built on first
 	// use ([builder.cellValueText]).
 	data *odf.DataStyles
+	// drawStyles indexes the gradients, hatches and fill images, built on
+	// first use ([builder.fillImage]).
+	drawStyles *odf.DrawStyles
 
 	warnings []typeset.Warning
 	warned   map[string]bool

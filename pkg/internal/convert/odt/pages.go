@@ -369,8 +369,13 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 	for i := range inner {
 		inner[i] += usedWidth(ps.border[i]) + ps.padding[i]
 	}
-	if bg := f.pageBackground(mp, ps); bg != nil {
+	if bg, full := f.pageBackground(mp, pp, ps); bg != nil {
 		box.Background = bg
+		inset := margin
+		if full {
+			inset = [4]float64{}
+		}
+		box.BackgroundInset = &inset
 	}
 	areaW := w - inner[css.Left] - inner[css.Right]
 	g.top, g.bottom = inner[css.Top], h-inner[css.Bottom]
@@ -416,25 +421,127 @@ func usedWidth(bd css.Border) float64 {
 	return bd.Width
 }
 
-// pageBackground returns the page box's background: the page layout's
-// fo:background-color, else the fill of the master page's drawing-page
-// style (draw:fill, which Writer 7 and later writes); nil for none.
-func (f *pageFlow) pageBackground(mp *odf.MasterPage, ps paraState) *css.Style {
-	c := ps.background
-	if c.A == 0 && mp != nil {
+// pageBackground returns the page box's background, nil for none, and
+// whether it covers the whole page rather than the area inside its
+// margins. The fill of the master page's drawing-page style (draw:fill,
+// which Writer 7 and later writes) wins, then the draw:fill of the page
+// layout (Writer 6), each over the page or inside its margins as
+// draw:background-size says; when it says nothing, a stretched bitmap
+// and a bitmap drawn once inside the margins, any other fill over the
+// page; else the
+// page layout's fo:background-color and style:background-image (ODF 1.3,
+// Part 3, 20.175 and 17.3), which Writer paints inside the margins. A
+// solid fill and a bitmap are painted; a gradient or a hatch paints the
+// fo:background-color the page layout keeps beside it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/pagestyle_background_ooo33.odt, written
+//     by OpenOffice.org 3.3 with fo:background-color alone, prints its
+//     colour and its pictures inside the page's 2 cm margins;
+//     pagestyle_background_lo64.odt, written by LibreOffice 6.4 with
+//     draw:fill on its page layouts and no draw:background-size, prints
+//     its colour over the whole page, its stretched bitmap and its bitmap
+//     of style:repeat no-repeat inside the margins.
+//   - libreoffice/odt: odfexport/pagestyle_background_lo70.odt prints a
+//     19-pixel bitmap of style:repeat repeat in tiles of 14.25 points from
+//     the page's top-left corner, one of style:repeat stretch and
+//     draw:background-size border over the area inside the margins, and
+//     one of style:repeat no-repeat at the top-left corner of that area,
+//     14.25 points wide.
+func (f *pageFlow) pageBackground(mp *odf.MasterPage, pp odf.Props, ps paraState) (*css.Style, bool) {
+	fill := pp
+	if mp != nil {
 		dp := f.b.styles.Resolve(odf.ScopeStyles, odf.FamilyDrawingPage, mp.El.A(odf.NSDraw, "style-name"), odf.DrawingPageProps)
-		if dp.Get("draw:fill") == "solid" {
-			if col, ok := odf.ParseColor(dp.Get("draw:fill-color")); ok {
-				c = cssColor(col)
-			}
+		if dp.Has("draw:fill") {
+			fill = dp
 		}
 	}
-	if c.A == 0 {
-		return nil
-	}
 	st := baseStyle()
-	st.BackgroundColor = c
-	return st
+	if !fill.Has("draw:fill") {
+		st.BackgroundColor = ps.background
+		if ps.bgImage != nil {
+			f.b.backgroundImage(st, ps.bgImage)
+		}
+		if st.BackgroundColor.A == 0 && st.BackgroundImage == "" {
+			return nil, false
+		}
+		return st, false
+	}
+	full := fill.Get("draw:background-size") != "border"
+	if !fill.Has("draw:background-size") && fill.Get("draw:fill") == "bitmap" {
+		r := fill.Get("style:repeat")
+		full = r != "stretch" && r != "no-repeat"
+	}
+	switch fill.Get("draw:fill") {
+	case "solid":
+		if col, ok := odf.ParseColor(fill.Get("draw:fill-color")); ok {
+			st.BackgroundColor = cssColor(col)
+		}
+	case "bitmap":
+		f.b.fillImage(st, fill)
+	case "gradient", "hatch":
+		st.BackgroundColor = ps.background
+	}
+	if st.BackgroundColor.A == 0 && st.BackgroundImage == "" {
+		return nil, false
+	}
+	return st, full
+}
+
+// fillImage sets st's background to the bitmap a draw:fill bitmap names
+// (ODF 1.3, Part 3, 20.143 draw:fill-image-name, 16.42.4 draw:fill-image):
+// tiled at its own size, or the size draw:fill-image-width and
+// draw:fill-image-height give, from the area's top-left corner under
+// style:repeat repeat; stretched over the area under stretch; drawn once
+// at draw:fill-image-ref-point under no-repeat.
+func (b *builder) fillImage(st *css.Style, p odf.Props) {
+	if b.drawStyles == nil {
+		b.drawStyles = odf.NewDrawStyles(b.pkg)
+	}
+	el := b.drawStyles.FillImages[p.Get("draw:fill-image-name")]
+	if el == nil {
+		return
+	}
+	href := el.A(odf.NSXLink, "href")
+	if href == "" {
+		return
+	}
+	st.BackgroundImage = pictureURL(href)
+	size := func(name string) css.Dimension {
+		v := p.Get(name)
+		if pc, ok := odf.Percent(v); ok && pc > 0 {
+			return css.Dimension{Kind: css.Percent, Value: pc}
+		}
+		if l, ok := odf.Length(v); ok && l > 0 {
+			return css.Pts(l)
+		}
+		return css.Dimension{Kind: css.Auto}
+	}
+	switch p.Get("style:repeat") {
+	case "stretch":
+		st.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
+		st.BackgroundSize = css.BackgroundSize{Kind: css.SizeExplicit, Width: css.Dimension{Kind: css.Percent, Value: 1}, Height: css.Dimension{Kind: css.Percent, Value: 1}}
+		return
+	case "no-repeat":
+		st.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
+		ref := p.Get("draw:fill-image-ref-point")
+		at := [2]float64{0.5, 0.5}
+		if strings.Contains(ref, "left") {
+			at[0] = 0
+		} else if strings.Contains(ref, "right") {
+			at[0] = 1
+		}
+		if strings.Contains(ref, "top") {
+			at[1] = 0
+		} else if strings.Contains(ref, "bottom") {
+			at[1] = 1
+		}
+		st.BackgroundPosition = [2]css.Dimension{{Kind: css.Percent, Value: at[0]}, {Kind: css.Percent, Value: at[1]}}
+	}
+	if w, h := size("draw:fill-image-width"), size("draw:fill-image-height"); w.Kind != css.Auto || h.Kind != css.Auto {
+		st.BackgroundSize = css.BackgroundSize{Kind: css.SizeExplicit, Width: w, Height: h}
+	}
 }
 
 // hfElement returns the header or footer element a page shows: the
