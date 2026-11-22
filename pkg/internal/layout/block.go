@@ -1825,17 +1825,37 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 		if y, ok := baseline(c, last); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
-	case a.st.Overflow == css.OverflowVisible && a.st.BaselineSource == css.BaselineFirst:
+	case !scrollContainer(a.st) && a.st.BaselineSource == css.BaselineFirst:
 		// baseline-source: first aligns an inline-block by its first line
 		// (CSS Inline 3, 4.3).
 		if y, ok := firstBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
-	case a.st.Overflow == css.OverflowVisible:
+	case !scrollContainer(a.st):
 		if y, ok := lastBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
 	}
+}
+
+// scrollContainer reports a box styled st that is a scroll container,
+// whose inline-block takes its bottom margin edge as its baseline rather
+// than its last line's (CSS 2.1, 10.8.1, for an overflow other than
+// visible; CSS Inline 3, 4.2.1, for a scroll container). overflow: clip
+// clips without making one (CSS Overflow 3, 3.1), so a box it clips keeps
+// its line's baseline, as an input does under the user agent's
+// overflow: clip.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets an
+//     inline-block 60 by 40 pixels holding one line on the line's
+//     baseline under overflow: clip, overflow-x: clip and
+//     overflow: clip visible, and its bottom margin edge on it under
+//     overflow: hidden; a text input's value sits on the baseline of the
+//     text around it.
+func scrollContainer(st *css.Style) bool {
+	return st.Overflow != css.OverflowVisible && !st.ClipOnly()
 }
 
 // lastBaseline returns the baseline of the last line box in flow inside b
