@@ -180,7 +180,26 @@ const maxColumnChars = 255
 
 // formatPr reads the sheet's format properties (ECMA-376 Part 1,
 // 18.3.1.81): defaultColWidth, else baseColWidth with Excel's padding;
-// defaultRowHeight.
+// defaultRowHeight, which a default within [standardSlack] of the Normal
+// font's standard row and not marked customHeight leaves at the standard
+// row ([standardRow]): 18.3.1.81 marks with customHeight a default "different
+// from the default value", and another program's standard row for the
+// same font, 14.4 or 14.25 points for Calibri 11, is no choice of the
+// user's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx, poi/xlsx: defaults of 14.4, 14.25, 14.5 and 14.85
+//     points under Calibri 11 (19 to 19.8 screen pixels against a standard
+//     of 20), 12.5, 13 and 13.2 under Arial 10 (16.7 to 17.6 against 17),
+//     16 under Calibri 12, 15.75 under Times New Roman 12 and 24 under Comic
+//     Sans MS 16 (32 against 34) print at the standard row:
+//     sc/Book1_custom.xlsx, sc/tdf137543.xlsx, sc/tdf155046.xlsx,
+//     chart2/barchart_outend.xlsx, 58896.xlsx and 56315.xlsx among them.
+//   - libreoffice/xlsx: sc/forum-mso-en4-145327.xlsx keeps its default of
+//     12.75 points under Calibri 11 (17 pixels against 20), and
+//     openxmlsdk/xlsx NoExtDataB1.xlsx its 16.5 under Arial 10 (22
+//     against 17).
 func (w *sheetReader) formatPr(f *ooxml.Element) {
 	r, sh := w.r, w.sh
 	if v, err := strconv.ParseFloat(attr(f, "defaultColWidth"), 64); err == nil && v > 0 {
@@ -188,12 +207,18 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 	} else if base := intAttr(f, "baseColWidth", defaultBaseColumn); base > 0 {
 		sh.DefaultColumnWidth = r.baseColumnWidth(min(base, maxColumnChars))
 	}
-	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && numeric.PositiveFinite(v) && boolAttr(f, "customHeight") {
-		if h := r.rowHeight(v); h > 0 {
+	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && numeric.PositiveFinite(v) {
+		px := math.Round(float64(min(v, maxRowHeight) * screenPixelsPerPoint))
+		if h := r.rowHeight(v); h > 0 && (boolAttr(f, "customHeight") || math.Abs(px-r.standardScreen) > standardSlack) {
 			sh.DefaultRowHeight = h
 		}
 	}
 }
+
+// standardSlack is how far, in screen pixels, a sheet's default row height
+// not marked custom may stand from the Normal font's standard row and
+// still print as it ([sheetReader.formatPr]).
+const standardSlack = 2
 
 // maxRowHeight is the tallest row in points (ECMA-376 Part 1, 18.3.1.73
 // ht: Excel caps a row at 409 points).

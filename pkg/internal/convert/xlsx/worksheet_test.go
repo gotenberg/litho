@@ -32,10 +32,13 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	}{
 		// 8 digits of 7 screen pixels and 5 of padding, 64 pixels, 9.140625
 		// characters of 46 printer pixels; the standard row of 100 printer
-		// pixels, whatever defaultRowHeight says without customHeight.
+		// pixels for a default within 2 screen pixels of its 17 without
+		// customHeight, 13.5 points being 18.
 		{"no format properties", `<sheetData/>`, 50.4, 12},
-		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 12},
-		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 12},
+		{"default near the standard", `<sheetFormatPr defaultRowHeight="13.5"/><sheetData/>`, 50.4, 12},
+		// 20 screen pixels times 100 over 17, 117.6 printer pixels.
+		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 14.04},
+		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 19.2},
 		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.4, 12},
 		// 27.33 screen pixels times 100 over 17, 160.78 printer pixels.
 		{"custom default", `<sheetFormatPr defaultRowHeight="20.5" customHeight="1"/><sheetData/>`, 50.4, 19.2},
@@ -504,8 +507,10 @@ func TestCell_FormulaCapCountsCharacters(t *testing.T) {
 
 // TestRead_StandardRowHeights checks the rows Excel prints from the Normal
 // font: a book without a custom default height prints its default rows at
-// the font's standard row, whatever defaultRowHeight says, 121 printer
-// pixels for Calibri 11 and 103 for Arial 10, and a row of h points h in
+// the font's standard row when defaultRowHeight stands within 2 screen
+// pixels of it, 121 printer pixels for Calibri 11 at 14.4 points and 103
+// for Arial 10, and its own default past that, 102 for 12.75 points of
+// Calibri; a row of h points h in
 // screen pixels times the standard row's printer pixels over its screen
 // ones, truncated: 116.56 for 14.45 points of Calibri, 102.85 for 12.75,
 // 103 for 12.75 points of Arial.
@@ -515,18 +520,20 @@ func TestRead_StandardRowHeights(t *testing.T) {
 	for _, tc := range []struct {
 		family       string
 		size         string
+		defHeight    string
 		def          float64
 		rows, height []float64
 	}{
-		{"Carlito", "11", 121, []float64{14.45, 12.75, 15}, []float64{116, 102, 121}},
-		{"Liberation Sans", "10", 103, []float64{12.75, 15}, []float64{103, 121}},
+		{"Carlito", "11", "14.4", 121, []float64{14.45, 12.75, 15}, []float64{116, 102, 121}},
+		{"Carlito", "11", "12.75", 102, nil, nil},
+		{"Liberation Sans", "10", "14.4", 103, []float64{12.75, 15}, []float64{103, 121}},
 	} {
 		styles := strings.Replace(strings.Replace(minimalStyles, "Test Sans", tc.family, 1), `<sz val="11"/>`, `<sz val="`+tc.size+`"/>`, 1)
 		var rows strings.Builder
 		for i, h := range tc.rows {
 			fmt.Fprintf(&rows, `<row r="%d" ht="%g"><c r="A%d"><v>1</v></c></row>`, i+1, h, i+1)
 		}
-		xml := `<sheetFormatPr defaultRowHeight="14.4"/><sheetData>` + rows.String() + `</sheetData>`
+		xml := `<sheetFormatPr defaultRowHeight="` + tc.defHeight + `"/><sheetData>` + rows.String() + `</sheetData>`
 		data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: xml}}, styles, "", "", nil))
 		doc, _, err := load(context.Background(), bytes.NewReader(data), fonts, office.Options{})
 		if err != nil {
