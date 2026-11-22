@@ -31,7 +31,8 @@ const (
 // excelHeaderInset and excelFooterInset are how far inside the header and
 // footer margins Excel sets the parts of a header and of a footer, in
 // points: each part on its own, the top of a header part's first line 8
-// printer pixels below the header margin, the bottom of a footer part's
+// printer pixels below the header margin, the largest line gap of its
+// faces above its ascent as GDI sets a line, the bottom of a footer part's
 // last line 15 above the footer margin, so that a part in a taller font
 // takes more room into the page. The specification gives the margins
 // alone (ECMA-376 Part 1, 18.3.1.62 pageMargins header and footer); the
@@ -49,7 +50,12 @@ const (
 //     ascent of 82), and its Calibri 8 right footer part 32.75 above the
 //     margin (15 and 18) beside a Calibri 11 one at 40.75.
 //   - probe, xlsx: a Cambria 11 header part is set 95 pixels below the
-//     margin (8 and 87.4).
+//     margin (8 and 87.4); Excel for the web sets a Times New Roman 11 part
+//     2.4 points below a Calibri 20 one beside it (8, a line gap of 3.9
+//     and an ascent of 82 against 8 and 159).
+//   - probe, xlsx: footer parts in Times New Roman, Verdana, Courier New
+//     and Arial keep their descent 15 pixels above the margin: the gap is
+//     above the line.
 //   - litho/xlsx: real_budget, fitted to its page's width at 68%, sets its
 //     Calibri 11 header, drawn at 7.56 points, 68 pixels below the margin
 //     (8 whole and an ascent of 60).
@@ -132,6 +138,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 	}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	empty := true
+	gap := 0.0
 	for _, s := range spans {
 		t := b.spanText(s, f)
 		if t == "" {
@@ -149,8 +156,10 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 		rs.WhiteSpace = css.PreWrap
 		rs.LineHeight = st.LineHeight
 		if b.doc.ExcelRules {
-			// Excel sets a header line by the fonts of its runs alone.
+			// Excel sets a header line by the fonts of its runs alone, the
+			// largest line gap of its faces above it ([excelHeaderInset]).
 			rs.LineHeight = css.Dimension{Kind: css.Number, Value: b.m.lineHeight(fnt) / math.Max(fnt.size, 0.01)}
+			gap = max(gap, b.m.lineGap(fnt))
 		}
 		n.Children = append(n.Children, &layout.Node{
 			Kind: layout.Element, Style: rs,
@@ -160,6 +169,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 	if empty {
 		return nil
 	}
+	st.Padding[css.Top] = css.Pts(gap)
 	return n
 }
 
@@ -231,7 +241,9 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 				// The insets are kept whole at any print scale.
 				box.Top = css.Pts(top + excelHeaderInset/z)
 				if fromBottom {
-					box.Top = css.Pts(height - top - excelFooterInset/z - heights[i])
+					// The line gap above a footer part's first line is
+					// outside its measured height.
+					box.Top = css.Pts(height - top - excelFooterInset/z - heights[i] - n.Style.Padding[css.Top].Value)
 				}
 			}
 			tree.Children = append(tree.Children, &layout.Node{Kind: layout.Element, Style: box, Children: []*layout.Node{n}})

@@ -524,19 +524,22 @@ func excelDoc(sh *Sheet) *Document {
 // row: a bottom-aligned line on one baseline whatever its font, the
 // standard row less the top padding and the Default font's ascent above
 // the cell's bottom; a top-aligned line its ascent under the top padding;
-// a centred line in the middle of the padded box; wrapped lines a
-// standard row apart.
+// a centred line in the middle of the padded box, a face's line gap above
+// its ascent; wrapped lines a standard row apart.
 func TestConvert_ExcelBaselines(t *testing.T) {
 	big := &Style{Font: Font{Families: []string{"Carlito"}, Size: 36}}
 	serif := &Style{Font: Font{Families: []string{"Liberation Serif"}, Size: 11}}
 	top := &Style{Align: Alignment{Vertical: VTop}}
 	mid := &Style{Font: Font{Families: []string{"Carlito"}, Size: 14}, Align: Alignment{Vertical: VMiddle}}
 	wrap := &Style{Align: Alignment{Wrap: true}}
+	serifTop := &Style{Font: serif.Font, Align: Alignment{Vertical: VTop}}
+	serifMid := &Style{Font: serif.Font, Align: Alignment{Vertical: VMiddle}}
 	sh := &Sheet{Name: "S", Rows: []Row{
 		{Index: 0, Cells: []Cell{textCell(0, "small", nil), textCell(1, "large", big), textCell(2, "serif", serif)}},
 		{Index: 1, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "topped", top), textCell(1, "tall", big)}},
 		{Index: 2, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "centred", mid)}},
 		{Index: 3, Height: 45, CustomHeight: true, Cells: []Cell{textCell(0, "one two three", wrap)}},
+		{Index: 4, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "serif top", serifTop), textCell(1, "serif centre", serifMid)}},
 	}}
 	sh.DefaultColumnWidth = 30
 	pg := convert(t, excelDoc(sh), office.Options{}).Pages[0]
@@ -568,38 +571,53 @@ func TestConvert_ExcelBaselines(t *testing.T) {
 	if got, want := baseline("three"), 36+14.52+30+30+45-above; !near(got, want, 0.01) {
 		t.Errorf("last wrapped line's baseline %.3f, want %.3f", got, want)
 	}
+	// A face with a line gap sets it above its ascent, as GDI sets a line.
+	ser := font{families: []string{"Liberation Serif"}, size: 11}
+	gap := m.lineGap(ser)
+	if gap < 0.3 {
+		t.Fatalf("Liberation Serif 11's line gap %.3f, want one to measure", gap)
+	}
+	row := 36 + 14.52 + 30 + 30 + 45
+	if got, want := baseline("serif top"), row+0.96+gap+ascent(ser); !near(got, want, 0.01) {
+		t.Errorf("top-aligned serif baseline %.3f, want %.3f", got, want)
+	}
+	if got, want := baseline("serif centre"), row+0.96+(30-0.96-0.12-m.lineHeight(ser)-gap)/2+gap+ascent(ser); !near(got, want, 0.01) {
+		t.Errorf("centred serif baseline %.3f, want %.3f", got, want)
+	}
 }
 
 // TestConvert_ExcelHeaderFooterInsets locks where Excel sets the parts of
 // a header and a footer: each part on its own, its first line 8 printer
-// pixels below the header margin, its last line 15 above the footer
-// margin, so that the baseline of a footer part in a smaller font sits
-// lower.
+// pixels below the header margin, a face's line gap above its ascent, its
+// last line 15 above the footer margin, so that the baseline of a footer
+// part in a smaller font sits lower.
 func TestConvert_ExcelHeaderFooterInsets(t *testing.T) {
 	sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
 	doc := excelDoc(sh)
 	sh.Page.Margin = [4]float64{54, 50, 54, 50}
 	sh.Page.HeaderTop, sh.Page.FooterBottom = 21.6, 21.6
 	cal := func(size float64) *Font { return &Font{Families: []string{"Carlito"}, Size: size} }
-	sh.HeaderFooter.Odd.Header = [3][]Span{{{Text: "left", Font: cal(11)}}, {{Text: "centre", Font: cal(20)}}}
-	sh.HeaderFooter.Odd.Footer = [3][]Span{{{Text: "foot", Font: cal(11)}}, nil, {{Text: "small", Font: cal(8)}}}
+	serif := &Font{Families: []string{"Liberation Serif"}, Size: 11}
+	sh.HeaderFooter.Odd.Header = [3][]Span{{{Text: "left", Font: cal(11)}}, {{Text: "centre", Font: cal(20)}}, {{Text: "serif", Font: serif}}}
+	sh.HeaderFooter.Odd.Footer = [3][]Span{{{Text: "foot", Font: cal(11)}}, {{Text: "serif foot", Font: serif}}, {{Text: "small", Font: cal(8)}}}
 	pg := convert(t, doc, office.Options{}).Pages[0]
 	m := newMeasurer(context.Background(), pinnedFonts(t), "")
 	baseline := func(s string) float64 { return pg.Height - find(t, pg, s).y }
+	ser := font{families: []string{"Liberation Serif"}, size: 11}
 	for _, tc := range []struct {
 		text string
-		size float64
-	}{{"left", 11}, {"centre", 20}} {
-		f := font{families: []string{"Carlito"}, size: tc.size}
-		if got, want := baseline(tc.text), 21.6+0.96+m.lineHeight(f)-m.descent(f); !near(got, want, 0.01) {
+		f    font
+	}{{"left", font{families: []string{"Carlito"}, size: 11}}, {"centre", font{families: []string{"Carlito"}, size: 20}}, {"serif", ser}} {
+		// A face's line gap sits above its ascent.
+		if got, want := baseline(tc.text), 21.6+0.96+m.lineGap(tc.f)+m.lineHeight(tc.f)-m.descent(tc.f); !near(got, want, 0.01) {
 			t.Errorf("header part %q: baseline %.3f from the top, want %.3f", tc.text, got, want)
 		}
 	}
 	for _, tc := range []struct {
 		text string
-		size float64
-	}{{"foot", 11}, {"small", 8}} {
-		f := font{families: []string{"Carlito"}, size: tc.size}
+		f    font
+	}{{"foot", font{families: []string{"Carlito"}, size: 11}}, {"serif foot", ser}, {"small", font{families: []string{"Carlito"}, size: 8}}} {
+		f := tc.f
 		if got, want := baseline(tc.text), pg.Height-21.6-1.8-m.descent(f); !near(got, want, 0.01) {
 			t.Errorf("footer part %q: baseline %.3f from the top, want %.3f", tc.text, got, want)
 		}

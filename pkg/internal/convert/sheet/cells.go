@@ -517,8 +517,10 @@ func (b *pageBuilder) excelPitch(lineH float64) float64 {
 // excelShift returns how far down Excel sets a cell's text from where its
 // box, padded 8 printer pixels at the top and 1 at the bottom, aligns
 // lines pitch points apart in the font f, whose own line is lineH: a
-// top-aligned first line starts at the padding, its leading below it; a
-// centred text is centred in the padded box; a bottom-aligned last line
+// top-aligned first line starts at the padding, the face's line gap above
+// its ascent and its leading below it; a
+// centred text is centred in the padded box, the face's line gap above its
+// ascent as GDI sets a line; a bottom-aligned last line
 // sets its baseline the bottom baseline above the cell's bottom edge
 // ([builder.bottomBaseline]), whatever the font, so that text in a
 // larger font hangs below the cell and is cut there. Justified and
@@ -542,16 +544,23 @@ func (b *pageBuilder) excelPitch(lineH float64) float64 {
 //     row of 151 (sc/pivottable_duplicated_member_filter.xlsx), Calibri 12
 //     at 101 in 127 (63934.xlsx), at 196.2 in 323 (fills_gradient), 337.8
 //     in 605 (52716.xlsx).
+//   - probe, xlsx: Excel for the web sets top-aligned Arial 11, Times New
+//     Roman 11 and Arial 20 text in Calibri 11 books 0.46, 0.52 and 0.59
+//     points lower than their ascent under the padding, the faces' line
+//     gaps (0.36, 0.47, 0.65), and centred ones 0.20, 0.20 and 0.22 lower
+//     than the middle, half of them; Calibri, without a line gap, sets on
+//     its ascent.
 func (b *pageBuilder) excelShift(v VAlign, f font, lineH, pitch, padBottom float64) float64 {
 	half := float64((pitch - lineH) / 2)
+	gap := b.m.lineGap(f)
 	switch v {
 	case VBottom:
 		return padBottom + half + b.m.descent(f) - b.bottomBaseline(b.g.zoom)
 	case VMiddle:
-		return 0
+		return gap / 2
 	case VTop, VJustify, VDistributed:
 	}
-	return -half
+	return gap - half
 }
 
 // bottomBaseline returns how far above a cell's bottom edge Excel sets

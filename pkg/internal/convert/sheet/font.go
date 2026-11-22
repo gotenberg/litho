@@ -420,6 +420,25 @@ func (m *measurer) descent(f font) float64 {
 	return d
 }
 
+// lineGap returns the line gap of f's face at f's size: the external
+// leading GDI adds above a line's ascent, which Excel sets above the text
+// of a cell and of a header part ([pageBuilder.excelShift]).
+func (m *measurer) lineGap(f font) float64 {
+	k := "g\x00" + m.key(f)
+	if g, ok := m.lineCache[k]; ok {
+		return g
+	}
+	g := 0.0
+	ts := f.textStyle(m.lang, m.fallback)
+	if fc := m.fonts.Match(ts); fc != nil {
+		g = max(fc.Metrics(ts.Size).LineGap, 0)
+	}
+	if len(m.lineCache) < maxMeasureCache {
+		m.lineCache[k] = g
+	}
+	return g
+}
+
 // formatSize writes a font size for a cache key.
 func formatSize(v float64) string {
 	return strconvFloat(v)
