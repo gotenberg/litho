@@ -163,8 +163,9 @@ func (p placeholder) class() string {
 // Part 1, 19.3.1.36), nil for none, by Impress's priorities: the same type
 // and index, the same type, then for a centred title the title, for a
 // subtitle or an object a body, with the same index and without, then
-// the same index alone. A placeholder of no type that the slide matches
-// by index takes the layout placeholder's type first (inherited).
+// the same index alone, which a placeholder of the index 4294967295 skips.
+// A placeholder of no type that the slide matches by index takes the
+// layout placeholder's type first (inherited).
 //
 // # Corpus evidence
 //
@@ -190,7 +191,7 @@ func (l *layer) find(p placeholder) *ooxml.Element {
 	}
 	for _, k := range l.phs {
 		q, _ := phOf(k)
-		sameIdx := p.hasIdx == q.hasIdx && (!p.hasIdx || p.idx == q.idx)
+		sameIdx := !p.skip && p.hasIdx == q.hasIdx && (!p.hasIdx || p.idx == q.idx)
 		switch {
 		case q.typ == p.typ && sameIdx:
 			take(&choice[0], k)
@@ -215,20 +216,34 @@ func (l *layer) find(p placeholder) *ooxml.Element {
 // inherited returns the chain of shapes el inherits from in layer l: el,
 // then its layout's placeholder, then that one's master placeholder. A
 // placeholder its layout has no placeholder for inherits nothing, not even
-// from the master; nor does a placeholder of the index 4294967295. Their
-// text still takes the master's text style for their type (textBody). A
-// placeholder without a type that its layout has one of the same index
-// for takes that one's type.
+// from the master; its text still takes the master's text style for its
+// type (textBody). A placeholder of the index 4294967295, which no index
+// matches, inherits from the first placeholder of its type, or of the
+// type standing for it, in its layout, else in its master, as PowerPoint
+// prints it. A placeholder without a type that its layout has one of the
+// same index for takes that one's type.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd-data/n759180's body placeholder of idx 4294967295, on a
 //     layout of a title, a footer and a slide number, prints at its own box
 //     and inset.
+//   - poi/pptx: slideshow/layouts.pptx's title placeholder of idx
+//     4294967295 and no xfrm, on a blank layout, prints at the master
+//     title's place, in its style.
 func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 	chain := []*ooxml.Element{el}
 	p, ok := phOf(el)
-	if !ok || p.skip {
+	if !ok {
+		return chain
+	}
+	if p.skip {
+		// Matched by its type alone, in its layout, else in its master.
+		for up := l.parent; up != nil; up = up.parent {
+			if k := up.find(p); k != nil {
+				return append(chain, inherited(up, k)...)
+			}
+		}
 		return chain
 	}
 	if !p.typed && p.hasIdx && l.parent != nil {

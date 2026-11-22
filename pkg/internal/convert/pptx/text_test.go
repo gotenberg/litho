@@ -276,6 +276,21 @@ func TestText_OrphanPlaceholder(t *testing.T) {
 	if p := doc.Slides[0].Shapes[1].Text.Paragraphs[0]; p.Bullet == nil || p.MarginLeft != 27 || p.Runs[0].Style.Size != 32 {
 		t.Errorf("a placeholder looked up nowhere: %+v", p)
 	}
+	// One that places itself nowhere takes the place of its type's
+	// placeholder in the master, its layout having none, and that one's
+	// body properties, but no placeholder of another type.
+	doc, _ = readDeck(t, testDeck{
+		layoutTree: phShape("Footer", "ftr", -1, 0, 0, 12700, 12700, para("x")),
+		slides: []testSlide{{tree: phShape("Title", "title", 4294967295, 0, 0, 0, 0, para("x")) +
+			phShape("Body", "body", 4294967295, 0, 0, 12700, 12700, para("x"))}},
+	})
+	shapes := doc.Slides[0].Shapes
+	if len(shapes) != 2 || math.Abs(shapes[0].Box.Y-21.625) > 0.01 || shapes[0].Text.Anchor != slides.AnchorMiddle {
+		t.Fatalf("title %+v, want at the master title's place, anchored in the middle", shapes[0])
+	}
+	if shapes[1].Text.Anchor != slides.AnchorTop {
+		t.Errorf("body anchored %v, want at the top as the master body", shapes[1].Text.Anchor)
+	}
 }
 
 // TestText_DateFieldFormats locks the formats of the date and time
