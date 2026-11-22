@@ -842,8 +842,9 @@ func (d *document) number(n *layout.Node, pst *css.Style, rp resolvedPara, st *c
 // whose line pitch is pitch (17.6.5 docGrid, type lines), as Word does: a
 // line of the grid is the pitch, so a proportional spacing mult (not 0)
 // counts pitches (17.3.1.33 line, in 240ths of a line), and a line takes
-// the larger of that and the whole pitches its natural height needs. The
-// glyphs are centred in the line.
+// the larger of that and the whole pitches its natural height needs, the
+// height of its tallest run or picture, which the layout measures
+// ([css.Office.GridPitch]). The glyphs are centred in the line.
 //
 // # Corpus evidence
 //
@@ -863,6 +864,12 @@ func (d *document) number(n *layout.Node, pst *css.Style, rp resolvedPara, st *c
 //     276 print 18.0 apart, of 360 23.5 apart, of 180 one pitch apart, and
 //     exact lines of 20 points 20 apart; a line holding a 26-point run is
 //     three pitches tall, the run's baseline where centring puts it.
+//   - libreoffice/docx: ooxmlimport/image-hyperlink.docx, a grid of 18
+//     points, prints a 150-point inline picture on a line of nine
+//     pitches, its top 6 points below the line's.
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/bookmark/bookmark-pic.docx
+//     prints a 96-point inline picture on a grid of 15.6 points on a line
+//     the picture grows, the lines after it below it.
 func (d *document) snapLines(st *css.Style, pitch, mult float64) {
 	h := d.naturalLine(st)
 	if h <= 0 {
@@ -871,6 +878,7 @@ func (d *document) snapLines(st *css.Style, pitch, mult float64) {
 	n := max(math.Ceil(h/pitch-1e-6), 1)
 	st.LineRule = css.LineRuleCentred
 	st.LineHeight = css.Pts(max(n, mult) * pitch)
+	st.GridPitch = pitch
 }
 
 // naturalLine returns the height of a line of text in the style st, its

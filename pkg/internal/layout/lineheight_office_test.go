@@ -10,7 +10,8 @@ import (
 // TestLineRule_Office lays line boxes out under the Office line rules and
 // the minimum line height as LibreOffice prints them, and under
 // css.LineRuleCentred with the glyphs centred, as Word lays the lines of
-// a document grid.
+// a document grid, a line holding a run taller than a pitch of the grid
+// growing to the whole pitches it needs.
 //
 // # Corpus evidence
 //
@@ -22,6 +23,10 @@ import (
 //     line-height-at-least 30pt puts it 27pt down, the room above, and 6pt
 //     changes nothing; a line mixing 10pt and 20pt text at 150% is 1.5
 //     times the 20pt text's height with the baseline under its ascent.
+//   - probe, docx: on a grid of 15.6 points, a line holding a 26-point
+//     Calibri run among 10.5-point text is three pitches tall, 46.8
+//     points, the run's baseline 32.3 below the line's top, where
+//     centring puts it.
 func TestLineRule_Office(t *testing.T) {
 	small := func(s *css.Style) { s.FontSize = px(10) }
 	big := inlineSty(func(s *css.Style) { s.FontSize = px(20) })
@@ -37,6 +42,11 @@ func TestLineRule_Office(t *testing.T) {
 	least := func(v float64) func(*css.Style) { return func(s *css.Style) { s.MinLineHeight = px(v) } }
 	centred := func(v float64) func(*css.Style) {
 		return func(s *css.Style) { s.LineRule = css.LineRuleCentred; s.LineHeight = css.Pts(px(v)) }
+	}
+	grid := func(v float64) func(*css.Style) {
+		return func(s *css.Style) {
+			s.LineRule, s.LineHeight, s.GridPitch = css.LineRuleCentred, css.Pts(px(v)), px(v)
+		}
 	}
 	tests := []struct {
 		name string
@@ -60,6 +70,8 @@ func TestLineRule_Office(t *testing.T) {
 		{"exact mixed sizes", []func(*css.Style){exact(30)}, true, [2]float64{24, 54}, 60},
 		{"centred", []func(*css.Style){centred(30)}, false, [2]float64{18, 48}, 60},
 		{"centred mixed sizes", []func(*css.Style){centred(30)}, true, [2]float64{21, 51}, 60},
+		{"grid", []func(*css.Style){grid(12)}, false, [2]float64{9, 21}, 24},
+		{"grid, a run taller than a pitch", []func(*css.Style){grid(12)}, true, [2]float64{18, 42}, 48},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

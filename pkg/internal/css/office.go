@@ -113,11 +113,13 @@ const (
 	// such a line. Below 1 the whole natural height shrinks and the
 	// baseline sits four fifths of it below the line top.
 	LineRuleMultiple
-	// LineRuleCentred makes every line box exactly LineHeight tall, a
-	// length, as LineRuleExact does, with the glyphs centred in it: the
-	// room the line's natural height (as LineRuleMultiple measures it)
-	// leaves is split equally above and below, as Word places the lines
-	// of a document grid (ECMA-376 Part 1, 17.6.5 docGrid).
+	// LineRuleCentred makes every line box LineHeight tall, a length, as
+	// LineRuleExact does, with the glyphs centred in it: the room the
+	// line's natural height (as LineRuleMultiple measures it) leaves is
+	// split equally above and below, as Word places the lines of a
+	// document grid (ECMA-376 Part 1, 17.6.5 docGrid). With a
+	// [Office.GridPitch], a line whose natural height passes LineHeight
+	// takes the whole pitches it needs.
 	LineRuleCentred
 )
 
@@ -197,6 +199,11 @@ type Office struct {
 	// grown by the top and bottom gaps. Nil, or fewer than three points,
 	// wraps along the border box.
 	WrapPolygon []WrapPoint
+	// GridPitch is the line pitch, in points, of the document grid the
+	// lines of a block container of [LineRuleCentred] lie on, 0 for none:
+	// a line whose natural height passes its LineHeight takes the whole
+	// pitches that height needs (ECMA-376 Part 1, 17.6.5 docGrid).
+	GridPitch float64
 	// Chain names the chain of linked boxes the box is a link of, "" for
 	// none (ODF 1.3 Part 3, 19.112 draw:chain-next-name; ECMA-376 Part 1,
 	// 20.4.2.18 wps:linkedTxbx id): the chain's content flows from one

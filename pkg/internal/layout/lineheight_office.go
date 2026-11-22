@@ -50,6 +50,13 @@ func (s *inlineState) officeLine(l *lineBox) {
 	case css.LineRuleCentred:
 		h = s.e.lineHeight(st, s.root.lang)
 		above, below, _ := s.naturalExtent(l)
+		if p := st.GridPitch; p > 0 {
+			// A line of a document grid holding a run or a picture
+			// taller than its paragraph's line grows by whole pitches.
+			if up, down := s.gridExtent(l); up+down > 0 {
+				h = max(h, float64(math.Ceil((up+down)/p-1e-6)*p))
+			}
+		}
 		base = above + float64((h-above-below)/2)
 	case css.LineRuleMultiple:
 		f := 1.0
@@ -155,6 +162,47 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 		below = max(below, down+shift)
 	}
 	return above, below, textAbove + textBelow
+}
+
+// gridExtent returns the extent of l above and below its baseline that
+// its runs set larger than its block container's font and its atomic
+// inlines take, each where its baseline shift puts it: what grows a line
+// of a document grid past its paragraph's line ([css.Office.GridPitch]).
+// A run is measured in the container's face at the run's size, the face
+// the paragraph's line is measured in: the run's own face may be a
+// stand-in of other metrics, a fallback face for its script among them,
+// whose height would grow lines Word lays out in the face the document
+// names. A run of the container's size or smaller counts for nothing,
+// and so does ruby, whose annotation Word sets in the grid line's room.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/Indent_Spacing.docx
+//     prints 11.5 and 12 point Chinese text, which the fixture fonts draw
+//     in a fallback face taller than a pitch, on lines of one pitch of a
+//     15.6-point grid.
+//   - poi/docx: integration/stress019.docx prints 12-point ruby bases
+//     with 5-point annotations on lines of one 18-point pitch.
+func (s *inlineState) gridExtent(l *lineBox) (above, below float64) {
+	st := s.root.st
+	size := s.e.fontSize(st)
+	if size <= 0 {
+		return 0, 0
+	}
+	m := s.e.faceMetrics(st, s.root.lang)
+	up, down := m.Ascent/size, m.Descent/size
+	for _, it := range l.items {
+		shift := it.baseline - l.baseline
+		switch {
+		case it.atomic != nil && it.atomic.ruby == nil:
+			above = max(above, it.ascent-shift)
+			below = max(below, it.descent+shift)
+		case it.atomic == nil && it.text != nil && it.text.Size > size+1e-6:
+			above = max(above, float64(up*it.text.Size)-shift)
+			below = max(below, float64(down*it.text.Size)+shift)
+		}
+	}
+	return above, below
 }
 
 // writerStrut reports whether the font of a block container under

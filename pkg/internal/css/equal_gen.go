@@ -2242,6 +2242,9 @@ func equalOffice(a, b *Office) bool {
 			}
 		}
 	}
+	if math.Float64bits(a.GridPitch) != math.Float64bits(b.GridPitch) {
+		return false
+	}
 	if a.Chain != b.Chain {
 		return false
 	}
@@ -2293,6 +2296,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	for i1 := range x.WrapPolygon {
 		h = hashWrapPoint(h, &x.WrapPolygon[i1])
 	}
+	h = mix(h, math.Float64bits(x.GridPitch))
 	h = mixString(h, x.Chain)
 	h = mix(h, uint64(x.ChainIndex))
 	h = mixBool(h, x.StrokeBorders)
