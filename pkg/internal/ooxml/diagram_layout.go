@@ -681,7 +681,7 @@ func (e *engine) decide(a *DiagramAtom, p *DiagramPoint) bool {
 	case "var":
 		switch a.Arg {
 		case "dir":
-			return compareTokens(a.Op, p.Dir, a.Val)
+			return compareTokens(a.Op, e.dir(p), a.Val)
 		case "hierBranch":
 			hb := p.HierBranch
 			if hb == "" {
@@ -698,6 +698,26 @@ func (e *engine) decide(a *DiagramAtom, p *DiagramPoint) bool {
 		return compareInts(a.Op, e.maxDepth(p.PresAssocID, 0), toInt32(a.Val))
 	}
 	return true
+}
+
+// dir returns the diagram direction a point lays out in (21.4.2.33 dir):
+// the one it states, else the nearest one a presentation point above it
+// states, "norm" for none: the direction set on the diagram's root turns
+// the whole diagram.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: FamilyTree_TP10107970 states dir rev on the
+//     hierarchy5 root's point alone; Office prints the whole tree from the
+//     right, "Me" on the right and the grandparents on the left.
+func (e *engine) dir(p *DiagramPoint) string {
+	for i := 0; p != nil && i < maxDiagramDepth; i++ {
+		if p.DirSet {
+			return p.Dir
+		}
+		p = e.d.byID[e.navigate("presParOf", p.ModelID, false)]
+	}
+	return "norm"
 }
 
 // compareTokens compares two tokens for equ and neq; any other operator

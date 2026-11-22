@@ -679,3 +679,26 @@ func TestDiagramLinearShareOfAShrinkingRow(t *testing.T) {
 		t.Errorf("nodes at %v, want %v", got, want)
 	}
 }
+
+// TestDiagramDirectionOfTheDiagram evaluates the variable dir (21.4.2.33)
+// for a point that states none as the nearest point above it states it:
+// the direction set on the diagram's root turns every node.
+func TestDiagramDirectionOfTheDiagram(t *testing.T) {
+	data := strings.Replace(diagramData("a", "b"), `<dgm:prSet presAssocID="0" presName="root"/>`,
+		`<dgm:prSet presAssocID="0" presName="root"><dgm:presLayoutVars><dgm:dir val="rev"/></dgm:presLayoutVars></dgm:prSet>`, 1)
+	shape := `<dgm:choose><dgm:if func="var" arg="dir" op="equ" val="norm"><dgm:shape type="rect"/></dgm:if><dgm:else><dgm:shape type="ellipse"/></dgm:else></dgm:choose>`
+	layout := diagramLayout(`<dgm:alg type="lin"/><dgm:shape/><dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/>` + shape + `</dgm:layoutNode></dgm:forEach>`)
+	root := ParseDiagram(mustParse(t, data), mustParse(t, layout), nil, nil).LayOut(2000, 1000, nil)
+	n := 0
+	for _, k := range root.Kids {
+		if k.Name == "node" {
+			n++
+			if k.Preset() != "ellipse" {
+				t.Errorf("node %s, want the ellipse of dir rev", k.Preset())
+			}
+		}
+	}
+	if n != 2 {
+		t.Errorf("%d nodes, want 2", n)
+	}
+}

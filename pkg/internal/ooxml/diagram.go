@@ -88,8 +88,10 @@ type DiagramPoint struct {
 	// (prSet custT).
 	CustomText bool
 	// Dir and HierBranch are the layout variables dir and hierBranch, the
-	// tokens as written ("norm" and "" when absent).
+	// tokens as written ("norm" and "" when absent); DirSet reports a dir
+	// the point states.
 	Dir, HierBranch string
+	DirSet          bool
 	// ScaleX is the width the user gave the point's shape, as a factor of
 	// the width the layout gives it (prSet custScaleX), 0 for none.
 	ScaleX float64
@@ -290,7 +292,7 @@ func (d *Diagram) parseData(dm *Element) {
 			for _, v := range pr.Child(NSDgm, "presLayoutVars").Kids() {
 				switch v.Local {
 				case "dir":
-					p.Dir = tokenOr(v, "val", "norm")
+					p.Dir, p.DirSet = tokenOr(v, "val", "norm"), true
 				case "hierBranch":
 					p.HierBranch = attrOr(v, "val")
 				}
