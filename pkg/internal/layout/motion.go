@@ -118,7 +118,8 @@ func offsetOps(m *css.MotionPath, r, f typeset.Rect, radii [4][2]float64) ([]typ
 	case m.Path.Kind == css.OffsetBox:
 		return roundedRect(f, radii), true
 	case m.Path.Kind == css.OffsetURL || s == nil:
-		// A reference litho does not resolve is path("m 0 0") (2.1).
+		// A reference to no SVG shape element is path("m 0 0") (2.1): the
+		// converter replaces one that names a shape by its path.
 		return []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}}}, false
 	case s.Kind == css.ShapePath:
 		data, _ := svg.PathData(s.Path) // a path cut short by an error keeps what it drew, as SVG 1.1, F.2 asks

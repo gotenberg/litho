@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	dom "golang.org/x/net/html"
@@ -193,18 +194,39 @@ func (b *builder) svgOptions(n *dom.Node, st *css.Style) svg.Options {
 	}
 }
 
-// definition returns the drawing of the svg element that holds the
-// clipPath or mask element of kind url names, and that element's id:
-// url names an element of the document by its fragment (CSS Masking 1,
-// 5.1 and 6.2). A url into another document names none.
-func (b *builder) definition(ctx context.Context, url, kind string) (*svg.Document, string, bool) {
+// svgShapes are the SVG shape elements an offset-path names by url():
+// the basic shapes and path (SVG 2, 9 and 10). Immutable lookup table.
+var svgShapes = map[string]bool{
+	"rect": true, "circle": true, "ellipse": true, "line": true, "polyline": true,
+	"polygon": true, "path": true,
+}
+
+// shapeKind is the kind [builder.definition] takes for any element of
+// [svgShapes].
+const shapeKind = "shape"
+
+// localURL reports a url that names an element of the document itself by
+// its fragment, and returns the fragment.
+func (b *builder) localURL(url string) (string, bool) {
 	i := strings.LastIndexByte(url, '#')
 	if i < 0 || url[:i] != "" && url[:i] != b.scan.resourceBase && url[:i] != b.scan.docURL {
+		return "", false
+	}
+	return url[i+1:], true
+}
+
+// definition returns the drawing of the svg element that holds the
+// clipPath, mask, filter or shape element of kind url names, and that
+// element's id: url names an element of the document by its fragment (CSS
+// Masking 1, 5.1 and 6.2). A url into another document names none.
+// [shapeKind] takes any element of [svgShapes].
+func (b *builder) definition(ctx context.Context, url, kind string) (*svg.Document, string, bool) {
+	id, ok := b.localURL(url)
+	if !ok {
 		return nil, "", false
 	}
-	id := url[i+1:]
 	def := b.scan.defs[id]
-	if def == nil || def.Data != kind {
+	if def == nil || def.Data != kind && (kind != shapeKind || !svgShapes[def.Data]) {
 		return nil, "", false
 	}
 	var owner *dom.Node
@@ -237,6 +259,79 @@ func (b *builder) definition(ctx context.Context, url, kind string) (*svg.Docume
 	}
 	b.defDocs[owner] = doc
 	return doc, id, doc != nil
+}
+
+// offsetPath returns st with the url() of its offset-path, when it names
+// an SVG shape element of the document, replaced by that shape's path, its
+// geometry in its own user space, its transform attribute and those of
+// its ancestors left out (CSS Motion Path 1, 2.1), laid as a path() is.
+// A url that names anything else is path("m 0 0") (2.1), which the layout
+// draws for a url it is left; one into another document is reported, as
+// litho reads no other document for it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 moves a box along
+//     url() of a path, a circle under a transform attribute, a rect in a
+//     translated group, a line, a polyline, an ellipse, a path in defs and
+//     a path of pathLength 10 to the points the shapes' own geometry
+//     gives, from the box's own top left, transforms and pathLength left
+//     out, and keeps a box whose url names no element at its place.
+func (b *builder) offsetPath(ctx context.Context, st *css.Style) *css.Style {
+	m := st.Motion()
+	if m == nil || m.Path.Kind != css.OffsetURL {
+		return st
+	}
+	if _, ok := b.localURL(m.Path.URL); !ok {
+		b.warnOnce(warn.ContentUnsupported, warn.Approximated, "offset-path url", "an offset-path url() naming another document's shape is not read: the box moves as on path(\"m 0 0\")")
+		return st
+	}
+	doc, id, ok := b.definition(ctx, m.Path.URL, shapeKind)
+	if !ok {
+		return st
+	}
+	ops, found := doc.ShapePath(ctx, id)
+	if !found {
+		return st
+	}
+	c, mp := *st, *m
+	mp.Path = css.OffsetPath{Kind: css.OffsetShape, Shape: &css.Shape{Kind: css.ShapePath, Path: pathData(ops)}, Box: m.Path.Box}
+	c.MotionPath = &mp
+	return &c
+}
+
+// pathData writes ops as SVG path data in absolute commands, a path()
+// reads it back (SVG 2, 9.3): "M 0 0" for no operator.
+func pathData(ops []typeset.PathOp) string {
+	if len(ops) == 0 {
+		return "M 0 0"
+	}
+	var sb strings.Builder
+	num := func(v float64) {
+		sb.WriteByte(' ')
+		sb.WriteString(strconv.FormatFloat(v, 'g', -1, 64))
+	}
+	for _, op := range ops {
+		switch op.Kind {
+		case typeset.MoveTo:
+			sb.WriteString(" M")
+			num(op.P[0].X)
+			num(op.P[0].Y)
+		case typeset.LineTo:
+			sb.WriteString(" L")
+			num(op.P[0].X)
+			num(op.P[0].Y)
+		case typeset.CurveTo:
+			sb.WriteString(" C")
+			for _, p := range op.P {
+				num(p.X)
+				num(p.Y)
+			}
+		case typeset.ClosePath:
+			sb.WriteString(" Z")
+		}
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // clipSource returns the clipping regions of the clipPath element url

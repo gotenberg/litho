@@ -625,9 +625,10 @@ type scan struct {
 	sheets []*dom.Node
 	// ids holds every id attribute and a[name] of the document.
 	ids map[string]bool
-	// defs holds the first SVG clipPath, mask and filter element of each
-	// id, the elements a clip-path, a mask or a filter names by url() (CSS
-	// Masking 1, 5.1 and 6.2; Filter Effects 1, 6).
+	// defs holds the first SVG clipPath, mask, filter or shape element of
+	// each id, the elements a clip-path, a mask, a filter or an
+	// offset-path names by url() (CSS Masking 1, 5.1 and 6.2; Filter
+	// Effects 1, 6; CSS Motion Path 1, 2.1).
 	defs map[string]*dom.Node
 	// resourceBase resolves resource references: the document's URL, or
 	// the <base href> resolved against it when that is relative or an http
@@ -680,7 +681,7 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements
 		}
 		if id, ok := attr(n, "id"); ok && id != "" {
 			s.ids[id] = true
-			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask" || n.Data == "filter") {
+			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask" || n.Data == "filter" || svgShapes[n.Data]) {
 				s.defs[id] = n
 			}
 		}

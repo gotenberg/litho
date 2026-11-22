@@ -145,3 +145,23 @@ func (f *Filter) Apply(ctx context.Context, src *effect.Surface, k, ox, oy float
 	}
 	return g.run(ctx, src, k, ox, oy)
 }
+
+// ShapePath returns the path of the shape element of id in its own user
+// space, in user units: the geometry of a path, rect, circle, ellipse,
+// line, polyline or polygon as SVG 2 draws it, its transform attribute and
+// those of its ancestors left out, and pathLength too (CSS Motion Path 1,
+// 2.1: an offset path names a shape by url()). Percentages resolve against
+// the viewport of the drawing that holds it. found reports an id that names
+// such an element; a shape that draws nothing has no path.
+func (d *Document) ShapePath(ctx context.Context, id string) (ops []typeset.PathOp, found bool) {
+	if d.disabled {
+		return nil, false
+	}
+	el := d.ids[id]
+	if el == nil || !shapes[el.Data] {
+		return nil, false
+	}
+	vw, vh := d.viewport()
+	r := newRenderer(ctx, d, vw, vh, identity)
+	return r.geometry(el, d.styleOf(el, 0)), true
+}

@@ -335,6 +335,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	if st == nil || st.Display == css.DisplayNone {
 		return nil, nil
 	}
+	st = b.offsetPath(ctx, st)
 	if b.omitBackgrounds && (n.Namespace == "" && n.DataAtom == atom.Body || st.PrintColorAdjust == css.ColorEconomy) {
 		st = withoutBackground(st)
 	}
