@@ -559,16 +559,19 @@ func TestRead_StandardRowHeights(t *testing.T) {
 
 // TestRead_KnownFonts checks which books Excel measures as it opens them:
 // one whose fonts part lacks x14ac:knownFonts (sheet.Document.FitRows),
-// and, in either, a row without a height under a custom default keeps the
-// default, unmeasured.
+// its Normal font served; and, in any, a row without a height under a
+// custom default keeps the default, unmeasured.
 func TestRead_KnownFonts(t *testing.T) {
 	t.Parallel()
 	fonts := pinnedFonts(t)
-	known := strings.Replace(minimalStyles, "<fonts>", `<fonts xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" x14ac:knownFonts="1">`, 1)
+	carlito := strings.Replace(minimalStyles, "Test Sans", "Carlito", 1)
+	known := strings.Replace(carlito, "<fonts>", `<fonts xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" x14ac:knownFonts="1">`, 1)
+	// A Normal font no font serves gives no standard row to measure by.
+	unserved := strings.Replace(minimalStyles, "Test Sans", "HelveticaNeue LightExt", 1)
 	for _, tc := range []struct {
 		styles string
 		fit    bool
-	}{{minimalStyles, true}, {known, false}} {
+	}{{carlito, true}, {known, false}, {unserved, false}} {
 		xml := `<sheetFormatPr defaultRowHeight="16.5" customHeight="1"/><sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="2" ht="20"><c r="A2"><v>1</v></c></row></sheetData>`
 		data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: xml}}, tc.styles, "", "", nil))
 		doc, _, err := load(context.Background(), bytes.NewReader(data), fonts, office.Options{})

@@ -84,7 +84,18 @@ type reader struct {
 	// standardPrinted and standardScreen are the standard row height of
 	// the Normal font in printer and screen pixels ([standardRow]).
 	standardPrinted, standardScreen float64
-	cells                           int
+	// normalUnserved reports a Normal font no font serves, drawn in
+	// [substituteFamily]: its standard row is not the one Excel prints,
+	// and the rows keep the heights the book stores
+	// (sheet.Document.FitRows).
+	//
+	// # Corpus evidence
+	//
+	//   - poi/xlsx: 47862.xlsx, whose Normal font is HelveticaNeue
+	//     LightExt 10 and which has no knownFonts, prints its row of Normal
+	//     text at its stored default of 12.75 points.
+	normalUnserved bool
+	cells          int
 	// doc is the document being read, which the charts' series read
 	// their values from when their part holds no cache.
 	doc      *sheet.Document
@@ -169,7 +180,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err := r.readSharedStrings(main); err != nil {
 		return nil, nil, err
 	}
-	doc := &sheet.Document{Default: r.normal(), ExcelRules: true, StandardRowHeight: r.standardPrinted * printerPixel, StandardScreenRow: r.standardScreen, FitRows: !r.styles.knownFonts}
+	doc := &sheet.Document{Default: r.normal(), ExcelRules: true, StandardRowHeight: r.standardPrinted * printerPixel, StandardScreenRow: r.standardScreen, FitRows: !r.styles.knownFonts && !r.normalUnserved}
 	cp, err := pkg.CoreProperties(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -307,6 +318,8 @@ func (r *reader) measureNormalFont() {
 	}
 	if face := r.fonts.Match(style); face != nil {
 		r.standardPrinted, r.standardScreen = standardRow(face.Metrics(1), f.Size)
+		// A face no font serves gives no standard row Excel would print.
+		r.normalUnserved = len(f.Families) > 0 && face.Family() == substituteFamily && !strings.EqualFold(f.Families[0], substituteFamily)
 	}
 	if len(f.Families) > 0 && !f.Bold && !f.Italic {
 		if row, ok := deviceStandardRows[deviceFace{strings.ToLower(f.Families[0]), f.Size}]; ok {
