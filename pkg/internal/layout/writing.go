@@ -121,9 +121,8 @@ func innerTurner(b *box) *box {
 // right. The content is monolithic: it does not break across pages.
 //
 // The inline size is the root's height when definite, else its table
-// row's, else the content's max-content width, at most the page area's
-// height (CSS Writing Modes 4, 7.3.1 leaves the fallback to the user
-// agent).
+// row's, else the content's fit-content width in the space
+// [engine.orthoAvailable] gives (CSS Writing Modes 4, 7.3.1).
 type orthoFormatter struct{}
 
 func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float64, _ *marginState) float64 {
@@ -219,8 +218,26 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 			return max(h-vEdges(b), 0)
 		}
 	}
-	_, hi := formatterFor(b.kids[0]).intrinsic(e, b.kids[0])
-	return min(hi, e.areaH(0))
+	lo, hi := formatterFor(b.kids[0]).intrinsic(e, b.kids[0])
+	return min(max(lo, e.orthoAvailable(b)), hi)
+}
+
+// orthoAvailable returns the space an orthogonal flow root b whose
+// containing block has no definite height fits its content in (CSS
+// Writing Modes 4, 7.3.1): the smaller of the containing block's inner
+// max-height, floored by its min-height, and the initial containing
+// block's height, the page area's. The nearest scrollport is not counted.
+func (e *engine) orthoAvailable(b *box) float64 {
+	avail := e.areaH(0)
+	if p := b.parent; p != nil && !b.abs && b.float == css.FloatNone {
+		if mx, ok := specHeight(p, p.st.MaxHeight, cblock{}); ok {
+			if mn, ok := specMinHeight(p, p.st.MinHeight, cblock{}); ok {
+				mx = max(mx, mn)
+			}
+			avail = min(avail, mx)
+		}
+	}
+	return avail
 }
 
 // turnKey names the copy of a style turned into an orthogonal flow of a

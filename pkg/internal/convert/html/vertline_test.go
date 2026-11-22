@@ -202,3 +202,27 @@ func TestVerticalLine_UprightGlyphsOfAFaceWithoutVerticalMetrics(t *testing.T) {
 		}
 	}
 }
+
+// TestVertical_OrthogonalAvailableSpace locks the inline size of an
+// orthogonal flow root whose containing block has no definite height: its
+// content's fit-content size in the smaller of the containing block's
+// max-height, floored by its min-height, and the initial containing
+// block's height (CSS Writing Modes 4, 7.3.1).
+func TestVertical_OrthogonalAvailableSpace(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, parent, want string
+	}{
+		{"min-height over max-height", `max-height: 40px; min-height: 80px`, "10,10+80x80"},
+		{"max-height", `max-height: 50px`, "10,10+80x50"},
+		{"no bound", ``, "10,10+20x190"},
+	} {
+		doc := convertDoc(t, `<style>@page { size: 400px 300px; margin: 0 } html, body { margin: 0 }
+			.p { margin: 10px; font: 20px/20px "Test Serif"; `+c.parent+` }
+			.v { writing-mode: vertical-rl; width: max-content; background: lime }</style>
+			<div class=p><div class=v>aaaa aaaa aaaa aaaa</div></div>`, Options{PreferCSSPageSize: true})
+		if got := pxBoxes(doc)[0]["g"]; got != c.want {
+			t.Errorf("%s: vertical box %q, want %q", c.name, got, c.want)
+		}
+	}
+}
