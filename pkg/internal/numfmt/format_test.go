@@ -395,8 +395,8 @@ func TestLCIDOf_RoundTrips(t *testing.T) {
 
 // TestFormat_Excel locks the values Excel shows apart from Calc: negative
 // dates and times fill the cell with "#", the 1900 date system's day 0
-// and February 29, whole seconds rounded, and a value too wide filling
-// the cell with "#".
+// and February 29, whole seconds rounded, a decimal point kept where no
+// decimal shows, and a value too wide filling the cell with "#".
 func TestFormat_Excel(t *testing.T) {
 	for _, tc := range []struct {
 		code string
@@ -410,6 +410,10 @@ func TestFormat_Excel(t *testing.T) {
 		{"ddd mm/dd/yyyy", 1, "Sun 12/31/1899", "Sun 01/01/1900"},
 		{"h:mm:ss", 1234.567, "13:36:28", "13:36:29"},
 		{"mm/dd/yyyy", -1, "", ""},
+		{"#0.#", 1000, "1000", "1000."},
+		{"#0.#", 0, "0", "0."},
+		{"#0.#", 2.5, "2.5", "2.5"},
+		{"#.##", 3, "3", "3."},
 	} {
 		f, err := Parse(tc.code)
 		if err != nil {

@@ -265,7 +265,13 @@ func (s *section) writeGrouped(b *strings.Builder, d string, group bool) {
 // the exponent, the decimal digits dp over the placeholders: trailing
 // zeros of '#' placeholders dropped, of '?' ones shown as figure spaces.
 // The point is dropped too when no decimal shows (LibreOffice writes 3
-// for 3 in #.##).
+// for 3 in #.##), but under Excel's rules ([Format.Excel]), where Excel
+// writes 3.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx spreadsheet/52348.xlsx: Excel prints 0 and 1000 in the
+//     format #0.# as "0." and "1000.".
 func (s *section) writeDecimals(b *strings.Builder, r *Result, dp string, m mantissa) {
 	type place struct {
 		tok   int
@@ -301,7 +307,7 @@ func (s *section) writeDecimals(b *strings.Builder, r *Result, dp string, m mant
 		trailing = false
 		shown = true
 	}
-	if shown || m.decDigits == 0 {
+	if shown || m.decDigits == 0 || s.excel {
 		b.WriteString(s.decimal())
 	}
 	pi := 0

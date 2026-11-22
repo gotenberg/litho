@@ -115,8 +115,9 @@ func Parse(code string) (*Format, error) {
 // differ: a date or time section shows a negative value as a cell filled
 // with "#", counts the 1900 date system's days from January 0, 1900 with
 // its February 29 (ECMA-376 Part 1, 18.17.4.1), and rounds whole seconds
-// to the nearest; a value [Format.Fit] cannot fit fills the cell with
-// "#" rather than writing "###". f is left unchanged.
+// to the nearest; a number keeps its decimal point where no decimal
+// shows; a value [Format.Fit] cannot fit fills the cell with "#" rather
+// than writing "###". f is left unchanged.
 //
 // # Corpus evidence
 //

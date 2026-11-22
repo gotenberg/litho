@@ -106,7 +106,7 @@ type section struct {
 	// [$-F400], 0 for none: [Format.WithLocale] replaces it by the
 	// locale's.
 	system byte
-	// excel formats dates and times as Excel shows them ([Format.Excel]).
+	// excel formats values as Excel shows them ([Format.Excel]).
 	excel bool
 }
 
