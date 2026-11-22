@@ -1826,6 +1826,8 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 	e.noPaginate--
 	a.hasBaseline = false
 	switch td := a.tdata; {
+	case widgetBaselined(a):
+		a.baseline, a.hasBaseline = widgetBaseline(a), true
 	case a.ortho && e.opts.BrowserRules:
 		// The lines of an orthogonal flow root give no baseline in its
 		// parent's writing mode: its baselines are synthesised from its

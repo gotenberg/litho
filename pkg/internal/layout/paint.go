@@ -1309,6 +1309,13 @@ func (p *painter) decorations(b *box) {
 		paint := func() {
 			radii := radiiOf(b, r.Width, r.Height)
 			p.shadows(b, b.st, r, radii, b.bd, false)
+			if p.widgetBase(b, r) {
+				// A control drawn as its widget paints the widget in
+				// place of its background and border.
+				p.shadows(b, b.st, r, radii, b.bd, true)
+				p.widgetParts(b, r)
+				return
+			}
 			p.background(b, b.st, r, radii, b.bd, b.pd)
 			p.shadows(b, b.st, r, radii, b.bd, true)
 			if cut != nil {
@@ -1316,6 +1323,7 @@ func (p *painter) decorations(b *box) {
 				return
 			}
 			p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
+			p.widgetParts(b, r)
 		}
 		if columns {
 			p.paintWhole(b, paint)

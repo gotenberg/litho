@@ -26,10 +26,12 @@ func TestControl_DefaultSize(t *testing.T) {
 		// 13.333px is read at 13.328125: avg 13.088 stays, max 13.
 		"text field at 13.333px": {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){ahemSize(40.0 / 3)}, 262, 40.0 / 3},
 		"textarea of 10 by 3":    {&Control{Kind: ControlTextArea, Chars: 10, Rows: 3}, nil, 115, 30},
-		"drop-down box":          {&Control{Kind: ControlDropDown, Labels: []ControlLabel{{Text: "ab"}, {Text: "abc"}}}, nil, 50, 12},
-		"list box":               {&Control{Kind: ControlListBox, Rows: 3, Labels: []ControlLabel{{Text: "abcd"}, {Text: "a", Indent: px(40)}}}, nil, 54, 39},
-		"author width kept":      {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){width(50)}, 50, 10},
-		"content sizing":         {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){func(s *css.Style) { s.FieldSizing = css.FieldContent }}, 0, 0},
+		"drop-down box":          {&Control{Kind: ControlDropDown, Labels: []ControlLabel{{Text: "ab"}, {Text: "abc"}}}, []func(*css.Style){func(s *css.Style) { s.Appearance = css.AppearanceAuto }}, 50, 12},
+		// Under appearance: none no arrow shows and no room is kept.
+		"drop-down box without arrow": {&Control{Kind: ControlDropDown, Labels: []ControlLabel{{Text: "abc"}}}, nil, 30, 12},
+		"list box":                    {&Control{Kind: ControlListBox, Rows: 3, Labels: []ControlLabel{{Text: "abcd"}, {Text: "a", Indent: px(40)}}}, nil, 54, 39},
+		"author width kept":           {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){width(50)}, 50, 10},
+		"content sizing":              {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){func(s *css.Style) { s.FieldSizing = css.FieldContent }}, 0, 0},
 		"border box": {&Control{Kind: ControlTextField, Chars: 20}, []func(*css.Style){func(s *css.Style) {
 			s.BoxSizing = css.BorderBox
 			s.Padding[css.Left] = css.Pts(px(3))
@@ -43,8 +45,14 @@ func TestControl_DefaultSize(t *testing.T) {
 		if b == nil {
 			t.Fatalf("%s: no box of the control", name)
 		}
-		if !near(b.w/css.Pt, tc.w) || !near(b.h/css.Pt, tc.h) {
-			t.Errorf("%s: content box %.3f by %.3f px, want %v by %v", name, b.w/css.Pt, b.h/css.Pt, tc.w, tc.h)
+		// A drop-down box keeps the pixel above and below its line and the
+		// room of its arrow as padding: its size is read through it.
+		w, h := b.w, b.h+b.pd[css.Top]+b.pd[css.Bottom]
+		if tc.c.Kind == ControlDropDown {
+			w += b.pd[css.Left] + b.pd[css.Right]
+		}
+		if !near(w/css.Pt, tc.w) || !near(h/css.Pt, tc.h) {
+			t.Errorf("%s: content box %.3f by %.3f px, want %v by %v", name, w/css.Pt, h/css.Pt, tc.w, tc.h)
 		}
 	}
 }

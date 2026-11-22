@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // ControlKind is the widget a form control renders as (HTML Standard,
@@ -22,6 +23,30 @@ const (
 	ControlDropDown
 	// ControlListBox is a select shown as a list box (15.5.16).
 	ControlListBox
+	// ControlButton is a button: a button element, an input of type
+	// submit, reset or button, or a file control's button (15.5.2 and
+	// 15.5.12 to 15.5.14).
+	ControlButton
+	// ControlCheckBox is a checkbox (15.5.6).
+	ControlCheckBox
+	// ControlRadio is a radio button (15.5.7).
+	ControlRadio
+	// ControlRange is a slider (15.5.11).
+	ControlRange
+	// ControlProgress is a progress bar (15.5.18).
+	ControlProgress
+	// ControlMeter is a gauge (15.5.19).
+	ControlMeter
+	// ControlColor is a colour well (15.5.4).
+	ControlColor
+	// ControlDate is a date, month, week or local date and time field,
+	// which shows a calendar (15.5.8 and 15.5.9).
+	ControlDate
+	// ControlTime is a time field, which shows a clock (15.5.10).
+	ControlTime
+	// ControlFile is a file upload control, its button and its text
+	// (15.5.13).
+	ControlFile
 )
 
 // Control is what sizes a form control by default, its preferred size
@@ -37,8 +62,22 @@ type Control struct {
 	// Rows is the rows of a textarea, and the display size of a list box.
 	Rows int
 	// Labels are the labels of a select's options and option group
-	// headings, the widest of which sizes it.
+	// headings, the widest of which sizes it, and the text a date or time
+	// field is as wide as.
 	Labels []ControlLabel
+	// Fields is the number of fields a date or time field shows.
+	Fields int
+	// Checked is the checkedness of a checkbox or a radio button, and
+	// Disabled whether the control is disabled (HTML Standard,
+	// 4.10.18.5).
+	Checked, Disabled bool
+	// Value places a range's thumb and fills a progress bar or a meter,
+	// from 0 to 1; a progress bar without a value is indeterminate at -1.
+	Value float64
+	// Level is a meter's region.
+	Level MeterLevel
+	// Swatch is a colour well's colour.
+	Swatch typeset.Color
 }
 
 // ControlLabel is one row of a select: an option's label, or an option
@@ -65,7 +104,8 @@ const (
 	// scroll bar, which HTML Standard, 15.5.17 adds to its width.
 	textAreaScrollbar = 15
 	// dropDownArrow is the room a drop-down box keeps for its button, and
-	// dropDownBlock what it adds to its line's height.
+	// dropDownBlock what it adds to its line's height, half above and half
+	// below.
 	dropDownArrow = 20
 	dropDownBlock = 2
 	// listBoxInline is the inline padding of a list box's option, both
@@ -106,6 +146,15 @@ const (
 //     pixels, and 2 pixels taller than their line in 28 of 33 boxes, 1 or
 //     3 in the others.
 func (e *engine) controlStyle(c *Control, st *css.Style, lang string) *css.Style {
+	switch c.Kind { //nolint:exhaustive // the fields are sized below
+	case ControlCheckBox, ControlRadio, ControlRange:
+		return widgetBoxStyle(c, st)
+	case ControlButton, ControlProgress, ControlMeter, ControlColor:
+		// Sized by their content or by the user agent sheet.
+		return st
+	case ControlDropDown:
+		st = dropDownPadding(st)
+	}
 	if st.FieldSizing != css.FieldFixed {
 		return st
 	}
@@ -129,8 +178,10 @@ func (e *engine) controlStyle(c *Control, st *css.Style, lang string) *css.Style
 		maxW = math.Round(maxW)
 	}
 	lh := e.lineHeight(st, lang)
-	var w, h float64
-	switch c.Kind {
+	// above and below are what the control adds above and below its line
+	// inside its content box, as padding when its padding is a length.
+	var w, h, above, below float64
+	switch c.Kind { //nolint:exhaustive // the other controls return above: their widget or their content sizes them
 	case ControlTextField:
 		chars := max(c.Chars, 1)
 		if maxW > 0 {
@@ -143,25 +194,161 @@ func (e *engine) controlStyle(c *Control, st *css.Style, lang string) *css.Style
 		w = math.Ceil(float64(avg*float64(max(c.Chars, 1))) + textAreaScrollbar)
 		h = float64(lh * float64(max(c.Rows, 1)))
 	case ControlDropDown:
-		w = math.Ceil(e.labelsWidth(c.Labels, st, lang)/css.Pt + dropDownArrow)
-		h = lh + dropDownBlock*css.Pt
+		w = e.labelsWidth(c.Labels, st, lang) / css.Pt
+		if st.Appearance == css.AppearanceNone {
+			// No arrow and no room for it.
+			w = math.Ceil(w)
+		} else {
+			// The room for the arrow is in the padding.
+			w = math.Ceil(w+dropDownArrow) - dropDownArrow
+		}
+		h = lh
+		above, below = dropDownBlock/2*css.Pt, dropDownBlock/2*css.Pt
 	case ControlListBox:
 		w = math.Round(e.labelsWidth(c.Labels, st, lang)/css.Pt + listBoxInline)
 		row := max(lh, float64(listBoxRowMin*size)) + listBoxRowEnd*css.Pt
 		h = float64(row * float64(max(c.Rows, 1)))
+	case ControlFile:
+		// As wide as 34 zeros, its height its content's.
+		w = math.Ceil(float64(fileChars * e.labelsWidth([]ControlLabel{{Text: "0"}}, st, lang) / css.Pt))
+		setH = false
+	case ControlDate, ControlTime:
+		// The fields' text, a pixel of padding either side of each
+		// field, then the room of the picker's icon, which scales with
+		// the font.
+		room := dateIconRoom
+		if c.Kind == ControlTime {
+			room = timeIconRoom
+		}
+		scale := size / css.Pt / smallControl
+		w = math.Ceil(e.labelsWidth(c.Labels, st, lang)/css.Pt + float64(2*c.Fields) + float64(room*scale))
+		h = lh
+		if c.Kind == ControlTime {
+			above, below = float64(scale*css.Pt), float64((timeIconBlock-1)*scale*css.Pt)
+		}
 	}
 	out := *st
+	if setH && (above > 0 || below > 0) {
+		if t, b := out.Padding[css.Top], out.Padding[css.Bottom]; t.Kind == css.Points && b.Kind == css.Points {
+			out.Padding[css.Top], out.Padding[css.Bottom] = css.Pts(t.Value+above), css.Pts(b.Value+below)
+		} else {
+			h += above + below
+		}
+	}
 	if setW {
-		out.Width = css.Pts(float64(w*css.Pt) + boxSizingEdges(st, true))
+		out.Width = css.Pts(float64(w*css.Pt) + boxSizingEdges(&out, true))
 	}
 	if setH {
-		out.Height = css.Pts(h + boxSizingEdges(st, false))
+		out.Height = css.Pts(h + boxSizingEdges(&out, false))
 	}
 	if clip && out.Overflow == css.OverflowVisible {
 		out.Overflow = css.OverflowHidden
 	}
 	return &out
 }
+
+// dropDownPadding returns the style of a drop-down box styled st whose
+// arrow shows: its text 4 pixels in from its left padding edge and the
+// rest of [dropDownArrow], which holds the arrow, at its right, as
+// padding. Under appearance: none it shows no arrow and keeps no room.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets the text of
+//     a drop-down box 4 pixels in from its border, as wide as its text
+//     and 20 pixels, under an author border too; under appearance: none
+//     at its border, as wide as its text.
+func dropDownPadding(st *css.Style) *css.Style {
+	l, r := st.Padding[css.Left], st.Padding[css.Right]
+	if st.Appearance == css.AppearanceNone || l.Kind != css.Points || r.Kind != css.Points {
+		return st
+	}
+	out := *st
+	out.Padding[css.Left] = css.Pts(l.Value + dropDownText*css.Pt)
+	out.Padding[css.Right] = css.Pts(r.Value + (dropDownArrow-dropDownText)*css.Pt)
+	return &out
+}
+
+// dropDownText is the room before a drop-down box's text, in CSS pixels.
+const dropDownText = 4
+
+// The room a date or time field keeps for its picker's icon, at the
+// control font's 13.333 pixels: its gap and its width beside a date, a
+// month, a week or a local date and time, beside a time; and what a time
+// field adds to its line's height for its clock.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints date,
+//     month, week and local date and time fields 31.5 to 31.7 pixels
+//     wider than their text and a pixel of padding either side of each
+//     field, time fields 26.7 to 26.8 pixels wider and 3 pixels taller
+//     than their line, their text a pixel lower than a text field's.
+const (
+	// fileChars is how many zeros a file upload control is as wide as.
+	fileChars     = 34
+	smallControl  = 40.0 / 3
+	dateIconRoom  = 31.6
+	timeIconRoom  = 26.7
+	timeIconBlock = 3
+)
+
+// widgetBoxStyle returns the style of the box of a checkbox, a radio
+// button or a range c styled st: drawn as its widget, a checkbox and a
+// radio button are 13 by 13 pixels where st leaves their size auto and
+// keep no border or padding; a range is 129 by 16 pixels.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints check
+//     boxes and radio buttons 13 by 13 pixels at any font size, the same
+//     under a 3 pixel border or a padding, ranges 129 by 16 pixels, under
+//     appearance: none too.
+func widgetBoxStyle(c *Control, st *css.Style) *css.Style {
+	w, h := float64(widgetBox), float64(widgetBox)
+	if c.Kind == ControlRange {
+		w, h = rangeWidth, rangeHeight
+	}
+	themed := c.Kind == ControlRange || st.Appearance != css.AppearanceNone
+	setW, setH := themed && st.Width.Kind == css.Auto, themed && st.Height.Kind == css.Auto
+	strip := c.Kind != ControlRange && st.Appearance != css.AppearanceNone && hasEdges(st)
+	if !setW && !setH && !strip {
+		return st
+	}
+	out := *st
+	if strip {
+		out.Border = [4]css.Border{}
+		out.Padding = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
+	}
+	if setW {
+		out.Width = css.Pts(w * css.Pt)
+	}
+	if setH {
+		out.Height = css.Pts(h * css.Pt)
+	}
+	return &out
+}
+
+// hasEdges reports a style whose border or padding takes room.
+func hasEdges(st *css.Style) bool {
+	for s := range 4 {
+		if p := st.Padding[s]; p.Kind != css.Points || p.Value != 0 {
+			return true
+		}
+		if b := st.Border[s]; b.Style != css.BorderNone && b.Style != css.BorderHidden && b.Width > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// The default sizes of a checkbox's and a radio button's box, and of a
+// range's, in CSS pixels.
+const (
+	widgetBox   = 13
+	rangeWidth  = 129
+	rangeHeight = 16
+)
 
 // boxSizingEdges returns what a width (horizontal) or height of st adds to
 // its content box: the padding and border of that axis under box-sizing:
