@@ -5,8 +5,9 @@ import "github.com/gotenberg/litho/pkg/internal/typeset"
 // padTableRows makes every table of the structure tree under root count
 // the same columns in each row, as ISO 14289-1, 7.2 and ISO 32000-1,
 // 14.8.5.7, Table 349 ask: where a row leaves grid columns without a cell,
-// the columns a gridBefore or gridAfter skips (ECMA-376 Part 1, 17.4.15
-// and 17.4.14), an empty TD spanning them takes their place. A reader
+// the columns a gridAfter skips (ECMA-376 Part 1, 17.4.14; those a
+// gridBefore skips, 17.4.15, hold a cell of [document.skippedCells]
+// already), an empty TD spanning them takes their place. A reader
 // places a cell in the first column the cells before it and the row spans
 // above leave free, so an empty cell inserted where the free run starts
 // fills it. Nothing the page draws changes: the engine lays the row's

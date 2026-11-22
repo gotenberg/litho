@@ -479,3 +479,24 @@ func TestFrames_Placed(t *testing.T) {
 		t.Errorf("frame of one paragraph without a width: width %v, want auto", w)
 	}
 }
+
+// TestTables_GridBefore holds the place of the grid columns a row's
+// gridBefore skips with one empty cell spanning them, so that the row's
+// first cell starts in the column after them.
+func TestTables_GridBefore(t *testing.T) {
+	t.Parallel()
+	body := `<w:tbl><w:tblGrid><w:gridCol w:w="500"/><w:gridCol w:w="500"/><w:gridCol w:w="2000"/></w:tblGrid>` +
+		`<w:tr><w:trPr><w:gridBefore w:val="2"/></w:trPr><w:tc><w:p><w:r><w:t>late</w:t></w:r></w:p></w:tc></w:tr>` +
+		`<w:tr><w:tc><w:tcPr><w:gridSpan w:val="3"/></w:tcPr><w:p><w:r><w:t>whole</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>`
+	rows := role(build(t, body, nil).root, "TR")
+	if len(rows) != 2 {
+		t.Fatalf("%d rows, want 2", len(rows))
+	}
+	first := rows[0].Children
+	if len(first) != 2 || first[0].ColSpan != 2 || len(first[0].Children) != 0 || first[0].Style.Border != [4]css.Border{} || textOf(first[1]) != "late" {
+		t.Fatalf("first row: %d cells, want an empty one spanning 2 columns, then late", len(first))
+	}
+	if len(rows[1].Children) != 1 {
+		t.Errorf("second row: %d cells, want 1", len(rows[1].Children))
+	}
+}

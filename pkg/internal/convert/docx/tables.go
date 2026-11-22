@@ -664,6 +664,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			inHeader = false
 		}
 		rn := &layout.Node{Kind: layout.Element, Style: d.share(rst), Role: "TR"}
+		if b := min(row.props.gridBefore, ncols); b > 0 {
+			rn.Children = append(rn.Children, d.skippedCells(b))
+		}
 		for ci, c := range row.cells {
 			if c.col >= ncols {
 				break
@@ -799,6 +802,25 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	bs.Display = css.TableRowGroup
 	tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: d.share(&bs), Children: body})
 	return tbl
+}
+
+// skippedCells returns the cell that holds the place of the n grid
+// columns a row's gridBefore skips (ECMA-376 Part 1, 17.4.15): empty, with
+// no border and no fill, so that the row's first cell starts in the grid
+// column after them, as Word lays it out, where the table's layout would
+// set it in the first column. It is a TD of the table's structure, as
+// [padTableRows] would add.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo38414.docx: Word starts the rows of
+//     gridBefore 1 in the table's second grid column, 1872 twips wide,
+//     their first cell's text beside the narrow first column, which the
+//     last row's cell alone spans.
+func (d *document) skippedCells(n int) *layout.Node {
+	cs := d.blockOf()
+	cs.Display = css.TableCell
+	return &layout.Node{Kind: layout.Element, Style: d.share(&cs), Role: "TD", ColSpan: n}
 }
 
 // endsWithTableMark reports a cell whose last paragraph is empty and
