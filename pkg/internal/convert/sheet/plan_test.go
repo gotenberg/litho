@@ -289,6 +289,26 @@ func TestPlan_ExcelPrintsFormattedPages(t *testing.T) {
 	}
 }
 
+// TestPlan_ExcelPrintsMergedPages locks the pages of a merged cell that a
+// manual break cuts: under Excel's rules the page of its lower rows
+// prints, though no cell of it holds a value; Calc prints one page.
+func TestPlan_ExcelPrintsMergedPages(t *testing.T) {
+	for _, tc := range []struct {
+		excel bool
+		order PageOrder
+		want  int
+	}{{false, DownThenOver, 1}, {true, DownThenOver, 2}, {true, OverThenDown, 2}} {
+		sh := &Sheet{Name: "S", Page: a4(), Rows: []Row{{Index: 14, Cells: []Cell{numCell(0, 1, nil)}}}, Merges: []Range{{FirstRow: 14, LastRow: 17, FirstColumn: 0, LastColumn: 1}}}
+		sh.Page.RowBreaks = []int{16}
+		sh.Page.Order = tc.order
+		doc := newDoc(sh)
+		doc.ExcelRules = tc.excel
+		if n := len(convert(t, doc, office.Options{}).Pages); n != tc.want {
+			t.Errorf("Excel's rules %v, order %v: %d pages, want %d", tc.excel, tc.order, n, tc.want)
+		}
+	}
+}
+
 // TestPlan_ExcelPrintsBlankPages locks the pages of a range Excel prints:
 // every page in the page order up to the last that holds something, the
 // blank ones between included, where Calc prints the pages that hold

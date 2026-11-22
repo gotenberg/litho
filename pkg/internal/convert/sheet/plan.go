@@ -411,7 +411,64 @@ func (g *grid) shows(c *Cell) bool {
 //     prints eight pages blank but for the footer before its table.
 //   - litho/xlsx: sparse_far_cells prints the blank page between A1 and
 //     D120.
+//   - litho/xlsx: merged_cells prints a second page for the rows of its
+//     merged cell A15:B18 below a manual break after row 16, the lower
+//     half of its centred text on it.
 func (sp *sheetPlan) lastPrinted(ctx context.Context, a Range, rows, cols []band) (int, int, error) {
+	ri, ci, err := sp.lastHolding(ctx, a, rows, cols)
+	if err != nil {
+		return 0, 0, err
+	}
+	mr, mc := sp.lastMerged(rows, cols)
+	if mr < 0 {
+		return ri, ci, nil
+	}
+	later := mc > ci || (mc == ci && mr > ri)
+	if sp.g.sh.Page.Order == OverThenDown {
+		later = mr > ri || (mr == ri && mc > ci)
+	}
+	if later {
+		return mr, mc, nil
+	}
+	return ri, ci, nil
+}
+
+// lastMerged returns the row and column bands of the last page, in the
+// sheet's page order, that a merged cell showing something reaches:
+// the page of its bottom-right cell, the merge clipped to the bands;
+// (-1, -1) when none does. A merged cell prints on every page it
+// reaches, as [sheetPlan.lastPrinted] says.
+func (sp *sheetPlan) lastMerged(rows, cols []band) (int, int) {
+	g := sp.g
+	if len(rows) == 0 || len(cols) == 0 {
+		return -1, -1
+	}
+	at := func(bs []band, v int) int {
+		i := sort.Search(len(bs), func(i int) bool { return bs[i].last >= v })
+		return min(i, len(bs)-1)
+	}
+	lastR, lastC := -1, -1
+	for at0, m := range g.merges {
+		c := g.cell(at0[0], at0[1])
+		if c == nil || !g.shows(c) || m.LastRow < rows[0].first || m.LastColumn < cols[0].first {
+			continue
+		}
+		r, cc := at(rows, m.LastRow), at(cols, m.LastColumn)
+		later := cc > lastC || (cc == lastC && r > lastR)
+		if g.sh.Page.Order == OverThenDown {
+			later = r > lastR || (r == lastR && cc > lastC)
+		}
+		if later {
+			lastR, lastC = r, cc
+		}
+	}
+	return lastR, lastC
+}
+
+// lastHolding returns the row and column bands of the last page that
+// holds something, in the sheet's page order, merged cells aside
+// ([sheetPlan.lastPrinted]).
+func (sp *sheetPlan) lastHolding(ctx context.Context, a Range, rows, cols []band) (int, int, error) {
 	g := sp.g
 	ps := &g.sh.Page
 	var repR, repC *Range
