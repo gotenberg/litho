@@ -605,3 +605,26 @@ func TestConvert_ExcelHeaderFooterInsets(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_ExcelScaledRows locks a sheet Excel prints at 50%: each row
+// rounded to a printer pixel at the scale, 121 pixels printing 61, and the
+// top inset kept whole, so that a bottom-aligned line sits 8 pixels and its
+// scaled ascent below the row's top in a row of the standard height.
+func TestConvert_ExcelScaledRows(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "first", nil)}},
+		{Index: 1, Cells: []Cell{textCell(0, "second", nil)}},
+	}}
+	doc := excelDoc(sh)
+	sh.Page.Scale = 50
+	pg := convert(t, doc, office.Options{}).Pages[0]
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	cal11 := font{families: []string{"Carlito"}, size: 11}
+	baseline := func(s string) float64 { return pg.Height - find(t, pg, s).y }
+	if got := baseline("second") - baseline("first"); !near(got, 61*excelPixel, 0.001) {
+		t.Errorf("rows %.4f apart, want 61 printer pixels, %.4f", got, 61*excelPixel)
+	}
+	if got, want := baseline("first"), 36+0.96+0.5*(m.lineHeight(cal11)-m.descent(cal11)); !near(got, want, 0.01) {
+		t.Errorf("first baseline %.3f from the top, want %.3f", got, want)
+	}
+}

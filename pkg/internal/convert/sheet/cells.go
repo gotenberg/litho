@@ -427,11 +427,16 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		b.textBottom = max(b.textBottom, u.y+max(u.h, ext+pad[css.Top]))
 	}
 	pitch, shift := lineH, 0.0
+	padTop, padBottom := pad[css.Top], pad[css.Bottom]
+	if z := b.g.zoom; b.doc.ExcelRules && z > 0 {
+		// Excel keeps the top and bottom insets whole at any print scale.
+		padTop, padBottom = padTop/z, padBottom/z
+	}
 	if b.doc.ExcelRules && !rotated && !st.Align.Stacked {
 		if d.wrap {
 			pitch = b.excelPitch(lineH)
 		}
-		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, pad[css.Bottom])
+		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, padBottom)
 		if shift > 0 {
 			// The box moved down runs past the row's bottom, where the
 			// cell's clip cuts it.
@@ -439,7 +444,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		}
 	}
 	para := b.paragraph(&d, f, pitch, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
-	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: pad[css.Top], bottom: pad[css.Bottom], vertical: st.Align.Vertical, shift: shift}
+	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: padTop, bottom: padBottom, vertical: st.Align.Vertical, shift: shift}
 	var inner *css.Style
 	if !rotated {
 		inner = b.innerStyle(ik)
@@ -534,7 +539,7 @@ func (b *pageBuilder) excelShift(v VAlign, f font, lineH, pitch, padBottom float
 	half := float64((pitch - lineH) / 2)
 	switch v {
 	case VBottom:
-		return padBottom + half + b.m.descent(f) - b.bottomBaseline()
+		return padBottom + half + b.m.descent(f) - b.bottomBaseline(b.g.zoom)
 	case VMiddle:
 		return 0
 	case VTop, VJustify, VDistributed:
@@ -543,30 +548,40 @@ func (b *pageBuilder) excelShift(v VAlign, f font, lineH, pitch, padBottom float
 }
 
 // bottomBaseline returns how far above a cell's bottom edge Excel sets
-// the baseline of bottom-aligned text: where the Default font's baseline
-// falls in a row of the standard height when that font's line starts at
-// the cell's top padding.
+// the baseline of bottom-aligned text, in sheet points at the print scale
+// z (0 for 100%): where the Default font's baseline falls in a row of the
+// standard height, as the scale prints it ([excelZoomed]), when that
+// font's line starts at the cell's top inset, which Excel keeps whole at
+// any scale. At a small scale the baseline falls below the cell.
 //
 // # Corpus evidence
 //
 //   - All Excel references: Calibri 11 books set bottom-aligned text 26
 //     printer pixels above the cell's bottom, where this gives 25.4 (121
 //     less 8 and an ascent of 87.6); Arial 10 books 20 (103 less 8 and
-//     75.1), Calibri 10 books 22.8 (sc NoExtDataE8.xlsx: 22), Calibri 12
-//     books 27 (sc/tdf155046.xlsx: 26.8).
-func (b *builder) bottomBaseline() float64 {
-	if b.baseSet {
+//     75.1), Calibri 10 books 22.8 (openxmlsdk/xlsx NoExtDataE8.xlsx: 22),
+//     Calibri 12 books 27 (sc/tdf155046.xlsx: 26.8).
+//   - litho/xlsx: scale_percent sets its Calibri 11 text 52 printer pixels
+//     below the top of rows of 61 at 50%, and 17 below the top of rows of
+//     12 at 10% (this gives 51.8 and 16.6).
+func (b *builder) bottomBaseline(z float64) float64 {
+	if !b.baseSet {
+		b.baseSet = true
+		def := resolveFont(Font{}, b.doc.Default.Font)
+		b.ascent = b.m.lineHeight(def) - b.m.descent(def)
+		// Without a standard row the Default font's text sits on the
+		// padding.
+		b.base = max(b.doc.Default.Padding[css.Bottom], 0) + b.m.descent(def)
+	}
+	std := b.doc.StandardRowHeight
+	if !numeric.Positive(std) {
 		return b.base
 	}
-	b.baseSet = true
-	def := resolveFont(Font{}, b.doc.Default.Font)
-	// Without a standard row the Default font's text sits on the padding.
-	b.base = max(b.doc.Default.Padding[css.Bottom], 0) + b.m.descent(def)
-	if std := b.doc.StandardRowHeight; numeric.Positive(std) {
-		ascent := b.m.lineHeight(def) - b.m.descent(def)
-		b.base = max(float64(std-b.doc.Default.Padding[css.Top])-ascent, 0)
+	top := b.doc.Default.Padding[css.Top]
+	if z > 0 {
+		std, top = excelZoomed(std, z), top/z
 	}
-	return b.base
+	return float64(std-top) - b.ascent
 }
 
 // paragraph returns the block holding d's text in the font f, turned

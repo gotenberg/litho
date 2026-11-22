@@ -59,6 +59,9 @@ type grid struct {
 	// layoutRowPrefix those of the layout ones, under Calc's rules.
 	colPrefix, rowPrefix             []float64
 	layoutColPrefix, layoutRowPrefix []float64
+	// zoom is, under Excel's rules, the print scale the rows are printed
+	// at, 0 for 100% ([excelZoomed]).
+	zoom float64
 	// cond is the sheet's conditional formatting, nil for none.
 	cond *conditions
 	// need measures the room a text cell needs on one line, nil for no
@@ -178,7 +181,24 @@ func (g *grid) colWidth(c int) float64 {
 // layout height ([grid.layoutRowHeight]), under Calc's rules as Calc
 // draws it ([calcPrinted]).
 func (g *grid) rowHeight(r int) float64 {
+	if g.zoom > 0 {
+		return excelZoomed(g.layoutRowHeight(r), g.zoom)
+	}
 	return g.printed(g.layoutRowHeight(r))
+}
+
+// setZoom prints the rows at the scale z under Excel's rules, which round
+// each row to a printer pixel at it ([excelZoomed]), and forgets the
+// running sums taken at another.
+func (g *grid) setZoom(z float64) {
+	if !g.doc.ExcelRules || z == g.zoom || (z == 1 && g.zoom == 0) {
+		return
+	}
+	g.zoom = 0
+	if z != 1 {
+		g.zoom = z
+	}
+	g.rowPrefix, g.layoutRowPrefix = nil, nil
 }
 
 // printed returns a column width or row height of v points as the sheet

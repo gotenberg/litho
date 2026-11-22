@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -319,13 +320,22 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 //     apart (72.6 rounded) and 76 rows under the header row on the first
 //     page, where rows of 72.6 would fit 77; paper-fit-a3-portrait at 87%
 //     prints them 105 apart (105.27), paper-fit-a5-landscape at 58% 70
-//     (70.18), fit_to_page at 39% 47 (47.19).
+//     (70.18), fit_to_page at 39% 47 (47.19), and draws them so.
 func (sp *sheetPlan) pagedRowHeight(r, zoom int) float64 {
 	h := sp.g.layoutRowHeight(r)
 	if !sp.g.doc.ExcelRules || zoom == 100 || zoom <= 0 || sp.single {
 		return h
 	}
-	z := float64(zoom) / 100
+	return excelZoomed(h, float64(zoom)/100)
+}
+
+// excelZoomed returns a row of h points as Excel prints it at the scale
+// z: its height at the scale rounded to a printer pixel, in sheet points
+// ([sheetPlan.pagedRowHeight]).
+func excelZoomed(h, z float64) float64 {
+	if !numeric.Positive(z) {
+		return h
+	}
 	return math.Round(float64(h*z)/excelPixel) * excelPixel / z
 }
 
@@ -561,6 +571,9 @@ func (sp *sheetPlan) plan(ctx context.Context) error {
 			return err
 		}
 		sp.zoom = float64(zoom) / 100
+		if !sp.single {
+			g.setZoom(sp.zoom)
+		}
 		sp.firstRows = nil
 		cols, rows, hidden, err := sp.layoutPages(ctx, a, zoom)
 		if err != nil {
