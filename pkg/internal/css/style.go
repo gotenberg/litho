@@ -49,6 +49,11 @@ const (
 	// being {Calc, 75, 0.1}, or a function of the reference such as
 	// min(100%, 300px), which [Dimension.Resolve] evaluates.
 	Calc
+	// FitContentOf is fit-content(<length-percentage>) on width, height
+	// and their minimums and maximums (CSS Sizing 4, 3.2): the fit-content
+	// size with the argument, read with [Dimension.FitLimit], in place of
+	// the available space.
+	FitContentOf
 )
 
 // Dimension is a computed length, percentage, number or keyword.

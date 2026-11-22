@@ -723,7 +723,7 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		} else if st.FlexBasis.Kind == css.Stretch && mainDef {
 			base, ok = max(innerMain-it.mm[0]-it.mm[1]-it.mEdges, 0), true
 		}
-	case css.FlexContent, css.None, css.Normal, css.Number, css.MaxContent:
+	case css.FlexContent, css.None, css.Normal, css.Number, css.MaxContent, css.FitContentOf:
 	}
 	if !ok {
 		base = contentSize()

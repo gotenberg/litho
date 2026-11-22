@@ -161,7 +161,7 @@ func (n *calcNode) nodeCount(limit int) int {
 // calc-size() over a keyword basis: its kind is the basis, and
 // [Dimension.OfSize] applies the calculation to the basis's used size.
 func (d Dimension) SizeCalc() bool {
-	return d.expr != nil && d.Kind != Calc
+	return d.expr != nil && d.Kind != Calc && d.Kind != FitContentOf
 }
 
 // OfSize returns the used size of d whose basis takes the used size

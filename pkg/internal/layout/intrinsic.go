@@ -56,7 +56,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 			}
 			lo, hi = w, w
 		}
-		lo, hi = keywordWidth(src, lo, hi, clo, chi)
+		lo, hi = keywordWidth(src, lo, hi, clo, chi, edges)
 		if src.Width.SizeCalc() {
 			// A calc-size() width contributes its calculation of the
 			// contribution its basis makes (CSS Sizing 4, 7.1).

@@ -33,9 +33,20 @@ func hasSizing(st *css.Style) bool {
 }
 
 // contentKeyword reports the min-content, max-content or fit-content
-// keyword.
+// keyword, or fit-content().
 func contentKeyword(d css.Dimension) bool {
-	return d.Kind == css.MinContent || d.Kind == css.MaxContent || d.Kind == css.FitContent
+	return d.Kind == css.MinContent || d.Kind == css.MaxContent || d.Kind == css.FitContent || d.Kind == css.FitContentOf
+}
+
+// fitLimit returns the argument of the fit-content() d as a content size
+// against the reference ref: its length, less the padding and borders
+// edges under border-box sizing, at least 0 (CSS Sizing 4, 3.2).
+func fitLimit(d css.Dimension, ref, edges float64, borderBox bool) float64 {
+	v := resolve(d.FitLimit(), ref)
+	if borderBox {
+		v -= edges
+	}
+	return max(v, 0)
 }
 
 // contentIntrinsic returns the min- and max-content widths of b's content
@@ -96,7 +107,7 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	width := func(d css.Dimension, limit bool) css.Dimension {
 		var v float64
 		switch d.Kind { //nolint:exhaustive // the other kinds stay as they are
-		case css.MinContent, css.MaxContent, css.FitContent:
+		case css.MinContent, css.MaxContent, css.FitContent, css.FitContentOf:
 			if limit && ratioOK {
 				// A box whose ratio and definite height give its width
 				// takes that width as its min- and max-content sizes
@@ -114,6 +125,10 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 				v = lo
 			case css.MaxContent:
 				v = hi
+			case css.FitContentOf:
+				// The argument stands for the available space (CSS Sizing
+				// 4, 3.2).
+				v = min(hi, max(lo, fitLimit(d, cb.w, he, src.BoxSizing == css.BorderBox && b.kind != kindInline)))
 			default:
 				v = min(hi, max(lo, roomW))
 			}
@@ -247,12 +262,20 @@ func contentHeightBounds(b *box, h, content float64, cb cblock) float64 {
 // behave as auto, the intrinsic contributions being made under a min- or
 // max-content constraint. min-width and max-width then clamp it as they
 // clamp any width (CSS 2.1, 10.4).
-func keywordWidth(st *css.Style, lo, hi, clo, chi float64) (float64, float64) {
+func keywordWidth(st *css.Style, lo, hi, clo, chi, edges float64) (float64, float64) {
 	switch st.Width.Kind { //nolint:exhaustive // the other kinds are handled by the caller
 	case css.MinContent:
 		lo, hi = clo, clo
 	case css.MaxContent:
 		lo, hi = chi, chi
+	case css.FitContentOf:
+		// A length argument fits the content as the width does; a
+		// percentage one makes the width a cyclic percentage, which
+		// contributes as auto (CSS Sizing 3, 5.2.1).
+		if !st.Width.FitLimit().HasPercent() {
+			f := min(chi, max(clo, fitLimit(st.Width, 0, edges, st.BoxSizing == css.BorderBox)))
+			lo, hi = f, f
+		}
 	}
 	return lo, hi
 }
@@ -270,6 +293,13 @@ func keywordIntrinsic(st *css.Style, lo, hi, clo, chi, edges float64) (float64, 
 		lo, hi = min(lo, through(d, clo)), min(hi, through(d, clo))
 	case css.MaxContent:
 		lo, hi = min(lo, through(d, chi)), min(hi, through(d, chi))
+	case css.FitContentOf:
+		// A percentage argument is a cyclic percentage, which a maximum
+		// contributes as none (CSS Sizing 3, 5.2.1).
+		if !d.FitLimit().HasPercent() {
+			f := min(chi, max(clo, fitLimit(d, 0, edges, borderBox)))
+			lo, hi = min(lo, f), min(hi, f)
+		}
 	}
 	switch d := st.MinWidth; d.Kind { //nolint:exhaustive // the other kinds are handled by the caller
 	case css.MinContent:
@@ -278,6 +308,11 @@ func keywordIntrinsic(st *css.Style, lo, hi, clo, chi, edges float64) (float64, 
 		lo, hi = max(lo, through(d, chi)), max(hi, through(d, chi))
 	case css.FitContent:
 		lo, hi = max(lo, through(d, clo)), max(hi, through(d, chi))
+	case css.FitContentOf:
+		// A percentage of a minimum resolves against zero here (CSS
+		// Sizing 3, 5.2.1).
+		f := min(chi, max(clo, fitLimit(d, 0, edges, borderBox)))
+		lo, hi = max(lo, f), max(hi, f)
 	}
 	return lo, max(hi, lo)
 }
