@@ -431,14 +431,24 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	fx := slices.ContainsFunc(leaves, func(l leaf) bool { return l.fx != nil })
 	pixels := &r.effectPixels
 	late, _ := r.ctx.Value(lateKey{}).(*lateWarnings) // a type assertion, nil when absent
+	// An outline is centred on its geometry, and Excel prints its outer
+	// half past the anchor's box, a line's whole width along a row.
+	grow := 0.0
+	for _, l := range leaves {
+		if l.geom != nil && (l.style.Line != nil || l.style.LineGradient != nil) {
+			grow = max(grow, l.style.LineWidth/2)
+		}
+	}
 	out.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
-		// The leaves are clipped to the anchor's box, but a turned one,
-		// which Excel draws whole about the centre of the box its anchor
-		// holds ([leaf.whole]); each keeps its place in the paint order.
+		// The leaves are clipped to the anchor's box and their outlines'
+		// outer half, but a turned one, which Excel draws whole about the
+		// centre of the box its anchor holds ([leaf.whole]); each keeps its
+		// place in the paint order.
+		clip := typeset.Rect{X: rect.X - grow, Y: rect.Y - grow, Width: float64(rect.Width + 2*grow), Height: float64(rect.Height + 2*grow)}
 		var drawn, frags []typeset.Fragment
 		flush := func() {
 			if len(frags) > 0 {
-				drawn = append(drawn, &typeset.Group{Clip: ooxml.RectPath(rect), Content: frags})
+				drawn = append(drawn, &typeset.Group{Clip: ooxml.RectPath(clip), Content: frags})
 				frags = nil
 			}
 		}

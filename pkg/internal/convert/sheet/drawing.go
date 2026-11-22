@@ -34,7 +34,9 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 	for i := range g.sh.Drawings {
 		d := &g.sh.Drawings[i]
 		rc := g.drawingRect(d)
-		if rc.Width <= 0 || rc.Height <= 0 {
+		// A line along a row or a column, a shape, has no height or no
+		// width; a picture of either shows nothing.
+		if rc.Width < 0 || rc.Height < 0 || rc.Width+rc.Height <= 0 || (!d.Shape && (rc.Width <= 0 || rc.Height <= 0)) {
 			continue
 		}
 		pic := d.Picture
@@ -50,7 +52,7 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 			// The drawing's box in the region's coordinates.
 			x := rg.x0 + rc.X - g.layoutColX(rg.cols.first)
 			y := rg.y0 + rc.Y - g.layoutRowY(rg.rows.first)
-			if x >= rg.x0+rg.w || y >= rg.y0+rg.h || x+rc.Width <= rg.x0 || y+rc.Height <= rg.y0 {
+			if x >= rg.x0+rg.w || y >= rg.y0+rg.h || before(x+rc.Width, rg.x0, rc.Width) || before(y+rc.Height, rg.y0, rc.Height) {
 				continue
 			}
 			r := typeset.Rect{X: x, Y: y, Width: rc.Width, Height: rc.Height}
@@ -80,6 +82,13 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 		}
 	}
 	return out, figs
+}
+
+// before reports a drawing side ending at end, size long, before a
+// region starting at start: a side of no length, a line's, ends there
+// within it.
+func before(end, start, size float64) bool {
+	return end < start || (size > 0 && end <= start)
 }
 
 // figureOf returns the Figure element a drawing d is read as, nil for

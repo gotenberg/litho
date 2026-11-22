@@ -193,3 +193,35 @@ func TestRead_TurnedShapeDrawnWhole(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_ShapeOutlineWhole locks that the clip of an unturned shape
+// leaves room for its outline's outer half, which Excel prints past the
+// anchor's box: a line along a row, of no height, keeps its width.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/bnc762542.xlsx prints a framed rectangle's
+//     right and bottom edges whole and three connectors along their rows.
+func TestRead_ShapeOutlineWhole(t *testing.T) {
+	t.Parallel()
+	files := workbookFiles([]testSheet{{
+		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
+	}},
+		minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="2540000" cy="0"/><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Line"/><xdr:cNvSpPr/></xdr:nvSpPr>` +
+			`<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="0"/></a:xfrm><a:prstGeom prst="line"/><a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></xdr:spPr></xdr:sp><xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 1 || ds[0].Picture == nil || ds[0].Picture.Vector == nil {
+		t.Fatalf("drawings %+v, want one shape", ds)
+	}
+	frags := ds[0].Picture.Vector(context.Background(), typeset.Rect{X: 10, Y: 10, Width: 200})
+	g, ok := frags[0].(*typeset.Group)
+	if len(frags) != 1 || !ok || g.Clip == nil {
+		t.Fatalf("fragments %+v, want one clipped group", frags)
+	}
+	top, bottom := g.Clip.Ops[0].P[0].Y, g.Clip.Ops[2].P[0].Y
+	if top != 9 || bottom != 11 {
+		t.Errorf("clip from %v to %v down, want 9 to 11: the line's 2 points", top, bottom)
+	}
+}
