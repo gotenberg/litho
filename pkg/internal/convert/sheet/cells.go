@@ -118,6 +118,15 @@ func printedError(e PrintErrors) string {
 
 // display returns what the unit u shows in its box, or false when it
 // shows nothing.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx Booleans.xlsx, libreoffice/xlsx sc/tdf155046.xlsx: Excel
+//     centres TRUE and FALSE in cells of general alignment.
+//   - litho/xlsx print_errors, openxmlsdk/xlsx VolTypes.xlsx, poi/xlsx
+//     64473.xlsx: Excel centres #DIV/0!, #N/A, #REF! and #VALUE!, and the
+//     "--" and "#N/A" it prints in their place under errors="dash" and
+//     "NA".
 func (b *pageBuilder) display(u *unit) (display, bool) {
 	c := u.cell
 	if !hasContent(c) {
@@ -199,6 +208,11 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 		// left, or right when it starts with a right-to-left character
 		// (sc/source/ui/view/output2.cxx, getAlignmentFromContext).
 		switch {
+		case b.doc.ExcelRules && (c.Value.Kind == Bool || c.Value.Kind == Error):
+			// Excel centres booleans and errors, printed as stated or not
+			// (ECMA-376 Part 1, 18.18.40 ST_HorizontalAlignment general:
+			// "Boolean types are centered").
+			d.hAlign = HCenter
 		case d.value:
 			d.hAlign = HRight
 		case startsRTL(d.text):

@@ -795,3 +795,33 @@ func TestConvert_ExcelFitRowsBaseline(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_ExcelCentresBooleansAndErrors locks Excel's general
+// alignment: a boolean and an error sit in the middle of their cell, a
+// number at its right; Calc sets all three at the right.
+func TestConvert_ExcelCentresBooleansAndErrors(t *testing.T) {
+	left := &Style{Align: Alignment{Horizontal: HLeft}}
+	right := &Style{Align: Alignment{Horizontal: HRight}}
+	sheetOf := func() *Sheet {
+		return &Sheet{Name: "S", DefaultColumnWidth: 80, Rows: []Row{
+			{Index: 0, Cells: []Cell{
+				{Column: 0, Value: Value{Kind: Bool, Number: 1}},
+				{Column: 1, Value: Value{Kind: Error, Text: "#N/A"}},
+				numCell(2, 7, nil),
+			}},
+			{Index: 1, Cells: []Cell{textCell(0, "a", left), textCell(1, "b", left)}},
+			{Index: 2, Cells: []Cell{textCell(0, "c", right), textCell(1, "d", right)}},
+		}}
+	}
+	pg := convert(t, excelDoc(sheetOf()), office.Options{}).Pages[0]
+	for _, tc := range [][3]string{{"TRUE", "a", "c"}, {"#N/A", "b", "d"}} {
+		r, l, e := find(t, pg, tc[0]), find(t, pg, tc[1]), find(t, pg, tc[2])
+		if got, want := (r.x+r.endX)/2, (l.x+e.endX)/2; !near(got, want, 1) {
+			t.Errorf("Excel sets %s about %.2f, want the cell's middle %.2f", tc[0], got, want)
+		}
+	}
+	calc := convert(t, newDoc(sheetOf()), office.Options{}).Pages[0]
+	if b, c := find(t, calc, "TRUE"), find(t, calc, "c"); !near(b.endX, c.endX, 0.5) {
+		t.Errorf("Calc ends TRUE at %.2f, want the cell's right side %.2f", b.endX, c.endX)
+	}
+}
