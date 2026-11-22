@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-22T00:35:52Z",
+  "captured_at": "2026-11-22T09:52:40Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 207,
-          "mismatched": 62,
+          "matched": 211,
+          "mismatched": 58,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -38599,11 +38599,11 @@
               "text_f1": 1
             },
             "sd/smartart-data-follow.pptx": {
-              "layout": 0,
+              "layout": 0.9682,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-dir.pptx": {
@@ -38639,7 +38639,7 @@
               "text_f1": 1
             },
             "sd/smartart-linear-rule.pptx": {
-              "layout": 0.9736,
+              "layout": 0.9944,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38671,19 +38671,19 @@
               "text_f1": 1
             },
             "sd/smartart-org-chart.pptx": {
-              "layout": 0,
+              "layout": 0.9742,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-org-chart2.pptx": {
-              "layout": 0,
+              "layout": 0.9693,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-picture-strip.pptx": {
@@ -38711,11 +38711,11 @@
               "text_f1": 1
             },
             "sd/smartart-recursion.pptx": {
-              "layout": 0,
+              "layout": 0.9734,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-rightoleftblockdiagram.pptx": {
@@ -60289,12 +60289,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 222,
+          "matched": 224,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 222,
+            "pages_equal": 224,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -60602,8 +60602,24 @@
               "strict": 1,
               "text_f1": 1
             },
+            "forms-controls": {
+              "layout": 0.8006,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 0.875
+            },
             "forms-fieldsets-details": {
               "layout": 0.9255,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "frames-files": {
+              "layout": 0.9359,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -62078,31 +62094,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 219,
+          "matched": 221,
           "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 475,
-            "pass_a1a": 222,
-            "pass_a1b": 222,
-            "pass_a2a": 222,
-            "pass_a2a+ua1": 219,
-            "pass_a2b": 222,
-            "pass_a2u": 222,
-            "pass_a3a": 222,
-            "pass_a3b": 222,
-            "pass_a3u": 222,
-            "pass_a4": 222,
-            "pass_a4+ua2": 220,
-            "pass_a4e": 222,
-            "pass_ua1": 219,
-            "pass_ua2": 220,
-            "pass_v1.4": 222,
-            "pass_v1.5": 222,
-            "pass_v1.6": 222,
-            "pass_v1.7": 222,
-            "pass_v2.0": 222,
+            "pass_a1a": 224,
+            "pass_a1b": 224,
+            "pass_a2a": 224,
+            "pass_a2a+ua1": 221,
+            "pass_a2b": 224,
+            "pass_a2u": 224,
+            "pass_a3a": 224,
+            "pass_a3b": 224,
+            "pass_a3u": 224,
+            "pass_a4": 224,
+            "pass_a4+ua2": 222,
+            "pass_a4e": 224,
+            "pass_ua1": 221,
+            "pass_ua2": 222,
+            "pass_v1.4": 224,
+            "pass_v1.5": 224,
+            "pass_v1.6": 224,
+            "pass_v1.7": 224,
+            "pass_v2.0": 224,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -62910,7 +62926,49 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "forms-controls": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "forms-fieldsets-details": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "frames-files": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -78449,7 +78507,7 @@
     "litho/stress": {
       "features": {
         "robustness": {
-          "matched": 17,
+          "matched": 18,
           "mismatched": 0,
           "skipped": 0,
           "outcomes": {
@@ -78461,6 +78519,7 @@
             "html-4mib": "pass",
             "html-frames-10000": "pass",
             "html-frames-chain-200": "pass",
+            "html-frames-documents": "pass",
             "html-frames-self": "pass",
             "html-jpeg-10": "pass",
             "html-jpeg-50": "pass",
@@ -90583,8 +90642,8 @@
     "openxmlsdk/pptx": {
       "features": {
         "diff": {
-          "matched": 106,
-          "mismatched": 42,
+          "matched": 113,
+          "mismatched": 35,
           "skipped": 34,
           "metrics": {
             "convert_error": 0,
@@ -91521,7 +91580,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/CompBckgrndPres_TP10220211.potx": {
-              "layout": 0.8608,
+              "layout": 0.9205,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91545,23 +91604,23 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/EmpOrienPres_TP10220212.potx": {
-              "layout": 0.8202,
+              "layout": 0.919,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.2,
+              "strict": 0.3,
               "text_f1": 0.9889
             },
             "v2FxTestFiles/presentation/O12_templates/HorizHierChart_TP10220217.potx": {
-              "layout": 0,
+              "layout": 0.9783,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/HorizLabHierChart_TP10220218.potx": {
-              "layout": 0.0243,
+              "layout": 0.6079,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91577,15 +91636,15 @@
               "text_f1": 0.9844
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx": {
-              "layout": 0,
+              "layout": 0.9651,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.6667
+              "strict": 1,
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D.pptx": {
-              "layout": 0.0503,
+              "layout": 0.9441,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91593,36 +91652,36 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D_Animation_Fly_In_as_one_object_.pptx": {
-              "layout": 0,
+              "layout": 0.9329,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8571
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D_Animation_Fly_In_by_level_one_by_one_.pptx": {
-              "layout": 0,
+              "layout": 0.9335,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8718
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1_Animation_Fly_In_as_one_object_.pptx": {
-              "layout": 0,
+              "layout": 0.9602,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8148
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1_Animation_Fly_In_by_level_one_by_one_.pptx": {
-              "layout": 0,
+              "layout": 0.9647,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8387
+              "strict": 1,
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/Table_Large.pptx": {
               "layout": 0.9783,
@@ -119618,8 +119677,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5213,
-          "mismatched": 507,
+          "matched": 5214,
+          "mismatched": 506,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -125032,7 +125091,7 @@
             "css/motion/offset-path-coord-box-003.html": "pass",
             "css/motion/offset-path-coord-box-004.html": "pass",
             "css/motion/offset-path-ray-001.html": "pass",
-            "css/motion/offset-path-ray-002.html": "fail",
+            "css/motion/offset-path-ray-002.html": "pass",
             "css/motion/offset-path-ray-003.html": "pass",
             "css/motion/offset-path-ray-004.html": "pass",
             "css/motion/offset-path-ray-005.html": "pass",
