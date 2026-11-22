@@ -146,7 +146,7 @@ var stagePins = map[string][]string{
 	"goldens/facturx-validity":   {"MUSTANG_VERSION", "JRE_VERSION"},
 	"goldens/render":             {"POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST", "POPPLER_DATA_VERSION", "NOTO_CJK_SANS_VERSION"},
 	"goldens/facturx-schematron": {"KOSIT_VERSION", "XRECHNUNG_CONFIG_TAG", "XRECHNUNG_CONFIG_ASSET", "EN16931_VERSION", "MUSTANG_VERSION", "JRE_VERSION"},
-	"goldens/diff":               {"PDFJS_REVISION", "NODE_VERSION", "POPPLER_VERSION", "POPPLER_DEBIAN_RELEASE", "POPPLER_DEBIAN_IMAGE_DIGEST", "POPPLER_DATA_VERSION", "NOTO_CJK_SANS_VERSION"},
+	"goldens/diff":               {"PDFJS_REVISION", "NODE_VERSION"},
 }
 
 // sourcePins maps each corpus source directory to the pins its PDFs come

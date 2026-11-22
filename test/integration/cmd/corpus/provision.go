@@ -214,16 +214,15 @@ func (p *provisioner) renderGoldens(ctx context.Context, pdfs string) error {
 // diffGoldens makes the diff goldens of the html and Office corpora: what
 // the Chromium or LibreOffice reference PDFs hold, read the ways the diff
 // feature reads litho's conversion of the same source. PDF.js extracts each
-// page's text and lists its links, poppler draws every page of every PDF.
-//
-// An Office reference's annotations are left out of its pages: the notes
-// LibreOffice exports have no appearance, so the icon drawn is the viewer's,
-// and the form fields' appearances use fonts it does not embed.
+// page's text and lists its links. The pages are not drawn here: the diff
+// feature draws each reference with litho's renderer when it scores it, as
+// it draws litho's conversion, so a drawing never outlives the renderer
+// that made it.
 func (p *provisioner) diffGoldens(ctx context.Context, pdfs string) error {
 	diff := filepath.Join(p.out, "goldens", "diff")
-	sub := []string{"text", "metadata", "render", "links"}
-	if nonEmptyDir(filepath.Join(diff, "text")) && nonEmptyDir(filepath.Join(diff, "render")) && nonEmptyDir(filepath.Join(diff, "links")) {
-		fmt.Println("==> diff goldens already present, skipping PDF.js and pdftoppm.")
+	sub := []string{"text", "metadata", "links"}
+	if nonEmptyDir(filepath.Join(diff, "text")) && nonEmptyDir(filepath.Join(diff, "links")) {
+		fmt.Println("==> diff goldens already present, skipping PDF.js.")
 		return nil
 	}
 	if err := os.RemoveAll(diff); err != nil {
@@ -234,25 +233,14 @@ func (p *provisioner) diffGoldens(ctx context.Context, pdfs string) error {
 			return err
 		}
 	}
-	fmt.Println("==> generating diff goldens (PDF.js text and links, pdftoppm pages)...")
+	fmt.Println("==> generating diff goldens (PDF.js text and links)...")
 	if err := node(ctx, "gen-references.mjs", "--pdfs-dir", pdfs, "--text-out", filepath.Join(diff, "text"), "--meta-out", filepath.Join(diff, "metadata")); err != nil {
-		return err
-	}
-	hide := officeFormats[filepath.Base(p.corpus)]
-	if err := renderPDFs(ctx, pdfs, filepath.Join(diff, "render"), 256, 0, hide); err != nil {
 		return err
 	}
 	if err := node(ctx, "gen-links.mjs", "--pdfs-dir", pdfs, "--out", filepath.Join(diff, "links")); err != nil {
 		return err
 	}
 	return p.record("goldens/diff", nil)
-}
-
-// officeFormats are the formats of the Office corpora, named by the last
-// element of the corpus name.
-var officeFormats = map[string]bool{
-	"docx": true, "odt": true, "xlsx": true, "ods": true, "csv": true,
-	"pptx": true, "odp": true, "doc": true, "xls": true, "ppt": true,
 }
 
 func (p *provisioner) bookmarkGoldens(ctx context.Context, pdfs string) error {
