@@ -17,8 +17,9 @@ import (
 )
 
 // FuzzFrames converts a page that frames the fuzzed bytes as a file, which
-// may frame itself, and as a srcdoc: the conversion ends, within its
-// bounds, with a valid document.
+// may frame itself, as a srcdoc, as a text file and as a file the bytes
+// alone say the kind of, a picture among them, and shows them in an object:
+// the conversion ends, within its bounds, with a valid document.
 func FuzzFrames(f *testing.F) {
 	valid := `<!doctype html><style>@page{size:A6}body{background:red}</style><p>x</p><iframe src="f.html" width=50% height=-1></iframe>` +
 		`<iframe srcdoc="<iframe src=f.html#a style='transform:rotate(9deg)'></iframe>"></iframe><object data=f.html></object>` +
@@ -26,9 +27,15 @@ func FuzzFrames(f *testing.F) {
 	f.Add([]byte(valid))
 	f.Add([]byte(valid[:len(valid)/2]))
 	f.Add([]byte("<iframe srcdoc=\"\xff\xfe\"></iframe>"))
+	pic := pngBytes(f, 3, 2)
+	f.Add(pic)
+	f.Add(pic[:len(pic)/2])
+	f.Add([]byte("<b>plain</b>\n\ttext \x1b\x00"))
+	f.Add([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><image href="f" width="9" height="9"/></svg>`))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		fsys := fstest.MapFS{"f.html": {Data: data}}
-		src := `<iframe src="f.html" width=300 height=200></iframe><iframe srcdoc="` + html.EscapeString(string(data)) + `"></iframe>`
+		fsys := fstest.MapFS{"f.html": {Data: data}, "f.txt": {Data: data}, "f": {Data: data}}
+		src := `<iframe src="f.html" width=300 height=200></iframe><iframe srcdoc="` + html.EscapeString(string(data)) + `"></iframe>` +
+			`<iframe src="f.txt" width=200 height=100></iframe><iframe src="f" width=200 height=100></iframe><object data="f">x</object><embed src="f" type="text/plain">`
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		o := Options{Resources: fsys, MaxInputBytes: 1 << 14, MaxPages: 16}

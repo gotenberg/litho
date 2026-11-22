@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"math"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -13,6 +14,7 @@ import (
 
 	dom "golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -220,8 +222,10 @@ func TestFrame_Bounds(t *testing.T) {
 		{name: "missing", src: `<p>Outertext</p><iframe src="missing.html"></iframe>`, fsys: fstest.MapFS{},
 			code: warn.ResourceFailed, message: "the frame missing.html was left out", want: []string{"Outertext"}},
 		{name: "outside the root", src: `<iframe src="../x.html"></iframe>`, fsys: fstest.MapFS{}, code: warn.ResourceRefused, message: "the frame ../x.html was left out"},
-		{name: "a picture", src: `<iframe src="p.png"></iframe>`, fsys: fstest.MapFS{"p.png": {Data: pngBytes(t, 2, 2)}}, code: warn.ContentUnsupported, message: "not an HTML document"},
-		{name: "a text file", src: `<iframe src="t.txt"></iframe>`, fsys: fstest.MapFS{"t.txt": {Data: []byte("<b>x")}}, code: warn.ContentUnsupported, message: "not an HTML document"},
+		{name: "a binary file", src: `<iframe src="t.txt"></iframe><p>Outertext</p>`, fsys: fstest.MapFS{"t.txt": {Data: []byte("x\x00y")}},
+			code: warn.ContentUnsupported, message: "neither an HTML document, a picture nor plain text", want: []string{"Outertext"}},
+		{name: "a long text file", src: `<iframe src="t.txt"></iframe><p>Outertext</p>`, fsys: fstest.MapFS{"t.txt": {Data: []byte("Head " + strings.Repeat("é", maxFrameTextBytes))}},
+			code: warn.LimitReached, message: fmt.Sprintf("shows the first %d bytes of its text", maxFrameTextBytes), want: []string{"Outertext", "Head"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -495,5 +499,111 @@ func TestFrame_Frameset(t *testing.T) {
 	doc = convertDoc(t, `<!doctype html><p>Outertext</p><frame src="left.html">`, Options{Resources: fsys})
 	if got := docText(doc); strings.Contains(got, "Lefttext") {
 		t.Errorf("text %q: a frame in a body counts", got)
+	}
+}
+
+// pictureRects returns the rectangles of the images under frags, in the
+// coordinates of the group that holds each.
+func pictureRects(frags []typeset.Fragment) []typeset.Rect {
+	var out []typeset.Rect
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *typeset.Group:
+			out = append(out, pictureRects(v.Content)...)
+		case *typeset.Image:
+			out = append(out, v.Rect)
+		}
+	}
+	return out
+}
+
+// A frame of a picture shows it in an image document, at its natural size
+// at the top left of the viewport (HTML Standard, 7.6.2), whatever names
+// it; a frame of a text file shows a text document (7.6.3), its markup as
+// text; an object or an embed of a picture draws it as an img does
+// (4.8.7), of a text file as a frame.
+func TestFrame_ShowsPicturesAndTextFiles(t *testing.T) {
+	pic := pngBytes(t, 4, 2)
+	fsys := fstest.MapFS{
+		"p.png": {Data: pic}, "noext": {Data: pic}, "t.txt": {Data: []byte("<b>Bold?</b>\n\tTabbed")},
+		"u.text": {Data: []byte("Textext")}, "notes.md": {Data: []byte("Markdowntext")},
+	}
+	tests := []struct {
+		name, src string
+		want      []string
+		absent    []string
+		pictures  int
+		size      [2]float64
+	}{
+		{name: "picture", src: `<iframe src="p.png" width=100 height=50></iframe>`, pictures: 1, size: [2]float64{4, 2}},
+		{name: "picture by its bytes", src: `<iframe src="noext" width=100 height=50></iframe>`, pictures: 1, size: [2]float64{4, 2}},
+		{name: "text file", src: `<iframe src="t.txt" width=300 height=100></iframe>`, want: []string{"<b>Bold?</b>", "Tabbed"}},
+		{name: "text extension", src: `<iframe src="u.text"></iframe>`, want: []string{"Textext"}},
+		{name: "data text", src: `<iframe src="data:,Datatext"></iframe>`, want: []string{"Datatext"}},
+		{name: "another name", src: `<iframe src="notes.md"></iframe><p>Outertext</p>`, want: []string{"Outertext"}, absent: []string{"Markdowntext"}},
+		{name: "object of a picture", src: `<object data="p.png">Fallbacktext</object>`, absent: []string{"Fallbacktext"}, pictures: 1, size: [2]float64{4, 2}},
+		{name: "object of a picture sized", src: `<object data="p.png" type="image/png" width=40 height=10>Fallbacktext</object>`, absent: []string{"Fallbacktext"}, pictures: 1, size: [2]float64{40, 10}},
+		{name: "embed of a picture", src: `<embed src="p.png">`, pictures: 1, size: [2]float64{4, 2}},
+		{name: "object of a text file", src: `<object data="t.txt" type="text/plain">Fallbacktext</object>`, want: []string{"Tabbed"}, absent: []string{"Fallbacktext"}},
+		{name: "object of a picture named as text", src: `<object data="p.png" type="text/plain">Fallbacktext</object>`, want: []string{"Fallbacktext"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := convertDoc(t, `<!doctype html><body>`+tt.src, Options{Resources: fsys})
+			got := docText(doc)
+			for _, w := range tt.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("text %q, want %q", got, w)
+				}
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(got, a) {
+					t.Errorf("text %q holds %q", got, a)
+				}
+			}
+			rects := pictureRects(doc.Pages[0].Content)
+			if len(rects) != tt.pictures {
+				t.Fatalf("%d pictures, want %d", len(rects), tt.pictures)
+			}
+			if tt.pictures > 0 {
+				r := rects[0]
+				if math.Abs(r.Width-tt.size[0]*css.Pt) > 0.01 || math.Abs(r.Height-tt.size[1]*css.Pt) > 0.01 {
+					t.Errorf("picture %v, want %v px", r, tt.size)
+				}
+			}
+		})
+	}
+}
+
+// The kind of a frame's resource comes from its bytes for a picture, from
+// its media type or its name for HTML and text, never from a name alone
+// for text whose bytes are binary (MIME Sniffing 7.2).
+func TestFrameKindOf(t *testing.T) {
+	pic := pngBytes(t, 1, 1)
+	for _, tc := range []struct {
+		u    string
+		f    fetched
+		want frameKind
+	}{
+		{"/.litho-root/a.png", fetched{data: pic}, framePicture},
+		{"/.litho-root/a.html", fetched{data: pic}, framePicture},
+		{"/.litho-root/a", fetched{data: []byte("<p>x")}, frameHTML},
+		{"/.litho-root/a.htm", fetched{data: []byte("<p>x")}, frameHTML},
+		{"/.litho-root/a.txt", fetched{data: []byte("<p>x")}, frameText},
+		{"/.litho-root/a.txt", fetched{data: []byte("a\x1bb")}, frameText},
+		{"/.litho-root/a.txt", fetched{data: []byte("a\x1ab")}, frameNone},
+		{"/.litho-root/a.txt", fetched{data: []byte("a\x00b")}, frameNone},
+		{"/.litho-root/a.pdf", fetched{data: []byte("%PDF-1.7")}, frameNone},
+		{"https://example.com/a", fetched{data: []byte("x"), mediaType: "text/plain; charset=utf-8"}, frameText},
+		{"https://example.com/a.png", fetched{data: []byte("x"), mediaType: "text/html"}, frameHTML},
+		{"https://example.com/a", fetched{data: pic, mediaType: "image/png"}, framePicture},
+		{"https://example.com/a", fetched{data: pic, mediaType: "text/plain"}, frameNone},
+		{"data:,x", fetched{data: []byte("x")}, frameText},
+		{"data:;base64,eA==", fetched{data: []byte("x")}, frameText},
+		{"data:text/html,x", fetched{data: []byte("x")}, frameHTML},
+	} {
+		if got := frameKindOf(tc.u, tc.f); got != tc.want {
+			t.Errorf("frameKindOf(%q, %q, %q) = %d, want %d", tc.u, tc.f.mediaType, tc.f.data[:min(len(tc.f.data), 8)], got, tc.want)
+		}
 	}
 }

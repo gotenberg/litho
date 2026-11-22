@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"math"
 	"net/url"
 	"path"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -101,6 +103,9 @@ type frameSet struct {
 
 // frameSource is the document a frame's URL names, or why it has none.
 type frameSource struct {
+	// kind is what the resource is shown as, and data the HTML of a
+	// document or the text of a plain text file; a picture keeps none.
+	kind frameKind
 	data string
 	// url is where the document came from, after redirects.
 	url string
@@ -266,13 +271,16 @@ func (b *builder) frameNode(n *dom.Node, st *css.Style, req *frameRequest) []*la
 }
 
 // embeddedDocument builds the replaced box of an object or an embed
-// element n styled st whose resource is an HTML document (HTML Standard,
-// 4.8.6 and 4.8.7: either makes a child navigable for it, shown as an
-// iframe's document is, without the iframe's border): the URL of its
-// attribute key, data or src, whose type attribute, when present, names
-// HTML, and whose resource loads and reads as an HTML document
-// ([htmlDocument]). It returns nil for any other, which the caller
-// draws as before: an object's fallback content, or nothing for an embed.
+// element n styled st whose resource it shows (HTML Standard, 4.8.6 and
+// 4.8.7): the URL of its attribute key, data or src, whose type attribute,
+// when present, names HTML, plain text or an image type, and whose
+// resource loads and reads as one, of that type when it names one
+// ([frameKindOf]). An HTML document or a
+// text file makes a child navigable, shown as an iframe's document is,
+// without the iframe's border; a picture is drawn as an img draws it,
+// scaled to the box (4.8.7: the object represents the image). It returns
+// nil for any other, which the caller draws as before: an object's
+// fallback content, or nothing for an embed.
 //
 // # Corpus evidence
 //
@@ -281,6 +289,12 @@ func (b *builder) frameNode(n *dom.Node, st *css.Style, req *frameRequest) []*la
 //     of src="c.html" as a frame of c.html without a border, 300 by 150
 //     pixels unless sized, the document's body background filling the
 //     box, the object's fallback content not shown.
+//   - probe, html: an embed and an object of type text/plain of a text
+//     file as a text document without a border; an object of a PNG, with
+//     or without type="image/png", and an embed of it at the picture's
+//     natural size, stretched over the box at a width and a height,
+//     fitted by object-fit; an object of a PNG that does not load as its
+//     fallback content.
 func (b *builder) embeddedDocument(ctx context.Context, n *dom.Node, st *css.Style, key string) []*layout.Node {
 	if b.frames == nil {
 		return nil
@@ -294,20 +308,52 @@ func (b *builder) embeddedDocument(ctx context.Context, n *dom.Node, st *css.Sty
 	if u == "" {
 		return nil
 	}
+	want := frameNone
 	if typ, ok := attr(n, "type"); ok {
 		mt, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(typ)), ";")
-		if mt != "text/html" && mt != "application/xhtml+xml" {
+		switch mt = strings.TrimSpace(mt); {
+		case mt == "text/html", mt == "application/xhtml+xml":
+			want = frameHTML
+		case mt == "text/plain":
+			want = frameText
+		case strings.HasPrefix(mt, "image/"):
+			want = framePicture
+		default:
 			return nil
 		}
-	} else if !htmlName(u) {
-		return nil
 	}
 	req := b.newFrameRequest(n)
 	req.u, req.shown = u, displayURL(src)
-	if b.frames.source(ctx, req).err != nil {
+	got := b.frames.source(ctx, req)
+	switch {
+	case got.err != nil, want != frameNone && got.kind != want:
 		return nil
+	case got.kind == framePicture:
+		return b.embeddedPicture(ctx, n, st, u, src)
 	}
 	return b.frameNode(n, st, req)
+}
+
+// embeddedPicture builds the replaced box of an object or an embed element
+// n styled st whose resource, at u (src as written), is a picture: drawn as
+// an img draws its picture, a Figure described by the element's title;
+// nil, with the picture's warning, when it does not decode.
+func (b *builder) embeddedPicture(ctx context.Context, n *dom.Node, st *css.Style, u, src string) []*layout.Node {
+	pic, err := b.res.picture(ctx, u)
+	if err != nil {
+		if ctx.Err() == nil {
+			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Effect: warn.Omitted, Message: fmt.Sprintf(
+				"the image %s was left out: %v", displayURL(src), err)})
+		}
+		return nil
+	}
+	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic, Role: "Figure"}
+	node.ID, _ = attr(n, "id")
+	node.Alt, _ = attr(n, "title")
+	if lang, ok := attr(n, "lang"); ok {
+		node.Lang = strings.TrimSpace(lang)
+	}
+	return []*layout.Node{node}
 }
 
 // htmlName reports a URL whose path names an HTML document by its
@@ -432,7 +478,7 @@ func (s *frameSet) layOutFrame(ctx context.Context, req *frameRequest, w, h floa
 			}
 			return left(src.code, loadReason(src.err))
 		}
-		data = src.data
+		data = s.documentOf(req, src)
 		fd.url, fd.base, fd.links = src.url, src.url, src.url
 		if fd.url == documentURL {
 			// The conversion's own document resolves its links as written.
@@ -462,6 +508,54 @@ func (s *frameSet) layOutFrame(ctx context.Context, req *frameRequest, w, h floa
 	return out
 }
 
+// maxFrameTextBytes bounds the bytes of a plain text file a frame shows:
+// 256 KiB, the first part of a longer file, with a warning. Anti-DoS guard,
+// not spec-mandated: the whole text document is laid out to show its first
+// viewport, and a page-sized frame shows a few thousand characters of
+// text, so 256 KiB covers a frame dozens of pages tall while a file of
+// 50 MB on one line is not set in full.
+const maxFrameTextBytes = 256 << 10
+
+// documentOf returns the HTML document src, the resource of the frame req
+// asks for, is shown as: an HTML document as it is; a picture in an image
+// document, an img naming it in a body without margins (HTML Standard,
+// 7.6.2), described by the frame's title when it has one; plain text in a text document, a pre
+// holding the text that wraps at the viewport's edge (7.6.3), the first
+// [maxFrameTextBytes] of it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 shows a 120 by 80
+//     PNG at its natural size at the top left of a 300 by 150 frame and a
+//     600 by 400 one cut at the frame's edges; a text file in 13 pixel
+//     DejaVu Sans Mono 8 pixels in from the frame's edges, its markup as
+//     text, its tabs and leading spaces kept and a long line wrapped at
+//     the viewport, as the document <pre style="word-wrap: break-word;
+//     white-space: pre-wrap;"> Chromium writes for a text file lays it.
+func (s *frameSet) documentOf(req *frameRequest, src frameSource) string {
+	switch src.kind {
+	case framePicture:
+		img := `<img src="` + html.EscapeString(src.url) + `"`
+		if title, _ := attr(req.n, "title"); strings.TrimSpace(title) != "" {
+			img += ` alt="` + html.EscapeString(title) + `"`
+		}
+		return `<!DOCTYPE html><html><body style="margin: 0px">` + img + `></body></html>`
+	case frameText:
+		text := src.data
+		if len(text) > maxFrameTextBytes {
+			cut := maxFrameTextBytes
+			for cut > 0 && !utf8.RuneStart(text[cut]) {
+				cut--
+			}
+			text = text[:cut]
+			s.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the frame %s shows the first %d bytes of its text", req.shown, maxFrameTextBytes))
+		}
+		return `<!DOCTYPE html><html><head></head><body><pre style="word-wrap: break-word; white-space: pre-wrap;">` + html.EscapeString(text) + `</pre></body></html>`
+	case frameNone, frameHTML:
+	}
+	return src.data
+}
+
 // frameErrorCode returns the warning code of a frame's document that did
 // not lay out: past a bound of the conversion, a limit; else a failure.
 func frameErrorCode(err error) warn.Code {
@@ -489,10 +583,15 @@ func (s *frameSet) source(ctx context.Context, req *frameRequest) frameSource {
 	case err != nil:
 		req.res.failLoad("frame", req.u, err)
 		src = frameSource{err: err, code: warningCode(err)}
-	case !htmlDocument(req.u, f):
-		src = frameSource{err: errNotHTML, code: warn.ContentUnsupported}
 	default:
-		src = frameSource{data: Decode(f.data), url: f.url}
+		switch kind := frameKindOf(req.u, f); kind {
+		case frameHTML, frameText:
+			src = frameSource{kind: kind, data: Decode(f.data), url: f.url}
+		case framePicture:
+			src = frameSource{kind: kind, url: f.url}
+		case frameNone:
+			src = frameSource{err: errNotDocument, code: warn.ContentUnsupported}
+		}
 	}
 	if ctx.Err() != nil {
 		return src
@@ -503,37 +602,111 @@ func (s *frameSet) source(ctx context.Context, req *frameRequest) frameSource {
 	return src
 }
 
-// errNotHTML is a frame's resource litho does not lay out as a document.
-var errNotHTML = errors.New("the resource is not an HTML document")
+// errNotDocument is a frame's resource litho does not show: neither an
+// HTML document, a picture nor plain text.
+var errNotDocument = errors.New("the resource is neither an HTML document, a picture nor plain text")
 
-// htmlDocument reports a resource u names, fetched as f, read as an HTML
-// document: one served as text/html or application/xhtml+xml, a data: URL
-// of one of those media types, or a file whose name ends in .html, .htm,
-// .xhtml, .xht or no extension, unless its bytes are a picture. Chromium
-// shows a picture or a plain text file in a document of its own; litho
-// shows neither.
-func htmlDocument(u string, f fetched) bool {
-	mt := strings.ToLower(f.mediaType)
+// frameKind is what a frame's resource is shown as (HTML Standard, 7.4.3,
+// loading a document: an HTML document, an image document or a text
+// document).
+type frameKind uint8
+
+// The kinds of a frame's document.
+const (
+	// frameNone is a resource litho does not show.
+	frameNone frameKind = iota
+	// frameHTML is an HTML document.
+	frameHTML
+	// framePicture is a picture, shown in an image document (7.6.2).
+	framePicture
+	// frameText is a plain text file, shown in a text document (7.6.3).
+	frameText
+)
+
+// mediaTypeOf returns the media type of the resource u names, fetched as
+// f, lower-cased and without parameters: the type it was served with, the
+// one a data: URL states, text/plain for a data: URL that states none
+// (RFC 2397, 2), "" for a file, which states none.
+func mediaTypeOf(u string, f fetched) string {
+	mt, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(f.mediaType)), ";")
 	if mt == "" && len(u) >= 5 && strings.EqualFold(u[:5], "data:") {
-		// RFC 2397, 2: a data: URL without a media type is text/plain.
 		meta, _, _ := strings.Cut(u[5:], ",")
 		mt, _, _ = strings.Cut(strings.ToLower(strings.TrimSpace(meta)), ";")
-		if mt == "" {
+		if mt == "" || mt == "base64" {
 			mt = "text/plain"
 		}
 	}
-	switch mt {
-	case "text/html", "application/xhtml+xml":
+	return strings.TrimSpace(mt)
+}
+
+// frameKindOf returns what the resource u names, fetched as f, is shown as
+// in a frame. Its bytes decide a picture, by the sniffing the converter
+// applies to every picture (isSVG, imagefile.DecodeConfig, the image type
+// patterns of MIME Sniffing 6.1), whatever its name or its type says but
+// another type than an image one; then an HTML document is one served as
+// text/html or application/xhtml+xml, or a file whose name ends in .html,
+// .htm, .xhtml, .xht or nothing; and plain text one served as text/plain,
+// or a file whose name ends in .txt or .text, whose first bytes hold no
+// binary data byte (MIME Sniffing 7.2). Anything else is not shown.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 shows a PNG file
+//     named pic.png, and the same bytes in a file without an extension,
+//     as a picture in a frame, and a .txt file, a .text file and a
+//     data:text/plain URL as a text document.
+func frameKindOf(u string, f fetched) frameKind {
+	mt := mediaTypeOf(u, f)
+	switch {
+	case (mt == "" || strings.HasPrefix(mt, "image/")) && isPictureData(u, f.data):
+		return framePicture
+	case mt == "text/html", mt == "application/xhtml+xml", mt == "" && htmlName(u):
+		return frameHTML
+	case (mt == "text/plain" || mt == "" && textName(u)) && !binaryData(f.data):
+		return frameText
+	}
+	return frameNone
+}
+
+// isPictureData reports bytes the converter draws as a picture: an SVG
+// document, or a raster format imagefile reads.
+func isPictureData(u string, data []byte) bool {
+	if isSVG(u, data) {
 		return true
-	case "":
-	default:
-		return false
 	}
-	if !htmlName(u) || isSVG(u, f.data) {
-		return false
+	_, _, err := imagefile.DecodeConfig(data)
+	return err == nil
+}
+
+// textName reports a URL whose path names a plain text file by its
+// extension.
+func textName(u string) bool {
+	p := u
+	if pu, err := url.Parse(u); err == nil {
+		p = pu.Path
 	}
-	_, _, err := imagefile.DecodeConfig(f.data)
-	return err != nil
+	switch strings.ToLower(path.Ext(p)) {
+	case ".txt", ".text":
+		return true
+	}
+	return false
+}
+
+// textHeaderBytes is how many bytes of a resource are read for binary data
+// bytes: 1445, the resource header of MIME Sniffing 5.2, the bytes its
+// rules for distinguishing text from binary read (7.2).
+const textHeaderBytes = 1445
+
+// binaryData reports a resource whose header holds a binary data byte
+// (MIME Sniffing 3: 0x00 to 0x08, 0x0B, 0x0E to 0x1A, 0x1C to 0x1F), which
+// is not text (7.2).
+func binaryData(data []byte) bool {
+	for _, c := range data[:min(len(data), textHeaderBytes)] {
+		if c <= 0x08 || c == 0x0B || c >= 0x0E && c <= 0x1A || c >= 0x1C && c <= 0x1F {
+			return true
+		}
+	}
+	return false
 }
 
 // withoutFragment returns u without its fragment (URL Standard, the
