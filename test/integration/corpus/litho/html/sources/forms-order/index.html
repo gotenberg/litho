@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Order form</title>
+<style>
+body { font: 15px/1.5 "Liberation Sans", sans-serif; color: #222; }
+h1 { font-size: 22px; margin: 0 0 6px; }
+h2 { font-size: 16px; margin: 14px 0 4px; }
+p { margin: 0 0 8px; }
+fieldset { margin: 0 0 10px; }
+.styled input:not([type=checkbox], [type=radio], [type=range]), .styled select, .styled textarea, .styled button {
+  border: 2px solid #2a6f97; border-radius: 6px; background: #f1f8fc; padding: 3px 6px;
+}
+.styled input[type=checkbox], .styled input[type=radio], .styled input[type=range], .styled progress { accent-color: #c2410c; }
+.styled meter { background: #eee; }
+.dark { color-scheme: dark; background: #1e1e1e; color: #eee; padding: 6px; }
+.bare { appearance: none; border: 1px dashed #888; }
+</style>
+</head>
+<body>
+<h1>Order form</h1>
+<p>Fields at Chromium's default look, then styled by the page, then in the dark colour scheme.</p>
+<h2>Customer</h2>
+<p>Name <input name="name" value="Ada Lovelace"> E-mail <input type="email" name="email" placeholder="you@example.com"></p>
+<p>Password <input type="password" value="secret"> Phone <input type="tel" size="12" value="+33 1 23 45"> Search <input type="search" size="10" value="widgets"></p>
+<p>Quantity <input type="number" size="4" value="3" style="width: 60px"> Website <input type="url" value="https://example.com" disabled></p>
+<h2>Delivery</h2>
+<p>Date <input type="date" value="2026-12-03"> Time <input type="time" value="14:30"> Week <input type="week" value="2026-W49"></p>
+<p>Month <input type="month" value="2026-12"> Slot <input type="datetime-local" value="2026-12-03T09:15"> Colour <input type="color" value="#2a6f97"></p>
+<p>Speed <label><input type="radio" name="speed" checked> Standard</label> <label><input type="radio" name="speed"> Express</label> <label><input type="radio" name="speed" disabled> Same day</label></p>
+<p>Extras <label><input type="checkbox" checked> Gift wrap</label> <label><input type="checkbox"> Card</label> <label><input type="checkbox" checked disabled> Insurance</label></p>
+<p>Country <select><option>France</option><option selected>Portugal</option></select> Tip <input type="range" min="0" max="20" value="5"> Receipt <input type="file"></p>
+<p>Notes<br><textarea cols="50" rows="3">Leave the parcel with the neighbour.
+Ring twice.</textarea></p>
+<p>Packing <progress value="0.6"></progress> Stock <meter min="0" max="100" low="20" high="80" optimum="90" value="72"></meter>
+ Output <output>3 items</output></p>
+<p><button>Place order</button> <input type="submit" value="Save"> <input type="reset"> <button disabled>Cancel</button></p>
+<div class="styled">
+<h2>Styled by the page</h2>
+<p>Name <input value="Ada Lovelace"> <select><option>Portugal</option></select> <button>Place order</button></p>
+<p><input type="checkbox" checked> <input type="radio" checked> <input type="range" value="70"> <progress value="0.4"></progress> <meter value="0.4"></meter></p>
+<p><textarea rows="2" cols="30">Styled notes</textarea> <input type="date" value="2026-12-03"> <input type="color" value="#c2410c"></p>
+<p class="plain"><input class="bare" value="appearance: none"> <select class="bare"><option>none</option></select> <input type="checkbox" class="bare" checked> <button class="bare">none</button></p>
+</div>
+<div class="dark">
+<h2>Dark colour scheme</h2>
+<p>Name <input value="Ada"> <input placeholder="placeholder"> <select><option>Portugal</option></select> <button>Order</button>
+ <input type="checkbox" checked> <input type="radio" checked> <input type="range"> <progress value="0.5"></progress></p>
+</div>
+</body>
+</html>
