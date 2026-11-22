@@ -707,14 +707,18 @@ func breaks(e *ooxml.Element, limit int) []int {
 // 18.3.1.12 chartsheet): a sheet without cells whose drawing holds its
 // chart, its page setup, header and footer as a worksheet's, fitted to one
 // page as LibreOffice prints the chart object it imports a chartsheet as.
+// A chart without a series prints its frame, as Excel prints it.
 //
 // # Corpus evidence
 //
 //   - probe, xlsx: sc/tdf107586.xlsx's chartsheet, a 731.7 by 477.9 point
 //     chart, given a series prints in LibreOffice 26.8.2.2 on one Letter
 //     page at 69%, 505.99 points wide from the 0.7-inch margin.
-//   - libreoffice/xlsx: sc/tdf107586.xlsx, whose chart holds no series,
-//     prints a blank page.
+//   - libreoffice/xlsx: sc/tdf107586.xlsx, openxmlsdk/xlsx:
+//     v2FxTestFiles/spreadsheet/ChartSheet.xlsx, poi/xlsx:
+//     spreadsheet/56557.xlsx: charts without a series, whose chartsheets
+//     Excel prints as the chart's frame alone, without the title one of
+//     them names, where LibreOffice prints a blank page.
 func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
@@ -738,14 +742,15 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 			return err
 		}
 	}
-	// A chart without a series prints nothing.
-	kept := sh.Drawings[:0]
-	for _, d := range sh.Drawings {
-		if d.Chart == nil || chartSeries(d.Chart) > 0 {
-			kept = append(kept, d)
+	// A chart without a series prints its frame alone, without title or
+	// legend, as Excel prints it; a frame that shows nothing is an
+	// artifact (ISO 14289-1, 7.1).
+	for i := range sh.Drawings {
+		if d := &sh.Drawings[i]; d.Chart != nil && chartSeries(d.Chart) == 0 {
+			d.Chart.Title, d.Chart.Legend = nil, nil
+			d.Decorative = true
 		}
 	}
-	sh.Drawings = kept
 	return nil
 }
 

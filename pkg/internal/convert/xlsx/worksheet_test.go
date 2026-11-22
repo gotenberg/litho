@@ -404,8 +404,10 @@ func TestCell_Formulas(t *testing.T) {
 
 func TestChartsheet(t *testing.T) {
 	chartXML := func(series string) string {
-		return `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:lineChart>` + series +
-			`<c:axId val="1"/><c:axId val="2"/></c:lineChart><c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx></c:plotArea></c:chart></c:chartSpace>`
+		return `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart>` +
+			`<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:lineChart>` + series +
+			`<c:axId val="1"/><c:axId val="2"/></c:lineChart><c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx></c:plotArea>` +
+			`<c:legend><c:legendPos val="r"/></c:legend></c:chart></c:chartSpace>`
 	}
 	tests := []struct {
 		name   string
@@ -413,7 +415,7 @@ func TestChartsheet(t *testing.T) {
 		want   int
 	}{
 		{"a series", `<c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser>`, 1},
-		{"no series prints nothing", "", 0},
+		{"no series prints its frame", "", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -442,8 +444,15 @@ func TestChartsheet(t *testing.T) {
 			if sh.Page.Scale != 0 || sh.Page.FitWidth != 1 || sh.Page.FitHeight != 1 {
 				t.Errorf("page %+v, want fitted to one page", sh.Page)
 			}
-			if tt.want == 1 && (!sh.Drawings[0].Absolute || sh.Drawings[0].Chart == nil) {
-				t.Errorf("drawing %+v", sh.Drawings[0])
+			d := sh.Drawings[0]
+			if !d.Absolute || d.Chart == nil {
+				t.Fatalf("drawing %+v", d)
+			}
+			// A chart without a series prints its frame alone, an
+			// artifact; one with a series keeps its title and legend.
+			empty := tt.series == ""
+			if d.Decorative != empty || (d.Chart.Title == nil) != empty || (d.Chart.Legend == nil) != empty {
+				t.Errorf("decorative %v, title %+v, legend %+v; want an empty chart's frame alone: %v", d.Decorative, d.Chart.Title, d.Chart.Legend, empty)
 			}
 		})
 	}
