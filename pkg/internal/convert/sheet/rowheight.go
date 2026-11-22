@@ -88,7 +88,9 @@ func (b *builder) optimalHeights(g *grid) error {
 				lastC = m.LastColumn
 			}
 			budget--
-			if excel && !g.style(ri, c.Column, c).Align.Wrap && !strings.Contains(c.Value.Text, "\n") {
+			// A row that stores a height is measured by its fonts alone,
+			// not by its wrapped lines.
+			if excel && ((fit && row.Height > 0) || (!g.style(ri, c.Column, c).Align.Wrap && !strings.Contains(c.Value.Text, "\n"))) {
 				if fit {
 					need = max(need, b.cellScreenFit(g, ri, c))
 				}
@@ -198,6 +200,9 @@ func (b *builder) measuredFont(g *grid, ri int, c *Cell) font {
 //     pixels), a Cambria 16 bold cell 163 (27), a Calibri 10 cell beside
 //     a Calibri 11 one 121, in a Calibri 11 book without knownFonts; rows
 //     stored 14.45 points tall print 121.
+//   - openxmlsdk/xlsx: VendorRatingCriteriaWorkbook_TP10192758.xltx, without
+//     knownFonts, prints its rows stored 12.75 points tall, of wrapped Arial
+//     10 text, as stored.
 //   - libreoffice/xlsx: sc/forum-mso-en4-145327.xlsx prints its rows of
 //     Calibri 10 text 17 screen pixels tall, its default; sc/tdf124525.xlsx
 //     its rows of Tahoma 8 text at the standard row, 121 printer pixels.

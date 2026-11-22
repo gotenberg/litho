@@ -93,8 +93,8 @@ func TestFont_Substitute(t *testing.T) {
 // font of its cells on the screen, at 121 printer pixels a 20-pixel
 // standard row, an empty styled cell's font included, Calibri 14 at 25
 // pixels, 151; a row stored shorter than its text, 14.45 points, prints
-// at its fit; a row of smaller text keeps the default; a custom row keeps
-// its height.
+// at its fit, its wrapped lines uncounted; a row of smaller text keeps the
+// default; a custom row keeps its height.
 func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 	c14 := &Style{Font: Font{Families: []string{"Carlito"}, Size: 14}}
 	sh := &Sheet{Name: "S", Rows: []Row{
@@ -107,6 +107,8 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 		// A cell without a format is measured in the Normal font, whatever
 		// its column's.
 		{Index: 5, Cells: []Cell{textCell(2, "unformatted", nil)}},
+		// A row storing a height is measured by its fonts, not its lines.
+		{Index: 6, Height: 116 * excelPixel, Cells: []Cell{textCell(0, "small words that wrap over several lines", &Style{Font: Font{Families: []string{"Carlito"}, Size: 8}, Align: Alignment{Wrap: true}})}},
 	}, Columns: []Column{{First: 2, Last: 2, Style: c14}}}
 	for _, fit := range []bool{false, true} {
 		doc := excelDoc(sh)
@@ -114,9 +116,9 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 		g := newGrid(t.Context(), doc, sh)
 		b.heightsOf(t, g)
-		want := []float64{121, 116, 121, 116, 121, 121}
+		want := []float64{121, 116, 121, 116, 121, 121, 116}
 		if fit {
-			want = []float64{151, 121, 151, 116, 121, 121}
+			want = []float64{151, 121, 151, 116, 121, 121, 116}
 		}
 		for r, w := range want {
 			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {
