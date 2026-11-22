@@ -255,7 +255,8 @@ func TestParagraphSpacing(t *testing.T) {
 	}
 	b := build(t, p("List", "a")+p("List", "b")+p("Normal", "c"), map[string]string{"word/styles.xml": styles})
 	ps := role(b.root, "P")
-	want := [][2]float64{{6, 0}, {0, 12}, {0, 0}}
+	// The styles part states no pPrDefault: Normal spaces 8 points after.
+	want := [][2]float64{{6, 0}, {0, 12}, {0, 8}}
 	for i, n := range ps {
 		if n.Style.Margin[css.Top].Value != want[i][0] || n.Style.Margin[css.Bottom].Value != want[i][1] {
 			t.Errorf("paragraph %d margins %v / %v, want %v", i, n.Style.Margin[css.Top], n.Style.Margin[css.Bottom], want[i])
@@ -673,6 +674,41 @@ func TestRunEmojiPresentation_FromStyles(t *testing.T) {
 	for text, want := range map[string]css.VariantEmoji{"char": css.EmojiText, "para": css.EmojiText, "shaded": css.EmojiNormal} {
 		if got := runWith(t, b.root, text).Style.FontVariantEmoji; got != want {
 			t.Errorf("%s: font-variant-emoji %v, want %v", text, got, want)
+		}
+	}
+}
+
+// TestDefaults_ParagraphSpacing checks the paragraph spacing of a document
+// that states no pPrDefault, as Word prints it, and that a stated one,
+// even empty, keeps the spacing of 17.3.1.33.
+func TestDefaults_ParagraphSpacing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		styles string
+		after  float64
+		mult   float64
+	}{
+		{"no styles part", ``, 8, 1.15},
+		{"no docDefaults", `<w:styles ` + nsDecl + `/>`, 8, 1.15},
+		{"rPrDefault alone", `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault/></w:docDefaults></w:styles>`, 8, 1.15},
+		{"empty pPrDefault", `<w:styles ` + nsDecl + `><w:docDefaults><w:pPrDefault/></w:docDefaults></w:styles>`, 0, 0},
+	} {
+		extra := map[string]string{}
+		if tc.styles != "" {
+			extra["word/styles.xml"] = tc.styles
+		}
+		ps := role(build(t, `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:p><w:r><w:t>y</w:t></w:r></w:p>`, extra).root, "P")
+		if len(ps) != 2 {
+			t.Fatalf("%s: %d paragraphs", tc.name, len(ps))
+		}
+		st := ps[0].Style
+		mult := 0.0
+		if st.LineRule == css.LineRuleMultiple {
+			mult = st.LineHeight.Value
+		}
+		if st.Margin[css.Bottom] != css.Pts(tc.after) || math.Abs(mult-tc.mult) > 1e-9 {
+			t.Errorf("%s: after %v, line %v (%v), want %v and %v", tc.name, st.Margin[css.Bottom], st.LineHeight, st.LineRule, tc.after, tc.mult)
 		}
 	}
 }

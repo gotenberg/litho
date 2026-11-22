@@ -334,11 +334,12 @@ func TestSections_DocGridSpacesLines(t *testing.T) {
 		rule      css.LineRule
 		h         float64
 	}{
-		{"one pitch", ``, css.LineRuleCentred, 18},
+		{"one pitch", `<w:spacing w:line="240" w:lineRule="auto"/>`, css.LineRuleCentred, 18},
+		{"unstated spacing, 1.15 pitches", ``, css.LineRuleCentred, 20.7},
 		{"two pitches", `<w:spacing w:line="480" w:lineRule="auto"/>`, css.LineRuleCentred, 36},
 		{"pitches counted, not rounded", `<w:spacing w:line="600" w:lineRule="auto"/>`, css.LineRuleCentred, 45},
 		{"below one pitch", `<w:spacing w:line="180" w:lineRule="auto"/>`, css.LineRuleCentred, 18},
-		{"off the grid", `<w:snapToGrid w:val="0"/>`, css.LineRuleCSS, 0},
+		{"off the grid", `<w:snapToGrid w:val="0"/><w:spacing w:line="240" w:lineRule="auto"/>`, css.LineRuleCSS, 0},
 		{"exact spacing kept", `<w:spacing w:line="300" w:lineRule="exact"/>`, css.LineRuleExact, 15},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -41,6 +41,28 @@ type condFormat struct {
 // Half a point is the least size w:sz can say.
 const unstatedKern = 0.5
 
+// unstatedAfter and unstatedLine are the paragraph spacing of a document
+// that states no default paragraph properties (no w:pPrDefault, 17.7.5.3,
+// which leaves them to the application), as Word prints it: 8 points
+// after each paragraph and lines 1.15 times their height, 276 240ths.
+//
+// # Corpus evidence
+//
+//   - probe, docx: three paragraphs without a styles part, and with a
+//     styles part without docDefaults, print in Calibri 12 25.0 points
+//     apart from one line to the next paragraph and their wrapped lines
+//     about 16.9 points apart, 1.15 times Calibri's 14.65.
+//   - probe, docx: a document whose docDefaults hold an rPrDefault alone,
+//     on a grid of 15.6-point lines, spaces its single-line paragraphs
+//     1.15 pitches apart plus 8 points.
+//   - poi/docx document/Bug66263-paragraph.docx and libreoffice/docx
+//     ooxmlexport/customxml-two-data-stores.docx, with no styles part:
+//     single-line paragraphs 25.0 points apart.
+const (
+	unstatedAfter float64 = 8
+	unstatedLine  float64 = 276
+)
+
 // styleSheet is the resolved styles part (ECMA-376 Part 1, 17.7).
 type styleSheet struct {
 	byID map[string]*style
@@ -87,6 +109,11 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
 		s.defRun.size = new(12.0)
 		s.defRun.kern = new(unstatedKern)
+	}
+	if root == nil || root.Child(w, "docDefaults").Child(w, "pPrDefault") == nil {
+		s.defPara.after = new(unstatedAfter)
+		s.defPara.line = new(unstatedLine)
+		s.defPara.lineRule = new("auto")
 	}
 	if root == nil {
 		return s
