@@ -67,7 +67,8 @@ func (s *inlineState) staticLine(p *ifcPara, start, end int, l *lineBox) {
 		s.placed[a.box] = true
 		rtl := s.root.st.Direction == css.RTL
 		if a.box.st.OuterInline {
-			setStatic(a.box, s.xAt(p, l, a.pos), l.y, false)
+			x, left := s.inlineStatic(p, l, a.pos, rtl)
+			setStatic(a.box, x, l.y, left)
 			continue
 		}
 		x := s.cb.x
@@ -135,6 +136,43 @@ func (s *inlineState) emptyLinePoint(y float64) (float64, bool) {
 	case css.AlignStart, css.AlignAuto, css.AlignJustify, css.AlignJustifyAll:
 	}
 	return start, rtl
+}
+
+// inlineStatic returns where the hypothetical inline box of an absolutely
+// positioned box anchored at the character position pos of p starts on the
+// line l, and whether it extends leftward from there (CSS 2.1, 10.3.7). In
+// a right-to-left paragraph the box, an object that resolves to the
+// paragraph's direction (UAX #9, N1 and N2), sits on the left of the
+// content of the line before it when it ends that content, and inside a
+// right-to-left run at its character's place counted from the run's right
+// edge; either way it extends leftward.
+func (s *inlineState) inlineStatic(p *ifcPara, l *lineBox, pos int, rtl bool) (float64, bool) {
+	if !rtl || len(l.items) == 0 {
+		return s.xAt(p, l, pos), false
+	}
+	left, ends := math.Inf(1), true
+	for _, it := range l.items {
+		left = min(left, it.x)
+		if pos < it.end {
+			ends = false
+		}
+	}
+	if ends {
+		return l.x + left, true
+	}
+	for _, it := range l.items {
+		if pos < it.start || pos >= it.end || !it.rtl {
+			continue
+		}
+		x := it.x + it.w
+		if it.text != nil && p.p != nil {
+			for j := it.start; j < pos && j < p.p.Len(); j++ {
+				x -= p.p.Advance(j)
+			}
+		}
+		return l.x + x, true
+	}
+	return s.xAt(p, l, pos), false
 }
 
 // xAt returns the flow x of the character position pos of p on the line l.

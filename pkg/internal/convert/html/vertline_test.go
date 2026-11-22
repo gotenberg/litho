@@ -243,3 +243,22 @@ func TestPrincipalDirection_FromTheBody(t *testing.T) {
 		t.Errorf("root line's A at %g, want 380; generated block's C at %g, want 0", at["A"], at["C"])
 	}
 }
+
+// TestStaticPosition_InlineInARightToLeftLine locks the static position of
+// an absolutely positioned box that was inline-level, both insets auto,
+// in a right-to-left line: its hypothetical box, an object resolving to
+// the paragraph's direction (UAX #9, N1 and N2), sits on the left of the
+// content before it and extends leftward, its right edge the static
+// position (CSS 2.1, 10.3.7), whatever its own writing mode.
+func TestStaticPosition_InlineInARightToLeftLine(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"horizontal-tb", "vertical-lr", "vertical-rl"} {
+		doc := convertDoc(t, `<style>@page { size: 400px 300px; margin: 0 } body { margin: 0 }
+			.c { direction: rtl; position: relative; width: 320px; height: 320px; font: 80px/1 "Test Serif" }
+			.c span { position: absolute; bottom: 80px; width: 80px; height: 80px; background: lime; writing-mode: `+mode+` }</style>
+			<div class=c>12 34 56 78<span></span></div>`, Options{PreferCSSPageSize: true})
+		if got := pxBoxes(doc)[0]["g"]; got != "160,160+80x80" {
+			t.Errorf("%s: box %q, want 160,160+80x80", mode, got)
+		}
+	}
+}
