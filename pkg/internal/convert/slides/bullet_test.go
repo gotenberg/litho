@@ -1,6 +1,7 @@
 package slides
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -126,6 +127,39 @@ func TestText_PowerPointBullets(t *testing.T) {
 	// OpenSymbol's glyph advances 1 em: the text reads 0.554 of it.
 	if !near(lbl.HScale, 0.554, 0.002) {
 		t.Errorf("bullet text scaled by %.3f, want 0.554", lbl.HScale)
+	}
+}
+
+// TestText_PowerPointPictureBullet checks a picture bullet under
+// PowerPoint's rules: seven tenths of the text size tall in whole
+// hundredths of an inch, standing on the line's baseline.
+func TestText_PowerPointPictureBullet(t *testing.T) {
+	p := para("One", arial(20))
+	p.MarginLeft, p.Indent = 36, -36
+	p.Bullet = &Bullet{Kind: BulletPicture, Picture: tinyPicture(t)}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, p)}}), office.Options{}).Pages[0]
+	var img typeset.Rect
+	var walk func([]typeset.Fragment, typeset.Matrix)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Image:
+				x0, y0 := apply(m, v.Rect.X, v.Rect.Y)
+				x1, y1 := apply(m, v.Rect.X+v.Rect.Width, v.Rect.Y+v.Rect.Height)
+				img = typeset.Rect{X: min(x0, x1), Y: min(y0, y1), Width: math.Abs(x1 - x0), Height: math.Abs(y1 - y0)}
+			case *typeset.Group:
+				tr := v.Transform
+				if tr == (typeset.Matrix{}) {
+					tr = typeset.Identity
+				}
+				walk(v.Content, then(tr, m))
+			}
+		}
+	}
+	walk(pg.Content, typeset.Identity)
+	one := find(t, pg, "One")
+	if !near(img.Height, 13.68, 0.01) || !near(img.Width, 13.68, 0.01) || !near(img.Y+img.Height, one.y, 0.05) || !near(img.X, 28.35, 0.3) {
+		t.Errorf("bullet at %+v, text baseline %.2f; want 13.68 square on the baseline", img, one.y)
 	}
 }
 

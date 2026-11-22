@@ -22,9 +22,10 @@ import (
 // pushed past the bullet when the bullet is wider than the indent; with
 // any other indent, or a centred or end-aligned paragraph, the bullet
 // opens the first line. A number stands on the text's baseline, and so
-// does a character under PowerPoint's rules, which sets a character
-// bullet on its paragraph's baseline; under Impress's a character, and a
-// picture under both, is centred on the first line's text height. A
+// does a character or a picture under PowerPoint's rules, which sets a
+// bullet on its paragraph's baseline, a picture at its own size
+// ([powerPointPictureBullet]); under Impress's a character or a picture,
+// as tall as the size, is centred on the first line's text height. A
 // character of a symbol font drawn in another face takes, under
 // PowerPoint's rules, the advance Office's font gives it ([officeAdvance]),
 // so that the text after it starts where PowerPoint starts it.
@@ -121,8 +122,13 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		}
 		ps := css.Initial()
 		ps.Display = css.InlineBlock
-		ps.Height = css.Pts(size)
+		h := size
 		bw = size * pic.Width / pic.Height
+		if !b.doc.ImpressBullets {
+			h, bw = powerPointPictureBullet(size, pic.Width/pic.Height)
+			office = true
+		}
+		ps.Height = css.Pts(h)
 		ps.Width = css.Pts(bw)
 		marker.Children = []*layout.Node{{Kind: layout.Replaced, Style: ps, Picture: pic}}
 	case BulletNone:
@@ -360,6 +366,30 @@ func readable(s string) string {
 		}
 	}
 	return s
+}
+
+// powerPointPictureBullet returns the height and width of a picture
+// bullet of the size size, its picture's width over its height aspect,
+// as PowerPoint prints it (ECMA-376 Part 1, 21.1.2.4.2 buBlip; the
+// clause leaves the size to the application): seven tenths of the size
+// tall, the width by the aspect, each a whole hundredth of an inch. The
+// bullet stands on its line's baseline.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: bullets-picture's bullets of 12, 18, 20, 24 and 30
+//     points print 8.64, 12.96, 13.68, 16.56 and 20.88 points tall, their
+//     bottoms on their lines' baselines.
+//   - libreoffice/pptx: sd/tdf114913.pptx's bullet of 28 points prints 19.44
+//     points tall, sd-data/fdo90607.pptx's of 32 points 22.32.
+func powerPointPictureBullet(size, aspect float64) (h, w float64) {
+	const hundredth = 0.72
+	h = max(math.Round(size*0.7/hundredth), 1) * hundredth
+	if !numeric.PositiveFinite(aspect) {
+		aspect = 1
+	}
+	w = max(math.Round(h*aspect/hundredth), 1) * hundredth
+	return h, w
 }
 
 // maxBulletScale caps a bullet's scale of the text size. Anti-DoS guard,
