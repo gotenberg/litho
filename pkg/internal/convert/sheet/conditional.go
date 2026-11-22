@@ -1258,3 +1258,14 @@ const (
 	excelIconInsetX = 1.7
 	excelIconInsetY = 0.2
 )
+
+// covers reports whether a conditional format of the sheet spans the cell
+// at (r, c), whether or not its rules hold there.
+func (cs *conditions) covers(r, c int) bool {
+	for i := range cs.rules {
+		if cs.rules[i].f.contains(r, c) {
+			return true
+		}
+	}
+	return false
+}

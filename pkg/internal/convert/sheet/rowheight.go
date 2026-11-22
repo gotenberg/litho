@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -79,9 +80,17 @@ func (b *builder) optimalHeights(g *grid) error {
 			base = min(row.Height, maxSide)
 		}
 		need := 0.0
+		if !excel {
+			need = b.calcStyledHeight(g, row)
+		}
+		// shrink says every cell of the row was measured: Calc sets a row
+		// of optimal height to what it measures, lower than the height
+		// the file stores too.
+		shrink := true
 		for i := range row.Cells {
 			c := &row.Cells[i]
 			if c.Column < 0 || c.Column >= maxColumns || budget <= 0 {
+				shrink = false
 				continue
 			}
 			if !hasContent(c) {
@@ -114,6 +123,14 @@ func (b *builder) optimalHeights(g *grid) error {
 			u.w = g.spanW(c.Column, lastC)
 			d, ok := pb.display(u)
 			if !ok {
+				continue
+			}
+			if !excel && g.calcStandard(ri, c, u.st, &d) {
+				size := d.font.size
+				if len(c.Runs) == 1 && c.Runs[0].Font != nil && numeric.Positive(c.Runs[0].Font.Size) {
+					size = c.Runs[0].Font.Size
+				}
+				need = max(need, calcStandardHeight(size, d.padding))
 				continue
 			}
 			lineH := 0.0
@@ -161,12 +178,67 @@ func (b *builder) optimalHeights(g *grid) error {
 			g.heights[ri] = min(need, maxSide)
 			continue
 		}
-		if need > base+epsilon {
+		if excel && need > base+epsilon || !excel && (need > base+calcRowSlack || shrink && need < base-calcRowSlack) {
 			g.heights[ri] = min(need, maxSide)
 		}
 	}
 	return nil
 }
+
+// calcStyledHeight returns the least optimal height Calc gives row: its
+// standard row height (calcStandardRow), and the height of the font of
+// every style that shows in the row as a plain line ([calcStandardHeight]):
+// the document default's, which every column without a style of its own
+// holds, the row's, each column's where no cell of the row stands, and
+// each cell's, empty ones included, since Calc measures a row by the
+// attributes of its cells before their text (ScColumn::GetOptimalHeight,
+// sc/source/core/data/column2.cxx).
+func (b *builder) calcStyledHeight(g *grid, row *Row) float64 {
+	h := max(calcStandardRow, b.calcStyleHeight(&b.doc.Default))
+	if row.Style != nil {
+		h = max(h, b.calcStyleHeight(row.Style))
+	}
+	for i := range g.sh.Columns {
+		col := &g.sh.Columns[i]
+		if col.Style == nil || col.Hidden || row.Style != nil {
+			continue
+		}
+		lo := sort.Search(len(row.Cells), func(k int) bool { return row.Cells[k].Column >= col.First })
+		hi := sort.Search(len(row.Cells), func(k int) bool { return row.Cells[k].Column > col.Last })
+		if hi-lo < col.Last-col.First+1 {
+			h = max(h, b.calcStyleHeight(col.Style))
+		}
+	}
+	for i := range row.Cells {
+		if st := row.Cells[i].Style; st != nil && !st.Align.Wrap && st.Align.Rotation == 0 && !st.Align.Stacked {
+			h = max(h, b.calcStyleHeight(st))
+		}
+	}
+	return h
+}
+
+// calcStyleHeight returns [calcStandardHeight] for the font and padding of
+// the style st.
+func (b *builder) calcStyleHeight(st *Style) float64 {
+	f := resolveFont(st.Font, b.doc.Default.Font)
+	p := st.Padding
+	if p == ([4]float64{}) {
+		p = b.doc.Default.Padding
+	}
+	return calcStandardHeight(f.size, p)
+}
+
+// calcRowSlack is how far from the height a row stores Calc's measure
+// must come before the row takes it: 0.05 points, the rounding of
+// a height written in inches or centimetres, so that a row stored at
+// 0.178in (12.816 points) keeps the 12.78 points of 256 twips as Calc
+// prints them.
+const calcRowSlack = 0.05
+
+// calcStandardRow is Calc's standard row height, in points: 256 twips,
+// ScGlobal::nStdRowHeight for its default font, Liberation Sans 10, and
+// the least height Calc gives a row of optimal height.
+const calcStandardRow = 12.8
 
 // cellScreenFit returns the height Excel fits a row to for the unwrapped
 // cell c of row ri: the tallest of its font's and its runs' fonts'
@@ -371,3 +443,55 @@ const excelPixel = 72.0 / 600
 func editLine(h float64) float64 {
 	return math.Ceil(float64(h*20)-1e-6) / 20
 }
+
+// calcStandard reports a cell of row ri whose optimal height Calc takes
+// from its font size alone ([calcStandardHeight]) rather than from its
+// text: one line of text in one font, the font of its script, unwrapped,
+// not justified, upright and unrotated, under no conditional format
+// (ScColumn::GetOptimalHeight, sc/source/core/data/column2.cxx, its
+// bStdOnly case). Text cut into several runs, by its formatting or by its
+// scripts, is laid out by Calc's edit engine and measured as it prints.
+func (g *grid) calcStandard(ri int, c *Cell, st *Style, d *display) bool {
+	if d.wrap || st.Align.Horizontal == HJustify || st.Align.Rotation != 0 || st.Align.Stacked {
+		return false
+	}
+	if len(c.Runs) > 1 || strings.Contains(d.text, "\n") {
+		return false
+	}
+	return g.cond == nil || !g.cond.covers(ri, c.Column)
+}
+
+// calcStandardHeight returns, in points, the optimal height Calc gives a
+// row for a cell of one plain line in a font of size points with the
+// padding pad (lcl_GetAttribHeight, sc/source/core/data/column2.cxx): the
+// size in twips times 1.18, truncated to a whole twip as Calc's 16-bit
+// count truncates it, plus the top and bottom margins in twips, less
+// STD_ROWHEIGHT_DIFF, 23 twips. The face plays no part.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, rows of optimal
+//     height holding one cell of Liberation Sans, Carlito, DejaVu Sans,
+//     Liberation Serif, Caladea or Liberation Mono at 11, 12, 14, 18 and
+//     24 points print 13.78, 14.99, 17.34, 22.02 and 29.14 points tall
+//     whatever the face, and Liberation Sans and DejaVu Sans from 10.5 to
+//     40 points in half points 13.18 to 48.04: 276, 300, 347, 441, 583
+//     twips for 11 to 24 points, each within a hundredth of a point of
+//     this rule; with fo:padding 1pt and without it alike, Calc's default
+//     margin being 20 twips.
+//   - probe, ods: chart2/PivotTableExample.ods of libreoffice/ods with its
+//     rows' stored optimal height changed to 3 mm or to 10 mm prints them
+//     13.78 points tall, as with the 4.87 mm it stores: Calc measures the
+//     row again as it loads it.
+func calcStandardHeight(size float64, pad [4]float64) float64 {
+	h := math.Trunc(float64(math.Round(size*20) * 1.18))
+	h += math.Round(pad[css.Top]*20) + math.Round(pad[css.Bottom]*20)
+	if h > calcRowHeightDiff {
+		h -= calcRowHeightDiff
+	}
+	return h / 20
+}
+
+// calcRowHeightDiff is Calc's STD_ROWHEIGHT_DIFF, in twips
+// (sc/inc/global.hxx).
+const calcRowHeightDiff = 23

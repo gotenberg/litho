@@ -10,13 +10,16 @@ import (
 )
 
 // TestOptimalHeights_FallbackFaces locks the optimal height of a row
-// whose text falls back to a taller face: Chinese text in Liberation Sans
-// takes Noto Sans CJK's line, 21 screen pixels with the padding, where a
-// Latin row keeps the sheet's 12.78 points.
+// whose text of two scripts falls back to a taller face: Chinese text and
+// a digit in Liberation Sans, which Calc's edit engine lays out, take
+// Noto Sans CJK's line, 21 screen pixels with the padding, where a Latin
+// row keeps the sheet's 12.78 points.
 func TestOptimalHeights_FallbackFaces(t *testing.T) {
+	mixed := textCell(0, "缩进0", nil)
+	mixed.Runs = []Run{{Text: "缩进"}, {Text: "0"}}
 	sh := &Sheet{Name: "S", Rows: []Row{
 		{Index: 0, Cells: []Cell{textCell(0, "Indent", nil)}},
-		{Index: 1, Cells: []Cell{textCell(0, "缩进0", nil)}},
+		{Index: 1, Cells: []Cell{mixed}},
 	}}
 	doc := newDoc(sh)
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
@@ -126,6 +129,57 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {
 				t.Errorf("FitRows %v: row %d %v printer pixels, want %v", fit, r, got, w)
 			}
+		}
+	}
+}
+
+// TestCalcStandardHeight locks Calc's optimal height of a row of one
+// plain line: the size in twips times 1.18, truncated, plus the top and
+// bottom margins, less 23 twips, the face playing no part.
+func TestCalcStandardHeight(t *testing.T) {
+	one := [4]float64{1, 1, 1, 1}
+	tests := []struct {
+		size float64
+		pad  [4]float64
+		want float64
+	}{
+		{11, one, 13.8},
+		{12, one, 15},
+		{24, one, 29.15},
+		{40, one, 48.05},
+		{10.5, one, 13.2},
+		{10, [4]float64{1.3896, 1, 1.3896, 1}, 13.45},
+	}
+	for _, tc := range tests {
+		if got := calcStandardHeight(tc.size, tc.pad); !near(got, tc.want, 1e-9) {
+			t.Errorf("size %v padding %v: %v, want %v", tc.size, tc.pad, got, tc.want)
+		}
+	}
+}
+
+// TestOptimalHeights_CalcStandard locks the rows Calc measures by their
+// cells' font sizes: a stored height Calc's measure lowers, an empty
+// styled cell, the document default's floor, and the rows it leaves alone,
+// a custom one and one of wrapped text taller than its stored height.
+func TestOptimalHeights_CalcStandard(t *testing.T) {
+	carlito := &Style{Font: Font{Families: []string{"Carlito"}, Size: 11}}
+	big := &Style{Font: Font{Size: 18}}
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Height: 14.5, Cells: []Cell{textCell(0, "Carlito", carlito)}},
+		{Index: 1, Height: 12.8, Cells: []Cell{textCell(0, "a", nil), {Column: 1, Style: big}}},
+		{Index: 2, Height: 30, Cells: []Cell{textCell(0, "small", nil)}},
+		{Index: 3, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "small", nil)}},
+		{Index: 4, Height: 12.8, Cells: []Cell{textCell(0, "Liberation Sans", &Style{Font: Font{Size: 24}})}},
+	}}
+	doc := newDoc(sh)
+	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+	g := newGrid(t.Context(), doc, sh)
+	b.heightsOf(t, g)
+	// The grid prints a row in whole hundredths of a millimetre, as Calc:
+	// 276 twips print 13.78 points.
+	for ri, want := range []float64{13.78, 22.03, 12.78, 29.99, 29.14} {
+		if h := g.rowHeight(ri); !near(h, want, 0.01) {
+			t.Errorf("row %d: %v, want %v", ri, h, want)
 		}
 	}
 }
