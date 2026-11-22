@@ -457,9 +457,17 @@ type wptProbe struct {
 	cap             int
 }
 
+// wptProbes are the probes. The vertical writing modes probe keeps every
+// candidate: the converter lays vertical flows out.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-writing-modes holds 784 candidates of the vertical
+//     probe at the pin and 13 of the area's own rules; litho draws 640 of
+//     the 797 like their reference.
 var wptProbes = []wptProbe{
 	{
-		name: "css/css-writing-modes vertical", dir: "css/css-writing-modes", cap: 10,
+		name: "css/css-writing-modes vertical", dir: "css/css-writing-modes", cap: 1000,
 		rules: wptAreaRules{
 			forbidden: wptLayoutForbidden, lift: []*regexp.Regexp{wptVertical, wptSideways},
 			required: regexp.MustCompile(`(?i)writing-mode\s*:\s*(vertical-(rl|lr)|sideways-(rl|lr))`),
