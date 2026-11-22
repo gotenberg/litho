@@ -180,11 +180,15 @@ func (w *sheetReader) styleTable(ts *tableStyle, t tableInfo) {
 		}
 		cell.Style = st
 	}
-	// The cells of the area are styled in reading order, an empty one
-	// added, until maxTableCells cells without a style of their own are;
-	// past that position only the cells the sheet holds are, so the work
-	// follows the sheet's cells and not the area, which can name the
-	// whole sheet.
+	w.eachAreaCell(area, apply)
+}
+
+// eachAreaCell calls apply on the cells of area in reading order, an
+// empty one added, until maxTableCells cells without a style of their
+// own are; past that position only on the cells the sheet holds, so the
+// work follows the sheet's cells and not the area, which can name the
+// whole sheet.
+func (w *sheetReader) eachAreaCell(area sheet.Range, apply func(cell *sheet.Cell, row, col int)) {
 	added := 0
 	stopRow, stopCol := area.LastRow+1, area.FirstColumn
 fill:

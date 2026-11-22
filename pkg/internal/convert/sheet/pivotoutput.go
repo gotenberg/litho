@@ -562,9 +562,7 @@ func sortedKeys(m map[int]bool) []int {
 //
 //   - libreoffice/xlsx: sc/pivottable_double_field_filter.xlsx,
 //     sc/pivot_table_first_header_row.xlsx and 14 more pivot tables print
-//     the text their sheets save (text F1 0.89 to 1). The pivot table
-//     style Excel paints over them is not drawn, which costs the layout
-//     of sc/PivotTable_CachedDefinitionAndDataInSync.xlsx and four more.
+//     the text their sheets save (text F1 0.89 to 1).
 func (b *builder) applyPivots(doc *Document) (*Document, error) {
 	if doc.ExcelRules {
 		return doc, nil

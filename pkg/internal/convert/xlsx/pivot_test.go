@@ -38,6 +38,7 @@ func pivotPackage(t testing.TB, def string) []byte {
 			"xl/pivotCache/pivotCacheDefinition1.xml": `<pivotCacheDefinition ` + nsDecl + `><cacheSource type="worksheet"><worksheetSource ref="A1:B4" sheet="S"/></cacheSource>` +
 				`<cacheFields count="2"><cacheField name="name"><sharedItems count="2"><s v="x"/><s v="y"/></sharedItems></cacheField><cacheField name="v"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>`,
 			"xl/pivotTables/pivotTable1.xml": def,
+			"xl/theme/theme1.xml":            testTheme,
 		})
 	wbRels := files["xl/_rels/workbook.xml.rels"]
 	files["xl/_rels/workbook.xml.rels"] = wbRels[:len(wbRels)-len(`</Relationships>`)] +

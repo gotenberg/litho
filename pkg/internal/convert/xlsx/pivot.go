@@ -90,7 +90,8 @@ func (r *reader) pivotCacheParts(main string, root *ooxml.Element) map[int]strin
 // (18.10.1.73 pivotTableDefinition), as LibreOffice imports them
 // (oox::xls::PivotTable): the location, the row, column, page and data
 // fields with their layout, subtotals, items and sorting, the grand
-// totals, the header row.
+// totals, the header row; and paints its style over the cells the sheet
+// saved for it.
 func (w *sheetReader) pivotTables() error {
 	r := w.r
 	// A worksheet without relationships relates to no pivot table.
@@ -112,6 +113,9 @@ func (w *sheetReader) pivotTables() error {
 		}
 		if !root.Is(nsMain, "pivotTableDefinition") {
 			continue
+		}
+		if w.printed {
+			w.stylePivot(root)
 		}
 		cachePart := r.pivotCaches[intAttr(root, "cacheId", -1)]
 		if cachePart == "" {
