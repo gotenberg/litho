@@ -1036,7 +1036,31 @@ func (rd *renderer) rowLabelsWidth(p *projection, g *Group) float64 {
 	if p.turned && rowTicks(a) {
 		w += tickLength
 	}
+	if b := rd.rowTitle(p, a); b != nil {
+		tw, _ := b.rotated()
+		w += officeRowTitleGap + tw
+	}
 	return w + labelSpacing
+}
+
+// officeRowTitleGap separates the title of the series axis of a turned
+// view from the names of its rows.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/xlsx: O14ISOStrict/Graphics/Axis_Title-O12-XL-ChartProperties.xlsx,
+//     Excel: a 10 pt bold title turned a quarter stands 8.5 pt right of
+//     the end of the 10 pt name "Series1", its line centred on the depth
+//     axis's middle.
+const officeRowTitleGap = 7.4
+
+// rowTitle lays out the title of the series axis a, which the turned view
+// sets beside the names of the rows, nil for none.
+func (rd *renderer) rowTitle(p *projection, a *Axis) *block {
+	if !p.turned || a.Title == nil {
+		return nil
+	}
+	return rd.measure(a.Title.Text, a.Title.Style, rd.page.Height*0.8)
 }
 
 // rowLabels draws the names of the rows of g along the floor's side edge,
@@ -1071,6 +1095,7 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 			}
 		}
 	}
+	reach := 0.0
 	for i, s := range g.Series {
 		z0, z1 := p.row(i)
 		b := rd.measure(s.Name, a.Style, 0)
@@ -1079,7 +1104,14 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 		}
 		w, _ := b.rotated()
 		pt := p.at(edge, f.Y+f.Height, (z0+z1)/2)
+		reach = math.Max(reach, float64(dir*(pt.X-edge))+gap+w)
 		rd.out = append(rd.out, b.draw(pt.X+float64(dir*(gap+float64(w/2))), pt.Y, al)...)
+	}
+	if b := rd.rowTitle(p, a); b != nil {
+		w, _ := b.rotated()
+		mid := p.at(edge, f.Y+f.Height, float64(p.depth/2))
+		x := edge + float64(dir*(reach+officeRowTitleGap+float64(w/2)))
+		rd.out = append(rd.out, b.draw(x, mid.Y, alignCenter)...)
 	}
 }
 

@@ -325,3 +325,35 @@ func TestLegend_RibbonKeysAsBox(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_TurnedSeriesAxisTitle draws the title of the series axis of
+// a turned view beside the names of its rows, as Excel does, and takes
+// its room from the plot area.
+func TestRender_TurnedSeriesAxisTitle(t *testing.T) {
+	plot := func(title bool) ([]typeset.Fragment, float64) {
+		c := turned3D()
+		nan := math.NaN()
+		z := &Axis{Kind: SeriesAxis, Labels: LabelNextTo, Min: nan, Max: nan, MajorUnit: nan, MinorUnit: nan, Style: TextStyle{Size: 10}}
+		if title {
+			z.Title = &Title{Text: "Depth", Style: TextStyle{Size: 10}}
+		}
+		c.Axes = append(c.Axes, z)
+		c.Groups[0].ZAxis = 2
+		c.Groups[0].Series[0].Name = "Row"
+		frags := Render(context.Background(), ahem(t), c, chartRect)
+		right := 0.0
+		for _, p := range paths(frags, red) {
+			b := bounds(p)
+			right = math.Max(right, b.X+b.Width)
+		}
+		return frags, right
+	}
+	frags, withTitle := plot(true)
+	if !strings.Contains(strings.Join(texts(frags), " "), "Depth") {
+		t.Errorf("texts %q lack the series axis title", texts(frags))
+	}
+	_, without := plot(false)
+	if withTitle >= without {
+		t.Errorf("bars end at %.2f with the title, %.2f without: the title takes no room", withTitle, without)
+	}
+}
