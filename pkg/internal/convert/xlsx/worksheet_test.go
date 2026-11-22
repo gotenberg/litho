@@ -218,7 +218,7 @@ func TestRead_HyperlinksWholeColumns(t *testing.T) {
 	}
 }
 
-// TestRead_PageSetup checks the page setup over LibreOffice's defaults.
+// TestRead_PageSetup checks the page setup over Excel's defaults.
 func TestRead_PageSetup(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -227,7 +227,9 @@ func TestRead_PageSetup(t *testing.T) {
 		check func(p sheet.PageSetup) bool
 	}{
 		{"defaults", `<sheetData/>`, func(p sheet.PageSetup) bool {
-			return p.Width == 612 && p.Height == 792 && p.Scale == 100 && math.Abs(p.Margin[3]-53.858) < 0.01 && math.Abs(p.Margin[0]-70.838) < 0.01 && math.Abs(p.HeaderTop-36.85) < 0.01
+			// Excel's Normal margins: 0.7 inch at the sides, 0.75 at the top
+			// and bottom, 0.3 for the header.
+			return p.Width == 612 && p.Height == 792 && p.Scale == 100 && math.Abs(p.Margin[3]-50.4) < 0.01 && math.Abs(p.Margin[0]-54) < 0.01 && math.Abs(p.HeaderTop-21.6) < 0.01
 		}},
 		{"margins", `<sheetData/><pageMargins left="0.25" right="0.5" top="1" bottom="2" header="0.3" footer="0"/>`, func(p sheet.PageSetup) bool {
 			return p.Margin == [4]float64{72, 36, 144, 18} && math.Abs(p.HeaderTop-21.6) < 1e-9 && p.FooterBottom == 0

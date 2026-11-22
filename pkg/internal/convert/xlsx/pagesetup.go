@@ -61,25 +61,28 @@ func (p paperSize) points() (w, h float64) {
 // hmmPt converts hundredths of a millimetre to points.
 func hmmPt(v float64) float64 { return v * 72 / 2540 }
 
-// The page margins of a sheet without pageMargins, in inches: the
-// defaults of LibreOffice's import (ECMA-376 Part 1, 18.3.1.62 leaves
-// them to the application).
+// The page margins of a sheet without pageMargins, or of a margin
+// pageMargins leaves out, in inches: Excel's Normal margins (ECMA-376
+// Part 1, 18.3.1.62 leaves them to the application), where LibreOffice's
+// import gives 0.748 at the sides and 0.984 at the top and the bottom.
+// The header and footer distances are Excel's Normal ones, not measured.
 //
 // # Corpus evidence
 //
-//   - probe, xlsx: a sheet without pageMargins prints, in LibreOffice
-//     26.8.2.2, its first column's text at x 54.82 (0.748 inch and the
-//     cell's one-point padding).
+//   - poi/xlsx: 59746_NoRowNums.xlsx, 64450.xlsx and 66365.xlsx, and
+//     libreoffice/xlsx sc/tdf122336.xlsx, sheets without pageMargins,
+//     print their first column's text at x 52.8 (0.7 inch and the cell's
+//     2.4-point inset) and their first row from y 54 (0.75 inch).
 const (
-	defaultMarginLR = 0.748
-	defaultMarginTB = 0.984
-	defaultMarginHF = 0.512
+	defaultMarginLR = 0.7
+	defaultMarginTB = 0.75
+	defaultMarginHF = 0.3
 )
 
 // defaultPage is the page setup of a sheet without pageSetup and
 // pageMargins on paper w by h, the conversion's default paper, else
 // Letter, the paperSize SpreadsheetML defaults to (ECMA-376 Part 1,
-// 18.3.1.63): LibreOffice's default margins, a scale of 100, the pages
+// 18.3.1.63): Excel's default margins, a scale of 100, the pages
 // numbered down then over and from the previous sheet's.
 func defaultPage(w, h float64) sheet.PageSetup {
 	p := sheet.PageSetup{Width: w, Height: h, Scale: 100}
