@@ -245,6 +245,14 @@ func TestFit_ExcelGeneral(t *testing.T) {
 		{12345678901, 44, "1.2E+10"},
 		{0.000123456789, 44, "0.00012"},
 		{0.00001, 44, "0.00001"},
+		// Below 1, fixed point while it keeps as many digits as
+		// scientific notation in the characters that fit.
+		{0.00001234, 44, "1.2E-05"},
+		{0.000015, 44, "1.5E-05"},
+		{0.00000999999, 44, "1E-05"},
+		{0.000001, 44, "1E-06"},
+		{0.0001, 44, "0.0001"},
+		{-0.0000123456, 44, "-1.2E-05"},
 		// The sign's room comes first.
 		{2.684713, 46, "2.684713"},
 		{-6.105228, 46, "-6.10523"},
@@ -260,8 +268,9 @@ func TestFit_ExcelGeneral(t *testing.T) {
 }
 
 // TestApply_ExcelGeneral checks that Excel's General format shows a
-// number in at most 11 characters, a minus sign aside, in fixed point
-// down to 0.00001.
+// number in at most 11 characters, a minus sign aside, a magnitude below
+// 1 in fixed point while that keeps as many of its digits as scientific
+// notation does.
 func TestApply_ExcelGeneral(t *testing.T) {
 	tests := []struct {
 		v    float64
@@ -281,6 +290,16 @@ func TestApply_ExcelGeneral(t *testing.T) {
 		{0.000123456789, "0.000123457"},
 		{0.00001, "0.00001"},
 		{0.0000012345, "1.2345E-06"},
+		{0.00001234, "0.00001234"},
+		{0.000001, "0.000001"},
+		{0.0000015, "0.0000015"},
+		{0.000015, "0.000015"},
+		{1e-9, "0.000000001"},
+		{1.5e-9, "1.5E-09"},
+		{1e-10, "1E-10"},
+		{1.23456789e-7, "1.23457E-07"},
+		{-0.0000123456, "-1.23456E-05"},
+		{0.00000999999, "9.99999E-06"},
 		{2.2250738585072014e-308, "2.2251E-308"},
 		{-1234567.891, "-1234567.891"},
 		{0.30000000000000004, "0.3"},

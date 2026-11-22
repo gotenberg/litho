@@ -151,34 +151,53 @@ func (f *Format) hash(r Result) Result {
 //     100000000000 and 99999999999.5 as 1E+11, 1E+16 as 1E+16.
 const excelGeneralChars = 11
 
-// excelLowerBound is the magnitude below which Excel's General format
-// prefers scientific notation, where Calc's is [expLowerBound].
+// excelNarrow returns x in Excel's General format in at most n
+// characters, a minus sign aside: a magnitude of 1 or more as Calc's
+// standard format narrows it ([narrowGeneral]); a smaller one in fixed
+// point when that keeps as many of its significant digits as scientific
+// notation in n characters does, else in scientific notation (ECMA-376
+// Part 1, 18.8.30 numFmt leaves General to the application; the choice is
+// Excel's, measured).
 //
 // # Corpus evidence
 //
+//   - probe, xlsx: Excel for the web prints, in a column of 14 characters,
+//     0.00001234 and 0.0000015 in fixed point, 0.000000001 too (its one
+//     digit in eleven characters), 1.5E-09, 1E-10, 1.23457E-07,
+//     -1.23456E-05 and 9.99999E-06 in scientific notation, which keeps
+//     more of their digits; in a column of 8.43, seven characters,
+//     1.2E-05, 1.5E-05 and 1E-05 for 0.00001234, 0.000015 and 0.00000999999,
+//     0.0001 whole.
 //   - litho/xlsx: large_numbers_general prints 0.00001 as 0.00001 in
-//     columns of 8.43, 14 and 30 characters, where Calc writes 1E-05.
-const excelLowerBound = 1e-5
-
-// excelNarrow returns x in Excel's General format in at most n
-// characters, a minus sign aside: the characters of [narrowGeneral] with
-// fixed point down to [excelLowerBound].
+//     columns of 8.43, 14 and 30 characters, where Calc writes 1E-05, and
+//     0.000123456789 as 0.000123457 and 0.00012.
 func excelNarrow(x float64, n int) string {
 	if x == 0 || !numeric.Finite(x) {
 		return generalString(x)
 	}
 	a := math.Abs(x)
 	var s string
-	// A number Calc's standard format writes in fixed point within n
-	// characters is written alike: no digit it keeps rounds away.
-	if g := generalString(a); a >= excelLowerBound && len(g) <= n && !strings.ContainsAny(g, "Ee") {
+	switch g := generalString(a); {
+	case len(g) <= n && !strings.ContainsAny(g, "Ee"):
+		// A number Calc's standard format writes in fixed point within n
+		// characters is written alike: no digit it keeps rounds away.
 		s = g
-	} else if a < excelLowerBound || a >= expLowerBound {
+	case a >= 1:
 		s = narrowGeneral(a, n)
-	} else {
-		s = formatFloat(a, fmtF, max(n-2, 0), true)
-		if len(s) > n || strings.Trim(s, "0.") == "" {
-			s = narrowScientific(a, n)
+	default:
+		digits, exp := decimalParts(a)
+		need := min(len(digits), 15)
+		// The zeros after the point before the first digit, and the
+		// digits fixed point leaves after them.
+		zeros := -(len(digits) + exp)
+		fixed := min(n-2-zeros, need)
+		sci := narrowScientific(a, n)
+		mant, _, _ := strings.Cut(sci, "E")
+		kept := min(len(mant)-strings.Count(mant, "."), need)
+		if fixed >= 1 && fixed >= kept {
+			s = formatFloat(a, fmtF, n-2, true)
+		} else {
+			s = sci
 		}
 	}
 	if math.Signbit(x) && strings.Trim(s, "0.") != "" {
