@@ -789,3 +789,18 @@ func TestCanvasSpace_ScaleIsCapped(t *testing.T) {
 		t.Fatalf("scale %v, point %v %v: want capped scales and a finite point", c.scale, x, y)
 	}
 }
+
+// TestInline_EffectExtent grows the room an inline drawing takes in its
+// line by its effect extent, side by side.
+func TestInline_EffectExtent(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><wp:effectExtent l="127000" t="254000" r="0" b="381000"/><wp:docPr id="4" name="p"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+		`<wps:wsp><wps:spPr><a:prstGeom prst="ellipse"/></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	shapes := find(build(t, body, nil).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 1 {
+		t.Fatalf("%d drawings, want 1", len(shapes))
+	}
+	if m := shapes[0].Style.Margin; m != [4]css.Dimension{css.Pts(20), css.Pts(0), css.Pts(30), css.Pts(10)} {
+		t.Errorf("margins %v, want 20 top, 30 bottom, 10 left", m)
+	}
+}

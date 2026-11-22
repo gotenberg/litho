@@ -137,6 +137,7 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			sink.add(n)
 			continue
 		}
+		effectExtent(n, k.Child(ooxml.NSWP, "effectExtent"))
 		if href := d.drawingLink(s, k.Child(ooxml.NSWP, "docPr")); href != "" {
 			sink.openLink(href)
 			sink.add(n)
@@ -144,6 +145,34 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			continue
 		}
 		sink.add(n)
+	}
+}
+
+// maxEffectExtent bounds each side of an inline drawing's effect extent,
+// in points. Anti-DoS guard, not spec-mandated: Word writes a few dozen
+// points for a turned picture or a shadow, and a page is at most 1,584
+// points wide.
+const maxEffectExtent = 1584
+
+// effectExtent grows the room the inline drawing n takes in its line by
+// its wp:effectExtent e (ECMA-376 Part 1, 20.4.2.6): the extent its
+// effects and its rotation add on each side, which Word lays out as part
+// of the drawing, the drawing set that far inside it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/effect-extent-inline.docx and
+//     fdo70457.docx: Word sets a turned inline picture's box its effect
+//     extent's left side right of the line's start, and the line its top
+//     and bottom sides taller.
+func effectExtent(n *layout.Node, e *ooxml.Element) {
+	if e == nil || n.Style == nil {
+		return
+	}
+	for side, name := range map[css.Side]string{css.Top: "t", css.Right: "r", css.Bottom: "b", css.Left: "l"} {
+		if v, ok := ooxml.EMU(attrOr(e, name)); ok && v != 0 {
+			n.Style.Margin[side] = css.Pts(max(-maxEffectExtent, min(v, maxEffectExtent)))
+		}
 	}
 }
 
