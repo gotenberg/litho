@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -80,7 +81,10 @@ type reader struct {
 	// space, in points, in whole printer pixels as Excel measures them;
 	// screenDigit is the digit in screen pixels ([reader.measureNormalFont]).
 	digitWidth, spaceWidth, screenDigit float64
-	cells                               int
+	// standardPrinted and standardScreen are the standard row height of
+	// the Normal font in printer and screen pixels ([standardRow]).
+	standardPrinted, standardScreen float64
+	cells                           int
 	// doc is the document being read, which the charts' series read
 	// their values from when their part holds no cache.
 	doc      *sheet.Document
@@ -165,7 +169,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err := r.readSharedStrings(main); err != nil {
 		return nil, nil, err
 	}
-	doc := &sheet.Document{Default: r.normal(), ExcelRules: true}
+	doc := &sheet.Document{Default: r.normal(), ExcelRules: true, StandardRowHeight: r.standardPrinted * printerPixel}
 	cp, err := pkg.CoreProperties(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -282,6 +286,7 @@ func printerPixels(v float64) float64 {
 //     23.4375 characters 129.38 points wide (1078 pixels, digits of 46).
 func (r *reader) measureNormalFont() {
 	r.digitWidth, r.spaceWidth, r.screenDigit = 47*printerPixel, 24*printerPixel, 7
+	r.standardPrinted, r.standardScreen = calibriStandardPrinted, calibriStandardScreen
 	s := r.styles
 	if len(s.fonts) == 0 {
 		return
@@ -299,6 +304,9 @@ func (r *reader) measureNormalFont() {
 	style := text.Style{Families: append(append([]string(nil), f.Families...), substituteFamily), Size: size, Italic: f.Italic, NoKerning: true}
 	if f.Bold {
 		style.Weight = 700
+	}
+	if face := r.fonts.Match(style); face != nil {
+		r.standardPrinted, r.standardScreen = standardRow(face.Metrics(1), f.Size)
 	}
 	p, _, err := r.fonts.Shape(r.ctx, []text.ParagraphRun{{Text: "0123456789 ", Style: style}}, text.ParagraphOptions{})
 	if err != nil || p.Len() != 11 {
@@ -318,6 +326,55 @@ func (r *reader) measureNormalFont() {
 	if sp := p.Advance(10); sp > 0 {
 		r.spaceWidth = printerPixels(sp)
 	}
+}
+
+// The standard row height of Calibri 11, in printer and screen pixels: what
+// a workbook whose Normal font Excel cannot measure prints its rows from.
+const (
+	calibriStandardPrinted = 121
+	calibriStandardScreen  = 20
+)
+
+// screenPixelsPerPoint is the screen Excel lays a sheet out on: 96 pixels
+// an inch.
+const screenPixelsPerPoint = 96.0 / 72
+
+// standardRow returns the standard row height Excel gives a Normal font of
+// size points whose face has the metrics m at 1 point, in printer pixels
+// ([printerPixel]) and in screen pixels: the font's ascent and descent,
+// each rounded to a pixel at the font's size in that device's pixels, and
+// its line gap truncated, plus the cell's insets, 8 printer pixels and 2
+// screen ones. A row of the default height prints that many printer
+// pixels, and a row of h points h in screen pixels times printed over
+// screen ([reader.rowHeight]). The specification gives a row's height in
+// points (ECMA-376 Part 1, 18.3.1.73 ht) and the default as a value the
+// application may compute (18.3.1.81 sheetFormatPr customHeight); the
+// rule is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx, poi/xlsx: rows without a height of books whose
+//     sheetFormatPr has no customHeight print, whatever defaultRowHeight
+//     says, 121 printer pixels apart for Calibri 11 (sc/Book1_custom.xlsx,
+//     sc/Sparklines.xlsx, sc/tdf131380.xlsx and 58896.xlsx at 14.4, 14.25
+//     and 14.5 points), 103 for Arial 10 (sc/tdf137543.xlsx at 13.2,
+//     sc/autofilternamedrange.xlsx at 12.5), 130 for Calibri 12
+//     (sc/tdf155046.xlsx), 109 for Calibri 10 (openxmlsdk/xlsx
+//     NoExtDataE8.xlsx) and 108 for Verdana 10 (DateFormatTests.xlsx), what
+//     the rule gives.
+//   - libreoffice/xlsx: Arial 11 and Liberation Sans 11 print 114
+//     (sc/tdf145054.xlsx, poi/xlsx 49325.xlsx), Times New Roman 12 126
+//     (poi/xlsx 56315.xlsx), where the rule gives 113 and 123: a face with
+//     a line gap is not measured as Excel measures it.
+func standardRow(m text.Metrics, size float64) (float64, float64) {
+	em := math.Round(size / printerPixel)
+	printed := 8 + math.Round(float64(m.Ascent*em)) + math.Round(float64(m.Descent*em)) + math.Floor(float64(m.LineGap*em)+1e-9)
+	em = math.Round(float64(size * screenPixelsPerPoint))
+	screen := 2 + math.Round(float64(m.Ascent*em)) + math.Round(float64(m.Descent*em)) + math.Floor(float64(m.LineGap*em)+1e-9)
+	if !numeric.Positive(printed) || !numeric.Positive(screen) {
+		return calibriStandardPrinted, calibriStandardScreen
+	}
+	return printed, screen
 }
 
 // warn records a warning, once per effect and message.

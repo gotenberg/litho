@@ -32,6 +32,11 @@ type Document struct {
 	// Excel's terms; the flag covers what the builder decides. The XLSX
 	// reader sets it; the OpenDocument and CSV readers leave it false.
 	ExcelRules bool
+	// StandardRowHeight is, under ExcelRules, the height Excel gives a row
+	// of the Default font, in points: the pitch of a wrapped cell's lines
+	// in that font, and the row in which the baseline of bottom-aligned
+	// text is set ([pageBuilder.excelShift]). 0 when the reader gives none.
+	StandardRowHeight float64
 }
 
 // Sheet is one worksheet (ECMA-376 Part 1, 18.3; ODF 1.3 Part 3, 9.1.2,

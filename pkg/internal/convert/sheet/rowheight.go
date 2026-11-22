@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"cmp"
 	"math"
 	"strings"
 
@@ -108,7 +109,7 @@ func (b *builder) optimalHeights(g *grid) error {
 				}
 			}
 			if excel {
-				need = max(need, excelHeight(g.defH, lineH, defLine, lines))
+				need = max(need, excelHeight(cmp.Or(b.doc.StandardRowHeight, g.defH), lineH, defLine, lines))
 				continue
 			}
 			if rot := u.st.Align.Rotation; rot != 0 && !u.st.Align.Stacked {
@@ -132,7 +133,7 @@ const rowsPerCheck = 4096
 
 // excelHeight returns the height Excel gives a row without a height of
 // its own whose wrapped text takes a count of lines of lineH points: a line of
-// the sheet's default row height defH for each, scaled by the line of the
+// the standard row height defH for each, scaled by the line of the
 // text's font against the default font's defLine, in whole printer pixels.
 // Excel fits such a row as it opens a workbook, and leaves a row whose
 // text is merely taller than the default unfitted.

@@ -19,14 +19,10 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// The base column width and the row height of a sheet whose format
+// defaultBaseColumn is the base column width of a sheet whose format
 // properties say nothing (ECMA-376 Part 1, 18.3.1.81 sheetFormatPr, whose
-// baseColWidth defaults to 8 characters; Excel's standard height of a
-// Calibri 11 row, 20 screen pixels).
-const (
-	defaultBaseColumn = 8
-	standardRowHeight = 15.0
-)
+// baseColWidth defaults to 8 characters).
+const defaultBaseColumn = 8
 
 // The screen padding Excel adds to a base column width (ECMA-376 Part 1,
 // 18.3.1.81 baseColWidth: two pixels a side and a pixel of grid line) and
@@ -41,24 +37,6 @@ const (
 	baseColumnPadding = 5
 	baseColumnStep    = 8
 )
-
-// rowHeightScale is how much shorter Excel prints a row than its height in
-// points: a row of h points prints h times 0.968, in whole printer pixels.
-// The specification gives a row's height in points (ECMA-376 Part 1,
-// 18.3.1.73 ht); the scale is Excel's, measured.
-//
-// # Corpus evidence
-//
-//   - litho/xlsx: row_heights prints rows of 6, 18, 30, 60 and 409.5 points
-//     5.76, 17.4, 29.04, 58.08 and 396.36 points tall; multipage_grid
-//     prints rows of 15 points 14.52 apart.
-//   - libreoffice/xlsx: sc/tdf139934.xlsx and sc/database.xlsx print Arial
-//     10 rows of 12.75 and 12.8 points 12.36 apart.
-//   - libreoffice/xlsx: sc/tdf155046.xlsx prints Calibri 12 rows of 16
-//     points 15.6 apart, a scale of 0.975, and poi/xlsx
-//     GeneralFormatTests.xlsx Verdana 10 rows of 13 points 12.96 apart:
-//     the scale depends on the font, by a rule not measured.
-const rowHeightScale = 0.968
 
 // worksheet reads the worksheet part name into sh, the index-th sheet of
 // the book (ECMA-376 Part 1, 18.3.1.99 worksheet).
@@ -170,7 +148,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 // pageSetup and pageMargins.
 func (r *reader) defaultSetup(sh *sheet.Sheet) {
 	sh.DefaultColumnWidth = r.baseColumnWidth(defaultBaseColumn)
-	sh.DefaultRowHeight = r.rowHeight(standardRowHeight)
+	sh.DefaultRowHeight = r.standardPrinted * printerPixel
 	sh.Page = defaultPage(r.paperW, r.paperH)
 }
 
@@ -210,7 +188,7 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 	} else if base := intAttr(f, "baseColWidth", defaultBaseColumn); base > 0 {
 		sh.DefaultColumnWidth = r.baseColumnWidth(min(base, maxColumnChars))
 	}
-	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && numeric.PositiveFinite(v) {
+	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && numeric.PositiveFinite(v) && boolAttr(f, "customHeight") {
 		if h := r.rowHeight(v); h > 0 {
 			sh.DefaultRowHeight = h
 		}
@@ -222,9 +200,25 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 const maxRowHeight = 409.5
 
 // rowHeight returns a row height in points as Excel prints a row of ht
-// points ([rowHeightScale]).
+// points: its screen pixels times the Normal font's standard row in
+// printer pixels over its standard row in screen pixels ([standardRow]),
+// truncated to a printer pixel.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: row_heights prints rows of 6, 18, 30, 60 and 409.5
+//     points 48, 145, 242, 484 and 3303 printer pixels tall; multipage_grid
+//     prints rows of 15 points 121 apart.
+//   - poi/xlsx: 56644.xlsx prints its rows of 14.45 points 116 pixels tall
+//     (116.56 truncated), and libreoffice/xlsx sc/tdf118668.xlsx its rows of
+//     12.75 points 102 (102.85), in Calibri 11 books; sc/tdf139934.xlsx
+//     and sc/database.xlsx print Arial 10 rows of 12.75 points 103.
+//   - libreoffice/xlsx: sc/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx
+//     prints its custom default of 28.35 points 228 pixels tall (228.7), and
+//     litho/xlsx fills_patterns its rows of 24 points 193 (193.6).
 func (r *reader) rowHeight(ht float64) float64 {
-	return printerPixels(min(ht, maxRowHeight) * rowHeightScale)
+	px := float64(min(ht, maxRowHeight)*screenPixelsPerPoint) * r.standardPrinted / r.standardScreen
+	return math.Floor(px+1e-6) * printerPixel
 }
 
 // columns reads the column ranges (ECMA-376 Part 1, 18.3.1.13 col),

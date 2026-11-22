@@ -1,12 +1,16 @@
 package xlsx
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -17,7 +21,8 @@ import (
 // pixels: digits of 46 pixels, 5.52 points, and of 7 screen pixels), the
 // default width and height of the format properties and of a sheet
 // without them, the rows' heights scaled as Excel prints them, flags and
-// styles.
+// styles. Test Sans rises 0.8 em and falls 0.2: its standard row is 100
+// printer pixels (8, 74 and 18) and 17 screen ones (2, 12 and 3).
 func TestRead_ColumnsAndRows(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -26,11 +31,14 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 		defWidth, defHeigh float64
 	}{
 		// 8 digits of 7 screen pixels and 5 of padding, 64 pixels, 9.140625
-		// characters of 46 printer pixels; 15 points times 0.968.
-		{"no format properties", `<sheetData/>`, 50.4, 14.52},
-		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 14.52},
-		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 19.8},
-		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.4, 14.52},
+		// characters of 46 printer pixels; the standard row of 100 printer
+		// pixels, whatever defaultRowHeight says without customHeight.
+		{"no format properties", `<sheetData/>`, 50.4, 12},
+		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 12},
+		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 12},
+		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.4, 12},
+		// 27.33 screen pixels times 100 over 17, 160.78 printer pixels.
+		{"custom default", `<sheetFormatPr defaultRowHeight="20.5" customHeight="1"/><sheetData/>`, 50.4, 19.2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -65,10 +73,12 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	if !slices.Equal(idx, []int{1, 2, 4, 7}) {
 		t.Fatalf("rows %v, want 1, 2, 4 and 7", idx)
 	}
-	if r := sh.Rows[0]; math.Abs(r.Height-29.04) > 1e-9 || !r.CustomHeight {
+	// 40 and 53.33 screen pixels times 100 over 17, truncated: 235 and 313
+	// printer pixels.
+	if r := sh.Rows[0]; math.Abs(r.Height-28.2) > 1e-9 || !r.CustomHeight {
 		t.Errorf("row 2 = %+v", r)
 	}
-	if r := sh.Rows[1]; math.Abs(r.Height-38.76) > 1e-9 || r.CustomHeight {
+	if r := sh.Rows[1]; math.Abs(r.Height-37.56) > 1e-9 || r.CustomHeight {
 		t.Errorf("row 3 = %+v, want the stored height of a row without a custom one", r)
 	}
 	if r := sh.Rows[2]; !r.Hidden || r.Style == nil {
@@ -487,5 +497,47 @@ func TestCell_FormulaCapCountsCharacters(t *testing.T) {
 	}
 	if c, ok := cellAt(doc.Sheets[0], 0, 1); ok && c.Formula != "" {
 		t.Errorf("a formula of %d characters is kept", len(long))
+	}
+}
+
+// TestRead_StandardRowHeights checks the rows Excel prints from the Normal
+// font: a book without a custom default height prints its default rows at
+// the font's standard row, whatever defaultRowHeight says, 121 printer
+// pixels for Calibri 11 and 103 for Arial 10, and a row of h points h in
+// screen pixels times the standard row's printer pixels over its screen
+// ones, truncated: 116.56 for 14.45 points of Calibri, 102.85 for 12.75,
+// 103 for 12.75 points of Arial.
+func TestRead_StandardRowHeights(t *testing.T) {
+	t.Parallel()
+	fonts := pinnedFonts(t)
+	for _, tc := range []struct {
+		family       string
+		size         string
+		def          float64
+		rows, height []float64
+	}{
+		{"Carlito", "11", 121, []float64{14.45, 12.75, 15}, []float64{116, 102, 121}},
+		{"Liberation Sans", "10", 103, []float64{12.75, 15}, []float64{103, 121}},
+	} {
+		styles := strings.Replace(strings.Replace(minimalStyles, "Test Sans", tc.family, 1), `<sz val="11"/>`, `<sz val="`+tc.size+`"/>`, 1)
+		var rows strings.Builder
+		for i, h := range tc.rows {
+			fmt.Fprintf(&rows, `<row r="%d" ht="%g"><c r="A%d"><v>1</v></c></row>`, i+1, h, i+1)
+		}
+		xml := `<sheetFormatPr defaultRowHeight="14.4"/><sheetData>` + rows.String() + `</sheetData>`
+		data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: xml}}, styles, "", "", nil))
+		doc, _, err := load(context.Background(), bytes.NewReader(data), fonts, office.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sh := doc.Sheets[0]
+		if got := math.Round(sh.DefaultRowHeight / printerPixel); got != tc.def {
+			t.Errorf("%s %s: default row %v printer pixels, want %v", tc.family, tc.size, got, tc.def)
+		}
+		for i, r := range sh.Rows {
+			if got := math.Round(r.Height / printerPixel); got != tc.height[i] {
+				t.Errorf("%s %s: a row of %v points prints %v printer pixels, want %v", tc.family, tc.size, tc.rows[i], got, tc.height[i])
+			}
+		}
 	}
 }
