@@ -1324,6 +1324,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 	hidden := boolOf(props.vanish)
 	rs := inlineOf(ps)
 	d.applyRun(&rs, props, lineMult)
+	runBorder(&rs, props.border)
 	st := d.share(&rs)
 	var lang string
 	if props.lang != nil {

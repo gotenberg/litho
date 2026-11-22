@@ -3,6 +3,7 @@ package docx
 import (
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
@@ -67,5 +68,32 @@ func TestBuild_TextLineEnds(t *testing.T) {
 	}
 	if n := countBreaks(b.root); n != 0 {
 		t.Errorf("%d breaks, want none", n)
+	}
+}
+
+// TestBuild_RunBorder draws a run's border around its text on every side,
+// its space between them, and none for a run without one or the paragraph
+// whose mark has one.
+func TestBuild_RunBorder(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:pPr><w:rPr><w:bdr w:val="single" w:sz="8" w:space="2"/></w:rPr></w:pPr>` +
+		`<w:r><w:rPr><w:bdr w:val="single" w:sz="8" w:space="2"/></w:rPr><w:t>boxed</w:t></w:r><w:r><w:t>plain</w:t></w:r></w:p>`
+	b := build(t, body, nil)
+	runs := find(b.root, func(n *layout.Node) bool {
+		return n.Kind == layout.Element && n.Role == "" && len(n.Children) > 0 && n.Children[0].Kind == layout.Text
+	})
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want 2", len(runs))
+	}
+	for _, r := range runs {
+		boxed := textOf(r) == "boxed"
+		for side := range r.Style.Border {
+			if got := r.Style.Border[side].Width == 1 && r.Style.Padding[side] == css.Pts(2); got != boxed {
+				t.Errorf("%q side %d: border %v padding %v", textOf(r), side, r.Style.Border[side], r.Style.Padding[side])
+			}
+		}
+	}
+	if p := role(b.root, "P")[0]; p.Style.Border[css.Top].Width != 0 {
+		t.Errorf("the paragraph took its mark's border")
 	}
 }

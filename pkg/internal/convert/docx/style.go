@@ -464,3 +464,23 @@ func legacyShadows(r runProps) []css.Shadow {
 	}
 	return nil
 }
+
+// runBorder draws the border b of a run (ECMA-376 Part 1, 17.3.2.4 bdr)
+// around its text on every side, its space (17.18.2, the distance from
+// the text) between them, or none for nil or a border of no line.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx O14ISOStrict/Word/bdr-Text_Border-themeColor-text1.docx
+//     and rPr-bdr-Text_Border-val_dotDash_color_auto.docx: Word draws a
+//     box around the run's text, a direct bdr and one of a character
+//     style alike.
+func runBorder(st *css.Style, b *borderSpec) {
+	if b == nil || b.Style == css.BorderNone || b.Width <= 0 {
+		return
+	}
+	for side := range st.Border {
+		st.Border[side] = b.Border
+		st.Padding[side] = css.Pts(b.space)
+	}
+}

@@ -62,6 +62,8 @@ type runProps struct {
 	// textSolid a w14:textFill's solid colour, each nil when unset.
 	textPaint *css.OfficeTextPaint
 	textSolid *css.Color
+	// border is the run's border (17.3.2.4 bdr), nil when unset.
+	border *borderSpec
 }
 
 // merge returns r with the properties o sets laid over it.
@@ -125,6 +127,9 @@ func (r runProps) merge(o *runProps) runProps {
 	}
 	if o.shading != nil || o.noShading {
 		r.shading, r.noShading = o.shading, o.noShading
+	}
+	if o.border != nil {
+		r.border = o.border
 	}
 	if o.glow != nil {
 		r.glow = o.glow
@@ -214,6 +219,8 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 			} else {
 				r.noShading = true
 			}
+		case "bdr":
+			r.border = d.parseBorder(c)
 		case "spacing":
 			if v, ok := ooxml.Twips(val); ok {
 				r.spacing = new(max(-maxFontSize, min(maxFontSize, v)))
