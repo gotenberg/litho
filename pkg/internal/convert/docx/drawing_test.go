@@ -608,3 +608,35 @@ func TestChartDerivedAltText(t *testing.T) {
 		t.Errorf("without the option: alt %q lang %q", c.Alt, c.Lang)
 	}
 }
+
+// TestTextBox_FitToText checks that a text box marked to resize to its
+// text, in DrawingML (spAutoFit) or VML (mso-fit-shape-to-text), keeps no
+// minimum height from its extent, and that an unmarked one keeps it.
+func TestTextBox_FitToText(t *testing.T) {
+	t.Parallel()
+	dml := func(bodyPr string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx>` + bodyPr + `</wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	vml := func(style string) string {
+		return `<w:p><w:r><w:pict><v:shape type="#_x0000_t202" style="width:200pt;height:100pt"><v:textbox style="` + style + `"><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>`
+	}
+	for _, tc := range []struct {
+		name, body string
+		min        float64
+	}{
+		{"drawingml fitted", dml(`<wps:bodyPr><a:spAutoFit/></wps:bodyPr>`), 0},
+		{"drawingml", dml(`<wps:bodyPr/>`), 100},
+		{"vml fitted", vml(`mso-fit-shape-to-text:t`), 0},
+		{"vml", vml(``), 100},
+	} {
+		figs := role(build(t, tc.body, nil).root, "Figure")
+		if len(figs) != 1 {
+			t.Fatalf("%s: %d text boxes", tc.name, len(figs))
+		}
+		if got := figs[0].Style.MinHeight; got != css.Pts(tc.min) {
+			t.Errorf("%s: minimum height %v, want %v", tc.name, got, tc.min)
+		}
+	}
+}

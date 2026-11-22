@@ -392,6 +392,9 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		boxText := d.boxText
 		d.boxText = d.boxTextColor(sp.Child(ooxml.NSWPS, "style"))
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
+		if bodyPr.Child(ooxml.NSA, "spAutoFit") != nil {
+			fitToText(n)
+		}
 		d.boxText = boxText
 		id := attrOr(tb, "id")
 		if id != "" {
@@ -682,6 +685,23 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		kids = append([]*layout.Node{pic}, kids...)
 	}
 	n.Children = kids
+}
+
+// fitToText makes the text box n, built by [document.textBox], as tall as
+// its content and its insets, smaller than the extent the file gives too:
+// the box resizes to its text (ECMA-376 Part 1, 21.1.2.1.4 spAutoFit; VML
+// mso-fit-shape-to-text, MS-OI29500, 2.1.1394), as Word prints it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/autofit.docx: Word prints the text box
+//     marked spAutoFit, 139 points tall in the file, one line tall, beside
+//     an unmarked one at its 128 points.
+//   - libreoffice/docx ooxmlimport/n757890.docx and
+//     ooxmlexport/docxopenhyperlinkbox.docx: a VML text box of 110.6
+//     points marked mso-fit-shape-to-text prints one line tall.
+func fitToText(n *layout.Node) {
+	n.Style.MinHeight = css.Pts(0)
 }
 
 // textBox builds a text box of w by h points: an inline block holding the
