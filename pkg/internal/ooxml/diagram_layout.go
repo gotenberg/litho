@@ -69,6 +69,10 @@ type DiagramShape struct {
 	pt     *DiagramPoint
 	// text marks a shape the text algorithm laid out.
 	text bool
+	// user holds the user-defined variables (21.4.7.21 userA to userZ)
+	// the enclosing composite's constraints set on the shape, in EMU; nil
+	// for none.
+	user map[string]int64
 }
 
 // DiagramParagraph is one paragraph of a layout shape's text: a source

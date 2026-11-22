@@ -606,3 +606,76 @@ func TestDiagramShapesKeepTheFirstSizeWhenTextFalls(t *testing.T) {
 		t.Errorf("kids %d and %d EMU tall, the label at %v points, want 1152000, 288000 and 16", pict.H, label.H, label.FontSize)
 	}
 }
+
+// TestDiagramLinearShareOfAShrinkingRow states the share of a row whose
+// rule shrinks its nodes (21.4.2.24 rule w, val 0): the nodes share what
+// the widths the row states leave, padding1 at 0.08 of the row and
+// padding2 at the user-defined variable userP the enclosing composite sets
+// (a quarter of its dummy's height, which an lte constraint holds to 0.4
+// of its width); a space takes 0.2 of a node's share, and the node the
+// user widened (prSet custScaleX 150000) one and a half shares.
+func TestDiagramLinearShareOfAShrinkingRow(t *testing.T) {
+	var pts, cxns strings.Builder
+	pts.WriteString(`<dgm:pt modelId="0" type="doc"/>`)
+	pres := func(id, assoc, name, parent, extra string) {
+		fmt.Fprintf(&pts, `<dgm:pt modelId="%s" type="pres"><dgm:prSet presAssocID="%s" presName="%s"%s/><dgm:spPr/></dgm:pt>`, id, assoc, name, extra)
+		if parent == "" {
+			fmt.Fprintf(&cxns, `<dgm:cxn modelId="c%s" type="presOf" srcId="%s" destId="%s"/>`, id, assoc, id)
+			return
+		}
+		fmt.Fprintf(&cxns, `<dgm:cxn modelId="c%s" type="presParOf" srcId="%s" destId="%s"/>`, id, parent, id)
+	}
+	pres("p0", "0", "root", "", "")
+	pres("pd", "0", "dummy", "p0", "")
+	pres("pl", "0", "linH", "p0", "")
+	pres("p1", "0", "padding1", "pl", "")
+	for i, text := range []string{"a", "b", "c"} {
+		fmt.Fprintf(&pts, `<dgm:pt modelId="n%d"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:p><a:r><a:t>%s</a:t></a:r></a:p></dgm:t></dgm:pt>`, i, text)
+		fmt.Fprintf(&pts, `<dgm:pt modelId="s%d" type="sibTrans" cxnId="x%d"/>`, i, i)
+		fmt.Fprintf(&cxns, `<dgm:cxn modelId="x%d" srcId="0" destId="n%d" srcOrd="%d" sibTransId="s%d"/>`, i, i, i, i)
+		extra := ""
+		if text == "c" {
+			extra = ` custScaleX="150000"`
+		}
+		pres(fmt.Sprintf("pn%d", i), fmt.Sprintf("n%d", i), "node", "pl", extra)
+		fmt.Fprintf(&cxns, `<dgm:cxn modelId="o%d" type="presOf" srcId="n%d" destId="pn%d"/>`, i, i, i)
+		pres(fmt.Sprintf("ps%d", i), fmt.Sprintf("s%d", i), "space", "pl", "")
+	}
+	pres("p2", "0", "padding2", "pl", "")
+	data := `<dgm:dataModel ` + dgmNS + `><dgm:ptLst>` + pts.String() + `</dgm:ptLst><dgm:cxnLst>` + cxns.String() + `</dgm:cxnLst></dgm:dataModel>`
+	sp := func(name string) string {
+		return `<dgm:layoutNode name="` + name + `"><dgm:alg type="sp"/><dgm:shape/></dgm:layoutNode>`
+	}
+	layout := diagramLayout(`<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="dummy" refType="w"/><dgm:constr type="h" for="ch" forName="dummy" refType="h"/>` +
+		`<dgm:constr type="h" for="ch" forName="dummy" refType="w" refFor="ch" refForName="dummy" op="lte" fact="0.4"/>` +
+		`<dgm:constr type="w" for="ch" forName="linH" refType="w"/><dgm:constr type="h" for="ch" forName="linH" refType="h"/>` +
+		`<dgm:constr type="userP" for="ch" forName="linH" refType="h" refFor="ch" refForName="dummy" fact="0.25"/></dgm:constrLst>` +
+		sp("dummy") + `<dgm:layoutNode name="linH"><dgm:alg type="lin"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="node" refType="w"/><dgm:constr type="w" for="ch" forName="space" refType="w" refFor="ch" refForName="node" fact="0.2"/>` +
+		`<dgm:constr type="w" for="ch" forName="padding1" refType="w" fact="0.08"/><dgm:constr type="userP"/><dgm:constr type="w" for="ch" forName="padding2" refType="userP"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="w" for="ch" forName="node" val="0"/></dgm:ruleLst>` + sp("padding1") +
+		`<dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/></dgm:layoutNode>` +
+		`<dgm:forEach axis="followSib" ptType="sibTrans" cnt="1">` + sp("space") + `</dgm:forEach></dgm:forEach>` + sp("padding2") + `</dgm:layoutNode>`)
+	root := ParseDiagram(mustParse(t, data), mustParse(t, layout), nil, nil).LayOut(10000, 5000, nil)
+	if root == nil {
+		t.Fatal("no layout")
+	}
+	var got []string
+	var walk func(s *DiagramShape, x int64)
+	walk = func(s *DiagramShape, x int64) {
+		x += s.X
+		if s.Name == "node" {
+			got = append(got, fmt.Sprintf("%d+%d", x, s.W))
+		}
+		for _, k := range s.Kids {
+			walk(k, x)
+		}
+	}
+	walk(root, -root.X)
+	// The dummy is 4000 tall, userP 1000, padding1 800: 8200 left for 3.9
+	// shares of 2102.56.
+	if want := []string{"800+2102", "3322+2102", "5844+3153"}; strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("nodes at %v, want %v", got, want)
+	}
+}

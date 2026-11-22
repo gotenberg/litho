@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -36,6 +37,10 @@ const (
 	// maxDiagramDepth caps the nesting of layout nodes and of the data
 	// model's parent chains the engine follows.
 	maxDiagramDepth = 64
+	// maxCustomScale caps the factor a point's custScaleX widens its shape
+	// by: PowerPoint's handles stretch a shape a few times at most, and the
+	// cap keeps the lengths a linear layout sums finite.
+	maxCustomScale = 100
 )
 
 // Diagram is a SmartArt diagram as its parts hold it (ECMA-376 Part 1,
@@ -85,6 +90,9 @@ type DiagramPoint struct {
 	// Dir and HierBranch are the layout variables dir and hierBranch, the
 	// tokens as written ("norm" and "" when absent).
 	Dir, HierBranch string
+	// ScaleX is the width the user gave the point's shape, as a factor of
+	// the width the layout gives it (prSet custScaleX), 0 for none.
+	ScaleX float64
 	// SpPr is the point's dgm:spPr, Text its dgm:t text body; nil for
 	// none.
 	SpPr, Text *Element
@@ -275,6 +283,10 @@ func (d *Diagram) parseData(dm *Element) {
 			p.PresStyleLbl = attrOr(pr, "presStyleLbl")
 			p.PresAssocID = attrOr(pr, "presAssocID")
 			p.CustomText = boolOr(pr, "custT", false)
+			// ST_PrSetCustVal: a percentage in thousandths, at 32 bits.
+			if v, err := intconv.Atoi32(strings.TrimSpace(attrOr(pr, "custScaleX"))); err == nil && v > 0 {
+				p.ScaleX = min(float64(v)/100000, maxCustomScale)
+			}
 			for _, v := range pr.Child(NSDgm, "presLayoutVars").Kids() {
 				switch v.Local {
 				case "dir":

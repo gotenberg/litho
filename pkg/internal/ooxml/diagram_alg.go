@@ -241,11 +241,26 @@ func (r *compositeRun) lay(place bool) {
 	}
 	type box struct{ x, y, w, h int64 }
 	boxes := make([]box, len(s.Kids))
+	users := make([]map[string]int64, len(s.Kids))
 	var bounds []DiagramConstraint
+	own, _ := r.e.own(a.Node, s.pt)
+	// The composite's own lte and gte constraints bound the lengths the
+	// equalities set (21.4.7.10 ST_BoolOperator), a kid's that lays out
+	// no shape of its own included: what refers to it reads the bound.
+	for _, c := range own {
+		if c.ForName != "" && (c.Op == "lte" || c.Op == "gte") && geometric[c.Type] {
+			holdToBound(c, props)
+		}
+	}
 	for i, k := range s.Kids {
 		for _, c := range cons {
 			if c.ForName == k.Name {
 				r.apply(c, props)
+			}
+		}
+		for _, c := range own {
+			if c.ForName == k.Name && (c.Op == "lte" || c.Op == "gte") && geometric[c.Type] {
+				bounds = append(bounds, c)
 			}
 		}
 		for _, n := range a.Node.Kids {
@@ -271,13 +286,7 @@ func (r *compositeRun) lay(place bool) {
 		// A kid's own lte or gte constraint bounds a length the others set
 		// (21.4.7.10 ST_BoolOperator) and sets none.
 		for _, c := range bounds {
-			b := layoutProps{c.ForName: maps.Clone(props[c.ForName])}
-			applyConstraint(c, b)
-			v, okB := b.get(c.ForName, c.Type)
-			cur, okC := props.get(c.ForName, c.Type)
-			if okB && okC && (c.Op == "lte" && cur > v || c.Op == "gte" && cur < v) {
-				props.set(c.ForName, c.Type, v)
-			}
+			holdToBound(c, props)
 		}
 		bounds = bounds[:0]
 		w, h := s.W, s.H
@@ -350,6 +359,14 @@ func (r *compositeRun) lay(place bool) {
 			h = min(h, s.H-y)
 		}
 		boxes[i] = box{x, y, w, h}
+		for _, prop := range sortedKeys(props[k.Name]) {
+			if strings.HasPrefix(prop, "user") {
+				if users[i] == nil {
+					users[i] = map[string]int64{}
+				}
+				users[i][prop] = props[k.Name][prop]
+			}
+		}
 		vmin = min(vmin, y)
 		vmax = max(vmax, y+h)
 	}
@@ -358,6 +375,7 @@ func (r *compositeRun) lay(place bool) {
 	}
 	for i, k := range s.Kids {
 		k.W, k.H, k.X, k.Y = boxes[i].w, boxes[i].h, boxes[i].x, boxes[i].y
+		k.user = users[i]
 	}
 	ph, _ := props.get("", "h")
 	if vmin < 0 || vmin > vmax || vmax > ph {
@@ -704,6 +722,13 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 		if !setsLength(c) {
 			continue
 		}
+		if v, ok := s.user[c.RefType]; ok && c.RefForName == "" && (c.Type == "w" || c.Type == "h") {
+			// A length that refers to a user-defined variable the
+			// enclosing composite set on this layout (21.4.7.21 userA to
+			// userZ) is its factor of it.
+			props.set(c.ForName, c.Type, trunc(float64(v)*c.Factor))
+			continue
+		}
 		if c.Type == "w" {
 			props.set(c.ForName, "w", min(e.lengthOf(c, cons, fl, s.W), s.W))
 		}
@@ -726,8 +751,10 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 	if vertical {
 		shrink = map[string]bool{}
 	}
+	var fitted map[*DiagramShape]int64
 	if len(shrink) > 0 {
 		deps := map[string]bool{}
+		depFactor := map[string]float64{}
 		for _, k := range s.Kids {
 			if shrink[k.Name] || count <= 1 {
 				continue
@@ -756,6 +783,7 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 				}
 				count += c.Factor
 				deps[k.Name] = true
+				depFactor[k.Name] = c.Factor
 				isDep = true
 				break
 			}
@@ -779,6 +807,17 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			shrink[n] = true
 		}
 		spaceW, spaceH = 0, 0
+		if horizontal {
+			// Only a rule that shrinks a width shares the row (21.4.2.24).
+			ruled := map[string]bool{}
+			_, own := e.own(a.Node, s.pt)
+			for _, r := range own {
+				if r.Type == "w" && r.ForName != "" && r.Value == 0 {
+					ruled[r.ForName] = true
+				}
+			}
+			fitted = shrinkToFit(s, props, ruled, depFactor)
+		}
 	} else {
 		s.Kids = dropEmptyGroupsBut(s.Kids, fl.spacers)
 		count = float64(len(s.Kids))
@@ -830,10 +869,18 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 	} else if vertical {
 		y += incY * alignOffset(param(a, "vertAlign", ""), s.H-trunc(float64(totH)*scaleH))
 	}
+	if fitted != nil {
+		scaleW = 1
+	}
 	for _, k := range s.Kids {
 		w, h := sizeOf(k)
-		if len(shrink) == 0 || shrink[k.Name] {
+		if v, ok := fitted[k]; ok {
+			w = v
+		}
+		if (len(shrink) == 0 || shrink[k.Name]) && fitted == nil {
 			w = trunc(float64(w) * scaleW)
+			h = trunc(float64(h) * scaleH)
+		} else if len(shrink) == 0 || shrink[k.Name] {
 			h = trunc(float64(h) * scaleH)
 		}
 		k.W, k.H = w, h
@@ -858,6 +905,99 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			s.Kids[i], s.Kids[j] = s.Kids[j], s.Kids[i]
 		}
 	}
+}
+
+// holdToBound holds the length an lte or gte constraint names to the bound it
+// gives, when both are known.
+func holdToBound(c DiagramConstraint, props layoutProps) {
+	b := layoutProps{c.ForName: maps.Clone(props[c.ForName])}
+	if c.RefForName != c.ForName {
+		b[c.RefForName] = props[c.RefForName]
+	}
+	applyConstraint(c, b)
+	v, okB := b.get(c.ForName, c.Type)
+	cur, okC := props.get(c.ForName, c.Type)
+	if okB && okC && (c.Op == "lte" && cur > v || c.Op == "gte" && cur < v) {
+		props.set(c.ForName, c.Type, v)
+	}
+}
+
+// shrinkToFit returns the widths a row gives the kids its rules shrink
+// (21.4.2.24 rule type w, val 0) when they do not fit and it holds kids of
+// a stated width or kids the user widened (prSet custScaleX), nil
+// otherwise: the kids that shrink share what the stated widths leave of
+// the row, each in proportion to its own scale, and a kid whose width is a
+// factor of a shrinking kid's takes that factor of the share.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-linear-rule's hProcess3 states padding1
+//     at 0.08 of the row, padding2 at userP (a quarter of the dummy's
+//     height, at most 0.4 of the width), the spaces at 0.2 of a column,
+//     and its third column's text is widened 1.42454 times: Office's
+//     columns stand 145.02 points apart in the 563.2-point row, which the
+//     share gives (1.2 x (0.92 x 563.2 - 56.3) / 3.82454 = 144.9); probe,
+//     pptx: hprocess3-narrow and hprocess3-wide, 400 and 920 points wide,
+//     103.0 and 243.4 points apart, given alike (102.9, 243.1).
+func shrinkToFit(s *DiagramShape, props layoutProps, ruled map[string]bool, depFactor map[string]float64) map[*DiagramShape]int64 {
+	var fixed, total, natural float64
+	stated, scaled := false, false
+	for _, k := range s.Kids {
+		switch {
+		case depFactor[k.Name] != 0:
+			total += depFactor[k.Name]
+		case ruled[k.Name]:
+			f := customScale(k, 0)
+			scaled = scaled || f != 1
+			total += f
+			v, ok := props.get(k.Name, "w")
+			if !ok {
+				return nil
+			}
+			natural += float64(float64(v) * f)
+		default:
+			v, ok := props.get(k.Name, "w")
+			if !ok {
+				return nil
+			}
+			fixed += float64(v)
+			stated = stated || v != 0
+		}
+	}
+	room := float64(s.W) - fixed
+	// The rule shrinks the row to fit, and never widens it.
+	if (!stated && !scaled) || !(total > 0) || !(room > 0) || natural <= room {
+		return nil
+	}
+	share := room / total
+	out := map[*DiagramShape]int64{}
+	for _, k := range s.Kids {
+		switch {
+		case depFactor[k.Name] != 0:
+			out[k] = trunc(float64(share * depFactor[k.Name]))
+		case ruled[k.Name]:
+			out[k] = trunc(float64(share * customScale(k, 0)))
+		}
+	}
+	return out
+}
+
+// customScale returns the factor the user widened a shape by, or the
+// widest a shape it holds was widened by (prSet custScaleX), 1 for none.
+func customScale(s *DiagramShape, depth int) float64 {
+	if s.pt != nil && s.pt.ScaleX > 0 {
+		return s.pt.ScaleX
+	}
+	f := 1.0
+	if depth >= maxDiagramDepth {
+		return f
+	}
+	for _, k := range s.Kids {
+		if v := customScale(k, depth+1); v > f {
+			f = v
+		}
+	}
+	return f
 }
 
 // setsLength reports a width or height constraint of a linear layout that
