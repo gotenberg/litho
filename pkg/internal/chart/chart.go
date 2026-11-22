@@ -253,6 +253,9 @@ type Group struct {
 	// BubbleScale is the size of the largest bubble as a percentage of the
 	// default, 100 by default (21.2.2.21 bubbleScale).
 	BubbleScale float64
+	// BubbleWidth sizes a bubble's diameter, not its area, in proportion to
+	// its size (ECMA-376 Part 1, 21.2.2.164 sizeRepresents w).
+	BubbleWidth bool
 	// Filled draws a radar group's polygons filled (21.2.3.37
 	// ST_RadarStyle filled).
 	Filled bool

@@ -553,3 +553,19 @@ func officeClampIntervals(n float64) int {
 func (rd *renderer) officeSharesAxis(own, first *Axis) bool {
 	return rd.office() && own.Deleted && first != nil && first.Kind == ValueAxis && !first.Deleted
 }
+
+// officeBubbleShare is the diameter of the largest bubble of an Office
+// bubble chart at a bubble scale of 100, in the plot area's smaller side;
+// a bubble's area, or its width under sizeRepresents w, is in proportion
+// to its size. LibreOffice gives the largest bubble that share as its
+// radius.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_scatter_bubble's bubbles of sizes 2 to 12 are
+//     8.92 to 21.85 pt across in Excel, the diameter over the square root
+//     of the size 6.31 for each, the largest 0.252 of the plot area's
+//     86.63 pt height.
+//   - litho/pptx: chart-scatter-bubble's largest bubble is 97.2 pt across
+//     in PowerPoint, 0.250 of its plot area's 388.9 pt height.
+const officeBubbleShare = 0.25

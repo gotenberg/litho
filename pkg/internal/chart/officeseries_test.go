@@ -3,6 +3,7 @@ package chart
 import (
 	"context"
 	"math"
+	"slices"
 	"testing"
 )
 
@@ -27,5 +28,58 @@ func TestDims_OfficeDeletedAxisSharesTheFirstScale(t *testing.T) {
 		if tc.want == 1 && (yOf[c.Groups[1]] != ys[0] || ys[0].hi != 4) {
 			t.Errorf("rules %v: the line is not drawn on the first axis, its range %v to %v", tc.rules, ys[0].lo, ys[0].hi)
 		}
+	}
+}
+
+// bubbleChart returns a bubble chart of one red series with the given
+// sizes at x 1, 2, ... and y 1, 2, ..., its axes unlabelled.
+func bubbleChart(rules Rules, sizes ...float64) *Chart {
+	var xs, ys []float64
+	for i := range sizes {
+		xs, ys = append(xs, float64(i+1)), append(ys, float64(i+1))
+	}
+	ax := plainAxes()
+	ax[0].Kind = ValueAxis
+	ax[0].Position = AxisBottom
+	return &Chart{
+		Rules: rules,
+		Axes:  ax,
+		Groups: []*Group{{Kind: Bubble, BubbleScale: 100, XAxis: 0, YAxis: 1, Series: []*Series{{
+			Categories: Data{Values: nums(xs...), Cached: true},
+			Values:     Data{Values: nums(ys...), Cached: true},
+			Sizes:      Data{Values: nums(sizes...), Cached: true},
+			Fill:       &Paint{Color: red},
+		}}}},
+	}
+}
+
+// TestRender_OfficeBubbleSizes holds the largest bubble of an Office chart
+// to a quarter of the plot area's smaller side across, the others by the
+// square root of their sizes, or by their sizes under sizeRepresents w;
+// LibreOffice's largest is twice as wide.
+func TestRender_OfficeBubbleSizes(t *testing.T) {
+	widths := func(c *Chart) []float64 {
+		var out []float64
+		for _, p := range paths(Render(context.Background(), ahem(t), c, chartRect), red) {
+			out = append(out, bounds(p).Width)
+		}
+		slices.Sort(out)
+		return out
+	}
+	office := widths(bubbleChart(OfficeRules, 1, 4))
+	lo := widths(bubbleChart(LibreOfficeRules, 1, 4))
+	if len(office) != 2 || len(lo) != 2 {
+		t.Fatalf("got %d and %d bubbles, want 2 each", len(office), len(lo))
+	}
+	if r := office[1] / lo[1]; math.Abs(r-0.5) > 0.01 {
+		t.Errorf("Office's largest bubble is %.3f of LibreOffice's, want 0.5", r)
+	}
+	if r := office[0] / office[1]; math.Abs(r-0.5) > 0.01 {
+		t.Errorf("a bubble of a quarter the size is %.3f as wide, want 0.5", r)
+	}
+	c := bubbleChart(OfficeRules, 1, 4)
+	c.Groups[0].BubbleWidth = true
+	if w := widths(c); len(w) != 2 || math.Abs(w[0]/w[1]-0.25) > 0.01 {
+		t.Errorf("sized by width: %v, want the small one a quarter as wide", w)
 	}
 }

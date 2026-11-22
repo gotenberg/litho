@@ -78,6 +78,11 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	if v := percentVal(e, "bubbleScale", 100); !math.IsNaN(v) {
 		g.BubbleScale = v
 	}
+	// ECMA-376 Part 1, 21.2.2.164 sizeRepresents: "w" sizes a bubble's
+	// width by its value, the default "area" its area.
+	if k := e.Child(NSChart, "sizeRepresents"); k != nil && attrOr(k, "val") == "w" {
+		g.BubbleWidth = true
+	}
 	var ids []string
 	for _, k := range e.Kids() {
 		if k.Is(NSChart, "axId") {

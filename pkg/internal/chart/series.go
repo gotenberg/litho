@@ -680,8 +680,13 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 		scaleB = 100
 	}
 	// The largest bubble's radius is a quarter of the plot area's smaller
-	// side (LibreOffice's BubbleChart).
-	rmax := math.Min(x.inner.Width, y.inner.Height) / 4 * math.Min(scaleB, 300) / 100
+	// side (LibreOffice's BubbleChart), its diameter under Office's rules
+	// (officeBubbleShare).
+	share := 0.25
+	if rd.office() {
+		share = officeBubbleShare / 2
+	}
+	rmax := float64(math.Min(x.inner.Width, y.inner.Height)*share) * math.Min(scaleB, 300) / 100
 	for _, s := range g.Series {
 		cats, vals, sizes := rd.data(s.Categories), rd.data(s.Values), rd.data(s.Sizes)
 		var pts []typeset.Point
@@ -705,6 +710,9 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 					continue
 				}
 				r := rmax * math.Sqrt(v/maxSize)
+				if g.BubbleWidth {
+					r = rmax * v / maxSize
+				}
 				rd.paint(ellipse(p.X, p.Y, r, r), rd.fillOf(g, s, idx[k]), rd.borderOf(g, s, idx[k]))
 			}
 		} else {
