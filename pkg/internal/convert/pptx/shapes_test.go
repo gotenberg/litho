@@ -420,7 +420,8 @@ func TestShapes_GradientTurn(t *testing.T) {
 	}{
 		{"a gradient turns with its shape", grad(""), 0},
 		{"a gradient that does not rotate with the shape keeps the page's direction", grad(`rotWithShape="0"`), 270},
-		{"a camera's turn does not turn the gradient", grad("") + camera, 90},
+		{"a camera's turn turns the gradient with the shape", grad("") + camera, 0},
+		{"one that does not rotate with the shape too", grad(`rotWithShape="0"`) + camera, 270},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -467,24 +467,27 @@ func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 }
 
 // fixGradient turns a shape's linear gradient so it keeps the direction
-// Impress gives it on the page: the gradient's angle turned by the
-// shape's own rotation turn (20.1.7.6 xfrm rot), or not at all when the
-// gradient does not rotate with the shape (20.1.8.33 gradFill
-// rotWithShape false); a camera's turn never turns it.
+// PowerPoint gives it on the page: the gradient's angle turned by the
+// shape's whole rotation, or, when the gradient does not rotate with the
+// shape (20.1.8.33 gradFill rotWithShape false), by its camera's turn
+// alone, not its own rotation turn (20.1.7.6 xfrm rot): the camera turns
+// the shape as drawn, its fill with it.
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: oox/Scene3d_orthographicFront's wave, turned a quarter by its
-//     camera, prints its left-to-right gradient left to right.
+//   - libreoffice/pptx: oox/Scene3d_orthographicFront's wave, of a
+//     left-to-right gradient that does not rotate with it, turned a
+//     quarter anticlockwise by its camera, prints its gradient from the
+//     bottom up.
 func fixGradient(s *slides.Shape, chain []*ooxml.Element, turn float64) {
 	if s.Fill.Kind != slides.FillGradient || s.Fill.Gradient.Radial {
 		return
 	}
-	page := turn
+	page := s.Rotation
 	for _, el := range chain {
 		if g := spPr(el).Child(ooxml.NSA, "gradFill"); g != nil {
 			if v, ok := g.Attr("rotWithShape"); ok && !ooxml.OnOff(v, true) {
-				page = 0
+				page = s.Rotation - turn
 			}
 			break
 		}
