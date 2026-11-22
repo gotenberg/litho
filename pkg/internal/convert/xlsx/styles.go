@@ -2,12 +2,14 @@ package xlsx
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -481,8 +483,9 @@ var patternShare = map[string]int{
 // fill reads a fill record (ECMA-376 Part 1, 18.8.20): a pattern fill as
 // its foreground mixed into its background by the pattern's share (the
 // foreground defaulting to the window text colour, black, and the
-// background to the window colour, white), a gradient fill as its first
-// two stops mixed equally, as LibreOffice imports both.
+// background to the window colour, white), as LibreOffice imports it; a
+// gradient fill as its gradient ([reader.gradient]), its first two stops
+// mixed equally as its one colour.
 func (r *reader) fill(e *ooxml.Element) sheet.Fill {
 	if pf := e.Child(nsMain, "patternFill"); pf != nil {
 		pattern := attr(pf, "patternType")
@@ -501,37 +504,67 @@ func (r *reader) fill(e *ooxml.Element) sheet.Fill {
 		return sheet.Fill{Color: mix(fg, bg, share)}
 	}
 	if gf := e.Child(nsMain, "gradientFill"); gf != nil {
-		type stop struct {
-			pos float64
-			c   css.Color
-		}
-		var stops []stop
-		for _, s := range gf.Kids() {
-			if !s.Is(nsMain, "stop") {
-				continue
-			}
-			p, err := strconv.ParseFloat(attr(s, "position"), 64)
-			if err != nil || p < 0 {
-				continue
-			}
-			c, ok := r.color(s.Child(nsMain, "color"))
-			if !ok {
-				c = css.Color{R: 1, G: 1, B: 1, A: 1}
-			}
-			stops = append(stops, stop{p, c})
-		}
-		if len(stops) == 0 {
+		g := r.gradient(gf)
+		if g == nil {
 			return sheet.Fill{}
 		}
-		sort.SliceStable(stops, func(i, j int) bool { return stops[i].pos < stops[j].pos })
-		r.warn(warn.ContentUnsupported, warn.Approximated, "a gradient fill is drawn as the mean of its first two colours")
-		c := stops[0].c
-		if len(stops) > 1 && stops[1].pos != stops[0].pos {
-			c = mix(c, stops[1].c, 0x40)
+		c := g.Stops[0].Color
+		if g.Stops[1].Position != g.Stops[0].Position {
+			c = mix(c, g.Stops[1].Color, 0x40)
 		}
-		return sheet.Fill{Color: c}
+		return sheet.Fill{Color: c, Gradient: g}
 	}
 	return sheet.Fill{}
+}
+
+// maxGradientStops caps the stops a gradient fill keeps. Anti-DoS guard,
+// not spec-mandated: Excel's dialog sets at most ten, and each stop kept
+// costs a function in the PDF.
+const maxGradientStops = 64
+
+// gradient reads a gradientFill (ECMA-376 Part 1, 18.8.24): its type,
+// degree and inner rectangle, and its stops (18.8.38), ordered by
+// position and padded so that the first sits at 0 and the last at 1; a
+// stop without a colour is white. nil for one without a stop.
+func (r *reader) gradient(gf *ooxml.Element) *sheet.Gradient {
+	g := &sheet.Gradient{Path: attr(gf, "type") == "path"}
+	frac := func(name string) float64 {
+		v, err := strconv.ParseFloat(attr(gf, name), 64)
+		if err != nil || !numeric.Finite(v) {
+			return 0
+		}
+		return min(max(v, 0), 1)
+	}
+	if v, err := strconv.ParseFloat(attr(gf, "degree"), 64); err == nil && numeric.Finite(v) {
+		g.Degree = math.Mod(v, 360)
+	}
+	g.Left, g.Right, g.Top, g.Bottom = frac("left"), frac("right"), frac("top"), frac("bottom")
+	g.Right, g.Bottom = max(g.Right, g.Left), max(g.Bottom, g.Top)
+	for _, s := range gf.Kids() {
+		if !s.Is(nsMain, "stop") || len(g.Stops) >= maxGradientStops {
+			continue
+		}
+		p, err := strconv.ParseFloat(attr(s, "position"), 64)
+		if err != nil || !numeric.Finite(p) {
+			continue
+		}
+		c, ok := r.color(s.Child(nsMain, "color"))
+		if !ok {
+			c = css.Color{R: 1, G: 1, B: 1, A: 1}
+		}
+		g.Stops = append(g.Stops, sheet.GradientStop{Position: min(max(p, 0), 1), Color: c})
+	}
+	if len(g.Stops) == 0 {
+		return nil
+	}
+	sort.SliceStable(g.Stops, func(i, j int) bool { return g.Stops[i].Position < g.Stops[j].Position })
+	if first := g.Stops[0]; first.Position > 0 {
+		g.Stops = append([]sheet.GradientStop{{Color: first.Color}}, g.Stops...)
+	}
+	if last := g.Stops[len(g.Stops)-1]; last.Position < 1 || len(g.Stops) == 1 {
+		g.Stops = append(g.Stops, sheet.GradientStop{Position: 1, Color: last.Color})
+	}
+	return g
 }
 
 // mix returns the colour a share in 128ths of fg over bg gives, channel by

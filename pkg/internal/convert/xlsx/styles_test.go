@@ -127,6 +127,33 @@ func TestRead_Fills(t *testing.T) {
 	}
 }
 
+// TestRead_GradientFills checks a gradient fill's type, degree, inner
+// rectangle and stops, sorted, padded to 0 and 1 and capped.
+func TestRead_GradientFills(t *testing.T) {
+	t.Parallel()
+	var many strings.Builder
+	for i := 0; i < 10000; i++ {
+		fmt.Fprintf(&many, `<stop position="%g"><color rgb="FF00FF00"/></stop>`, float64(i)/10000)
+	}
+	doc := styledBook(t, "", "",
+		`<fill><gradientFill degree="405"><stop position="0.8"><color rgb="FF0000FF"/></stop><stop position="0.2"><color rgb="FFFF0000"/></stop></gradientFill></fill>`+
+			`<fill><gradientFill type="path" left="0.5" right="0.25" top="2" bottom="NaN"><stop position="0"><color rgb="FFFFFFFF"/></stop><stop position="1"><color rgb="FF000000"/></stop></gradientFill></fill>`+
+			`<fill><gradientFill>`+many.String()+`</gradientFill></fill>`,
+		"", "", `<xf fillId="2"/><xf fillId="3"/><xf fillId="4"/>`, 3)
+	g := styleOf(t, doc, 0).Fill.Gradient
+	if g == nil || g.Path || g.Degree != 45 || len(g.Stops) != 4 || g.Stops[0] != (sheet.GradientStop{Color: rgb(0xFF0000)}) ||
+		g.Stops[1].Position != 0.2 || g.Stops[3] != (sheet.GradientStop{Position: 1, Color: rgb(0x0000FF)}) {
+		t.Errorf("linear %+v", g)
+	}
+	g = styleOf(t, doc, 1).Fill.Gradient
+	if g == nil || !g.Path || g.Left != 0.5 || g.Right != 0.5 || g.Top != 1 || g.Bottom != 1 {
+		t.Errorf("path %+v", g)
+	}
+	if g = styleOf(t, doc, 2).Fill.Gradient; g == nil || len(g.Stops) != maxGradientStops+1 {
+		t.Errorf("many stops: %d kept", len(g.Stops))
+	}
+}
+
 // TestRead_Borders checks the named border styles resolved to Calc's
 // widths, the colours and the diagonals.
 func TestRead_Borders(t *testing.T) {

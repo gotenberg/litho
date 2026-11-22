@@ -820,7 +820,7 @@ func (cs *conditions) overlayStyle(base *Style, res *condResult) *Style {
 		}
 	}
 	if res.hasScale {
-		st.Fill.Color = res.scale
+		st.Fill.Color, st.Fill.Gradient = res.scale, nil
 	}
 	if len(cs.styles) < maxCondStyles {
 		cs.styles[key] = &st

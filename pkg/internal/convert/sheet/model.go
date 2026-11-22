@@ -470,6 +470,33 @@ type Fill struct {
 	// transparent, paints nothing. A pattern fill is read as the colour
 	// its pattern shows most, as Calc imports one.
 	Color css.Color
+	// Gradient, when not nil, paints the cell in place of Color, which
+	// then holds one colour of it for what reads a fill as one colour.
+	Gradient *Gradient
+}
+
+// Gradient is a gradient fill (ECMA-376 Part 1, 18.8.24 gradientFill):
+// linear, along Degree, or a path that runs from an inner rectangle out
+// to the cell's edges.
+type Gradient struct {
+	// Path selects the path gradient; Degree, for a linear one, turns its
+	// direction clockwise from left to right, in degrees.
+	Path   bool
+	Degree float64
+	// Left, Right, Top and Bottom place the inner rectangle of a path
+	// gradient, each a fraction of the cell from its left or top edge, in
+	// [0, 1], Left at most Right and Top at most Bottom.
+	Left, Right, Top, Bottom float64
+	// Stops are the colours, at least two, by rising Position, the first
+	// at 0 and the last at 1.
+	Stops []GradientStop
+}
+
+// GradientStop is a colour of a gradient at Position, a fraction of the
+// way from its start to its end.
+type GradientStop struct {
+	Position float64
+	Color    css.Color
 }
 
 // Border is one border line (ECMA-376 Part 1, 18.8.4 border; ODF 1.3 Part

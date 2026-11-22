@@ -208,7 +208,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 	}
 	draft := g.sh.Page.Draft
 	b.units(rg, func(u *unit) {
-		if c := u.st.Fill.Color; c.A > 0 && !draft {
+		if gr := u.st.Fill.Gradient; gr != nil && !draft {
+			b.fills = append(b.fills, gradientPaths(u.x, u.y, u.w, u.h, gr)...)
+		} else if c := u.st.Fill.Color; c.A > 0 && !draft {
 			b.fills = append(b.fills, &typeset.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &typeset.Fill{Color: colorOf(c)}})
 		}
 		b.drawDataBar(u)
