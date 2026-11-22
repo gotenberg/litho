@@ -1169,10 +1169,45 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		}
 	}
 	b.h = usedHeight(b, h, content, hSet, cb)
+	e.alignContent(b, content)
 	e.cloneEdges(b, hSet)
 	fillFieldset(b)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
+}
+
+// alignContent moves the content of the block container b, content tall,
+// within its content box as its align-content asks (CSS Align 3, 5.1):
+// center by half the room left, end and flex-end by all of it. Under safe
+// a content taller than the box keeps its start; otherwise it overflows
+// both ways or the start, as unsafe asks (4.4). Only a box laid out whole,
+// an inline-block, a float or an absolutely positioned box, moves its
+// content: a block a page break cuts keeps its content at its start.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 centres the text
+//     of an input, a button and a select 40 or 50 pixels tall, which the
+//     user agent sheet aligns with align-content: center.
+func (e *engine) alignContent(b *box, content float64) {
+	k := b.st.AlignContent.Keyword()
+	if k != css.BoxCenter && k != css.BoxEnd && k != css.BoxFlexEnd || e.noPaginate == 0 ||
+		b.flex != nil || b.grid != nil || b.tdata != nil || b.mc != nil {
+		return
+	}
+	free := b.h - content
+	if free < 0 && b.st.AlignContent&css.BoxSafe != 0 {
+		return
+	}
+	d := free
+	if k == css.BoxCenter {
+		d = free / 2
+	}
+	if d == 0 {
+		return
+	}
+	b.shift(0, d)
+	b.y, b.sy, b.anchorY = b.y-d, b.sy-d, b.anchorY-d
 }
 
 // lineClampContainer reports a box of the line-clamp property, whose
