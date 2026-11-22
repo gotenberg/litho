@@ -113,9 +113,12 @@ func (rd *renderer) render(r typeset.Rect) {
 		if rd.ctx.Err() != nil || !above(plot.Width, 1) || !above(plot.Height, 1) {
 			return
 		}
-		if hierarchical(c) {
+		switch {
+		case pie:
+			rd.pies(officePie(plot))
+		case hierarchical(c):
 			rd.hierarchy(plot)
-		} else {
+		default:
 			rd.cartesian(plot)
 		}
 		if c.Notice != nil {

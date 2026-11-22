@@ -37,7 +37,9 @@
 // its minimum. A two-dimensional cartesian chart puts its title, a legend
 // above or below the plot area and the plot area at Office's distances,
 // and its text lines are as high as their faces' ascent, descent and line
-// gap. The rest keeps LibreOffice's rules.
+// gap. A flat pie or doughnut without data labels takes Office's title,
+// legend and room, and fills a square inset in it. The rest keeps
+// LibreOffice's rules.
 //
 // Trendlines fit their series by least squares, or average them, and
 // enter the legend after their series. Error bars mark each point's error

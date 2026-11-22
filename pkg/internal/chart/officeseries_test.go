@@ -181,3 +181,53 @@ func TestRender_OfficeSpanCap(t *testing.T) {
 		t.Errorf("labels %q, want 0 to 6 by 1", got)
 	}
 }
+
+// TestRender_OfficePieLayout holds a flat, unlabelled Office pie to the
+// square officePie leaves it, and a labelled one to LibreOffice's layout.
+func TestRender_OfficePieLayout(t *testing.T) {
+	pie := func(labels bool, explosion float64) *Chart {
+		s := &Series{Values: Data{Values: nums(1, 1, 1, 1), Cached: true}, Fill: &Paint{Color: red}}
+		if explosion > 0 {
+			s.Points = []Point{{Index: 0, Explosion: explosion, HasExplosion: true}}
+		}
+		if labels {
+			s.Labels = Labels{ShowValue: true}
+		}
+		return &Chart{Rules: OfficeRules, Groups: []*Group{{Kind: Pie, XAxis: -1, YAxis: -1, Series: []*Series{s}}}}
+	}
+	r := typeset.Rect{Width: 300, Height: 200}
+	box := func(c *Chart) typeset.Rect {
+		var b typeset.Rect
+		for i, p := range paths(Render(context.Background(), ahem(t), c, r), red) {
+			if i == 0 {
+				b = bounds(p)
+			} else {
+				b = union(b, bounds(p))
+			}
+		}
+		return b
+	}
+	// The room is 6.5 pt in from the sides and bottom and officeTopPad
+	// under the top; the pie is officeMinLabelRoom/2 under the room's top
+	// and officePieInset from its bottom, its radius not shrunk for the
+	// exploded sectors that reach past it.
+	d := 200 - officeTopPad - officePad - officeMinLabelRoom/2 - officePieInset
+	got := box(pie(false, 0))
+	if math.Abs(got.Height-d) > 0.05 {
+		t.Errorf("pie %.2f high, want %.2f", got.Height, d)
+	}
+	if cy := got.Y + got.Height/2; math.Abs(cy-(officeTopPad+officeMinLabelRoom/2+d/2)) > 0.05 {
+		t.Errorf("centre at %.2f, want %.2f", cy, officeTopPad+officeMinLabelRoom/2+d/2)
+	}
+	if ex := box(pie(false, 20)); ex.Height <= d+1 {
+		t.Errorf("pie with an exploded point %.2f high, want that point past the %.2f pt square", ex.Height, d)
+	}
+	c := pie(false, 0)
+	c.Groups[0].Series[0].Explosion = 20
+	if ex := box(c); ex.Height > d+0.05 {
+		t.Errorf("pie with its series exploded %.2f high, want it within the %.2f pt square", ex.Height, d)
+	}
+	if lo := box(pie(true, 0)); math.Abs(lo.Height-got.Height) < 1 {
+		t.Errorf("a labelled pie %.2f high, want LibreOffice's layout", lo.Height)
+	}
+}

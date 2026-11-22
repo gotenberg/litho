@@ -105,8 +105,10 @@ const (
 	LibreOfficeRules Rules = iota
 	// OfficeRules lays a two-dimensional cartesian chart out and scales
 	// its vertical value axis as Microsoft Office does: the rules of a
-	// DrawingML chart part. Pies, radar charts, three-dimensional plots
-	// and a plot area the file places keep LibreOffice's layout.
+	// DrawingML chart part, and a flat pie or doughnut without data
+	// labels. Labelled and three-dimensional pies, radar charts,
+	// three-dimensional plots and a plot area the file places keep
+	// LibreOffice's layout.
 	OfficeRules
 )
 

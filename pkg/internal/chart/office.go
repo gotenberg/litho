@@ -89,19 +89,76 @@ func (rd *renderer) office() bool { return rd.c.Rules == OfficeRules }
 
 // officeLayout reports a chart whose title, legend and plot area Office's
 // rules place: a two-dimensional cartesian chart under [OfficeRules]
-// whose file does not place its plot area. Pies, radar charts and
-// three-dimensional plots keep LibreOffice's layout.
+// whose file does not place its plot area, or a flat pie or doughnut
+// without data labels (officePie). Labelled and three-dimensional pies,
+// radar charts and three-dimensional plots keep LibreOffice's layout.
 func (rd *renderer) officeLayout() bool {
 	c := rd.c
 	if !rd.office() || len(c.Groups) == 0 || c.PlotLayout != nil {
 		return false
 	}
 	g0 := c.Groups[0]
-	if g0.Kind == Pie || g0.Kind == Doughnut || g0.Kind == Radar {
+	if g0.Kind == Pie || g0.Kind == Doughnut {
+		return rd.pieView(g0) == nil && !rd.pieLabelled(g0)
+	}
+	if g0.Kind == Radar {
 		return false
 	}
 	return rd.threeD(g0) == nil
 }
+
+// pieLabelled reports a pie or doughnut group g that labels a point.
+func (rd *renderer) pieLabelled(g *Group) bool {
+	series := g.Series
+	if g.Kind == Pie && len(series) > 1 {
+		series = series[:1]
+	}
+	for _, s := range series {
+		for j := range min(rd.data(s.Values).Len(), MaxPoints) {
+			if rd.labelsAt(g, s, j).Any() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// officePie returns the square a flat, unlabelled pie or doughnut fills in
+// the rectangle plot that Office's layout leaves it (officePlot): plot
+// less officeMinLabelRoom/2 at its top and officePieInset at its other
+// sides, the pie centred in it. The pie shrinks by its series' explosion,
+// as LibreOffice's does, and not by a point's: an exploded point reaches
+// past the square.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: pies with a 14 pt title and a right legend in frames
+//     258 by 116.2, 361.2 by 174.2, 464.4 by 232.3 and 206.4 by 203.3 pt
+//     print in Excel with their tops 37.08 pt under the frame's top, their
+//     bottoms 4.4 to 4.5 pt over the room the legend and the bottom pad
+//     leave, centred across the room left of the legend within 0.05 pt,
+//     and the narrow one 4.48 pt from either side of that room; untitled
+//     ones over a bottom legend 6.0 pt under the room's top.
+//   - libreoffice/xlsx: chart2/chart_pie2007.xlsx's pie, 18 pt title and
+//     right legend, is 156.2 pt across in a room 166.6 pt high; and
+//     chart2/deleted_legend_entry2.xlsx's, untitled over a bottom legend,
+//     centred 98.7 pt under the top as this rule puts it.
+//   - litho/xlsx, litho/docx: charts_pie_doughnut's and
+//     charts-pie-doughnut's pies with one point exploded have the radius
+//     of their unexploded ones; charts-pie-doughnut's "All slices
+//     exploded", its series exploded 12%, is 64.75 pt in radius in Word
+//     where the square gives 72.53, 1.12 times as much.
+func officePie(plot typeset.Rect) typeset.Rect {
+	top := float64(officeMinLabelRoom / 2)
+	w := plot.Width - 2*officePieInset
+	h := plot.Height - top - officePieInset
+	d := math.Min(w, h)
+	return typeset.Rect{X: plot.X + float64((plot.Width-d)/2), Y: plot.Y + top + float64((h-d)/2), Width: d, Height: d}
+}
+
+// officePieInset is the least distance from a flat pie to the sides and
+// bottom of the room Office's layout leaves it (officePie).
+const officePieInset = 4.48
 
 // officeLegend reports a legend Office's rules place: one above or below
 // the plot area of a chart [renderer.officeLayout] places, at no position

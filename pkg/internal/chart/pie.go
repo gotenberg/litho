@@ -86,6 +86,11 @@ func (rd *renderer) pies(plot typeset.Rect) {
 	maxExpl := 0.0
 	for _, s := range series {
 		maxExpl = math.Max(maxExpl, s.Explosion)
+		if rd.officeLayout() {
+			// Office shrinks the pie for the series' explosion alone
+			// (officePie).
+			continue
+		}
 		for _, p := range s.Points {
 			if p.HasExplosion {
 				maxExpl = math.Max(maxExpl, p.Explosion)
