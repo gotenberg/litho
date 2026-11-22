@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -425,8 +426,20 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		ext := float64(lineH * float64(1+strings.Count(d.text, "\n")))
 		b.textBottom = max(b.textBottom, u.y+max(u.h, ext+pad[css.Top]))
 	}
-	para := b.paragraph(&d, f, lineH, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
-	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: pad[css.Top], bottom: pad[css.Bottom], vertical: st.Align.Vertical}
+	pitch, shift := lineH, 0.0
+	if b.doc.ExcelRules && !rotated && !st.Align.Stacked {
+		if d.wrap {
+			pitch = b.excelPitch(lineH)
+		}
+		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, pad[css.Bottom])
+		if shift > 0 {
+			// The box moved down runs past the row's bottom, where the
+			// cell's clip cuts it.
+			b.textBottom = max(b.textBottom, u.y+u.h+shift)
+		}
+	}
+	para := b.paragraph(&d, f, pitch, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
+	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: pad[css.Top], bottom: pad[css.Bottom], vertical: st.Align.Vertical, shift: shift}
 	var inner *css.Style
 	if !rotated {
 		inner = b.innerStyle(ik)
@@ -465,6 +478,95 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		para.Role = "Link"
 	}
 	return n, cx0, cx1
+}
+
+// excelPitch returns how far apart Excel sets the lines of a wrapped cell
+// whose font's line is lineH points: the standard row of the Default
+// font a line, scaled by the font's line against the Default font's when
+// it is taller, as Excel fits a row to its wrapped lines ([excelHeight]).
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: alignment sets the three wrapped Calibri 11 lines of
+//     each of its wrapped cells 14.52 points apart, a standard row, where
+//     their font's line is 13.43 points.
+func (b *pageBuilder) excelPitch(lineH float64) float64 {
+	std := b.doc.StandardRowHeight
+	if !numeric.Positive(std) {
+		return lineH
+	}
+	defLine := b.m.lineHeight(resolveFont(Font{}, b.doc.Default.Font))
+	if defLine > 0 && lineH > defLine {
+		return float64(std * lineH / defLine)
+	}
+	return std
+}
+
+// excelShift returns how far down Excel sets a cell's text from where its
+// box, padded 8 printer pixels at the top and 1 at the bottom, aligns
+// lines pitch points apart in the font f, whose own line is lineH: a
+// top-aligned first line starts at the padding, its leading below it; a
+// centred text is centred in the padded box; a bottom-aligned last line
+// sets its baseline the bottom baseline above the cell's bottom edge
+// ([builder.bottomBaseline]), whatever the font, so that text in a
+// larger font hangs below the cell and is cut there. Justified and
+// distributed text is set from the top.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: fonts sets its Calibri 6, 8.5, 14, 24 and 36 point
+//     cells and its Arial, Times New Roman, Courier New and Cambria cells
+//     on the baseline of the Calibri 11 label beside them, 26 printer
+//     pixels above the row's bottom, the descenders of the 36 point text
+//     cut at the cell's bottom edge.
+//   - All Excel references (litho/xlsx, libreoffice/xlsx, openxmlsdk/xlsx,
+//     poi/xlsx): the first row of a page sets bottom-aligned Calibri 11
+//     text 95 printer pixels below its top in rows of 121 (5,700 cells),
+//     26 pixels above the bottom in rows of 127, 145, 151, 188, 228, 242
+//     and 323 pixels; top-aligned Calibri 11 text 96 pixels below the top
+//     (sc/tdf153767.xlsx, sc/tdf113271.xlsx, 64667.xlsx).
+//   - All Excel references: centred text is set 8 pixels plus half the
+//     room left by its line below the top: Calibri 14 at 119 pixels in a
+//     row of 151 (sc/pivottable_duplicated_member_filter.xlsx), Calibri 12
+//     at 101 in 127 (63934.xlsx), at 196.2 in 323 (fills_gradient), 337.8
+//     in 605 (52716.xlsx).
+func (b *pageBuilder) excelShift(v VAlign, f font, lineH, pitch, padBottom float64) float64 {
+	half := float64((pitch - lineH) / 2)
+	switch v {
+	case VBottom:
+		return padBottom + half + b.m.descent(f) - b.bottomBaseline()
+	case VMiddle:
+		return 0
+	case VTop, VJustify, VDistributed:
+	}
+	return -half
+}
+
+// bottomBaseline returns how far above a cell's bottom edge Excel sets
+// the baseline of bottom-aligned text: where the Default font's baseline
+// falls in a row of the standard height when that font's line starts at
+// the cell's top padding.
+//
+// # Corpus evidence
+//
+//   - All Excel references: Calibri 11 books set bottom-aligned text 26
+//     printer pixels above the cell's bottom, where this gives 25.4 (121
+//     less 8 and an ascent of 87.6); Arial 10 books 20 (103 less 8 and
+//     75.1), Calibri 10 books 22.8 (sc NoExtDataE8.xlsx: 22), Calibri 12
+//     books 27 (sc/tdf155046.xlsx: 26.8).
+func (b *builder) bottomBaseline() float64 {
+	if b.baseSet {
+		return b.base
+	}
+	b.baseSet = true
+	def := resolveFont(Font{}, b.doc.Default.Font)
+	// Without a standard row the Default font's text sits on the padding.
+	b.base = max(b.doc.Default.Padding[css.Bottom], 0) + b.m.descent(def)
+	if std := b.doc.StandardRowHeight; numeric.Positive(std) {
+		ascent := b.m.lineHeight(def) - b.m.descent(def)
+		b.base = max(float64(std-b.doc.Default.Padding[css.Top])-ascent, 0)
+	}
+	return b.base
 }
 
 // paragraph returns the block holding d's text in the font f, turned

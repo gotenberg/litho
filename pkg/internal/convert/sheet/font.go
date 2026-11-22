@@ -370,6 +370,26 @@ func (m *measurer) lineHeight(f font) float64 {
 	return h
 }
 
+// descent returns the descent of a line of f, the part of
+// [measurer.lineHeight] below the baseline.
+func (m *measurer) descent(f font) float64 {
+	k := "d\x00" + m.key(f)
+	if d, ok := m.lineCache[k]; ok {
+		return d
+	}
+	ts := f.textStyle(m.lang, m.fallback)
+	d := ts.Size * 0.2
+	if fc := m.fonts.Match(ts); fc != nil {
+		if mt := fc.Metrics(ts.Size); mt.Ascent+mt.Descent > 0 {
+			d = mt.Descent
+		}
+	}
+	if len(m.lineCache) < maxMeasureCache {
+		m.lineCache[k] = d
+	}
+	return d
+}
+
 // formatSize writes a font size for a cache key.
 func formatSize(v float64) string {
 	return strconvFloat(v)

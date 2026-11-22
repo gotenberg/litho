@@ -507,3 +507,66 @@ func source(t testing.TB, img image.Image) *typeset.ImageSource {
 	}
 	return src
 }
+
+// excelDoc returns a document of sh under Excel's rules: Carlito 11 as the
+// Default font, Excel's insets of 8 printer pixels at the top and 1 at the
+// bottom, a standard row of 121 printer pixels.
+func excelDoc(sh *Sheet) *Document {
+	doc := newDoc(sh)
+	doc.ExcelRules = true
+	doc.StandardRowHeight = 14.52
+	sh.DefaultRowHeight = 14.52
+	doc.Default = Style{Font: Font{Families: []string{"Carlito"}, Size: 11}, Padding: [4]float64{0.96, 1.44, 0.12, 2.4}}
+	return doc
+}
+
+// TestConvert_ExcelBaselines locks where Excel sets a cell's text in its
+// row: a bottom-aligned line on one baseline whatever its font, the
+// standard row less the top padding and the Default font's ascent above
+// the cell's bottom; a top-aligned line its ascent under the top padding;
+// a centred line in the middle of the padded box; wrapped lines a
+// standard row apart.
+func TestConvert_ExcelBaselines(t *testing.T) {
+	big := &Style{Font: Font{Families: []string{"Carlito"}, Size: 36}}
+	serif := &Style{Font: Font{Families: []string{"Liberation Serif"}, Size: 11}}
+	top := &Style{Align: Alignment{Vertical: VTop}}
+	mid := &Style{Font: Font{Families: []string{"Carlito"}, Size: 14}, Align: Alignment{Vertical: VMiddle}}
+	wrap := &Style{Align: Alignment{Wrap: true}}
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "small", nil), textCell(1, "large", big), textCell(2, "serif", serif)}},
+		{Index: 1, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "topped", top), textCell(1, "tall", big)}},
+		{Index: 2, Height: 30, CustomHeight: true, Cells: []Cell{textCell(0, "centred", mid)}},
+		{Index: 3, Height: 45, CustomHeight: true, Cells: []Cell{textCell(0, "one two three", wrap)}},
+	}}
+	sh.DefaultColumnWidth = 30
+	pg := convert(t, excelDoc(sh), office.Options{}).Pages[0]
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	ascent := func(f font) float64 { return m.lineHeight(f) - m.descent(f) }
+	cal11 := font{families: []string{"Carlito"}, size: 11}
+	cal14 := font{families: []string{"Carlito"}, size: 14}
+	above := 14.52 - 0.96 - ascent(cal11)
+	baseline := func(s string) float64 { return pg.Height - find(t, pg, s).y }
+	for _, s := range []string{"small", "large", "serif"} {
+		if got, want := baseline(s), 36+14.52-above; !near(got, want, 0.01) {
+			t.Errorf("%q baseline %.3f from the top, want %.3f", s, got, want)
+		}
+	}
+	if got, want := baseline("tall"), 36+14.52+30-above; !near(got, want, 0.01) {
+		t.Errorf("36 point text in a custom row: baseline %.3f, want %.3f", got, want)
+	}
+	if got, want := baseline("topped"), 36+14.52+0.96+ascent(cal11); !near(got, want, 0.01) {
+		t.Errorf("top-aligned baseline %.3f, want %.3f", got, want)
+	}
+	line14 := m.lineHeight(cal14)
+	if got, want := baseline("centred"), 36+14.52+30+0.96+(30-0.96-0.12-line14)/2+ascent(cal14); !near(got, want, 0.01) {
+		t.Errorf("centred baseline %.3f, want %.3f", got, want)
+	}
+	one, two := baseline("one "), baseline("two ")
+	if !near(two-one, 14.52, 0.01) {
+		t.Errorf("wrapped lines %.3f apart, want the standard row's 14.52", two-one)
+	}
+	if got, want := baseline("three"), 36+14.52+30+30+45-above; !near(got, want, 0.01) {
+		t.Errorf("last wrapped line's baseline %.3f, want %.3f", got, want)
+	}
+}
+

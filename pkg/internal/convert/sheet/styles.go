@@ -38,6 +38,9 @@ type innerKey struct {
 	left, width, height float64
 	top, bottom         float64
 	vertical            VAlign
+	// shift moves the box down from where it aligns its text, under
+	// Excel's rules ([pageBuilder.excelShift]).
+	shift float64
 }
 
 // paraTurn says what a cell's paragraph turns from its alignment: a
@@ -109,7 +112,7 @@ func (b *pageBuilder) newInnerStyle(k innerKey) *css.Style {
 	st := b.style()
 	st.Position = css.Absolute
 	st.Left = css.Pts(k.left)
-	st.Top = css.Pts(0)
+	st.Top = css.Pts(k.shift)
 	st.Width = css.Pts(k.width)
 	st.Height = css.Pts(k.height)
 	st.BoxSizing = css.BorderBox
@@ -154,7 +157,9 @@ func (b *pageBuilder) paraStyle(f font, lineH float64, align css.TextAlign, wrap
 		if wrap {
 			st.WhiteSpace = css.PreWrap
 			st.OverflowWrap = css.BreakWord
-			st.LineHeight.Value = editLine(lineH) / math.Max(f.size, 0.01)
+			if !b.doc.ExcelRules {
+				st.LineHeight.Value = editLine(lineH) / math.Max(f.size, 0.01)
+			}
 		}
 		if t.rotated {
 			st.TextAlign = css.AlignLeft

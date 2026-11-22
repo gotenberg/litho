@@ -27,19 +27,25 @@ const (
 
 // The insets of a cell's text Excel prints, in printer pixels
 // ([printerPixel]): a pixel of the screen's grid line (8 printer pixels)
-// at the cell's left and top, then 12 pixels to the text on either side.
-// The bottom inset is the room under the text's descent.
+// at the cell's left and top, then 12 pixels to the text on either side,
+// and one pixel at the bottom. The sheet builder sets bottom-aligned
+// text's baseline from the bottom edge by a rule of its own.
 //
 // # Corpus evidence
 //
 //   - litho/xlsx: minimal prints left-aligned text 2.4 points past its
 //     column's left edge and right-aligned numbers 1.44 points short of
 //     its right edge; multipage_grid alike.
+//   - All Excel references: centred text is centred between 8 printer
+//     pixels below a cell's top and 1 above its bottom: Calibri 14 at 119
+//     pixels in a row of 151, Calibri 12 at 101 in 127, Calibri 11 at 196.2
+//     in 323 and 337.8 in 605, where a bottom inset of 8 would set them
+//     3.5 pixels higher.
 const (
 	cellInsetLeft   = 20
 	cellInsetRight  = 12
 	cellInsetTop    = 8
-	cellInsetBottom = 8
+	cellInsetBottom = 1
 )
 
 // cellPadding is the padding of every cell's style, by [css.Side].

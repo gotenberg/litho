@@ -49,6 +49,9 @@ type builder struct {
 	formats  map[string]*numfmt.Format
 	warnings []typeset.Warning
 	warned   map[string]bool
+	// base is the bottom baseline once baseSet ([builder.bottomBaseline]).
+	base    float64
+	baseSet bool
 }
 
 // newBuilder returns the builder of one conversion.
