@@ -17,14 +17,23 @@ func principalMode(root *Node, opts Options) css.WritingMode {
 	if !opts.BrowserRules || root == nil || root.Kind != Element || root.Style == nil {
 		return css.HorizontalTB
 	}
-	wm := root.Style.WritingMode
+	if body := principalChild(root); body != nil {
+		return body.Style.WritingMode
+	}
+	return root.Style.WritingMode
+}
+
+// principalChild returns the element of the document whose root is root
+// that CSS Writing Modes 4, 8 takes the principal writing mode from: the
+// first element child of the root, the body of an HTML document, content
+// the root generates (::before) aside; nil when there is none.
+func principalChild(root *Node) *Node {
 	for _, k := range root.Children {
-		if k != nil && k.Kind == Element && k.Style != nil {
-			wm = k.Style.WritingMode
-			break
+		if k != nil && k.Kind == Element && k.Style != nil && !k.Generated {
+			return k
 		}
 	}
-	return wm
+	return nil
 }
 
 // turnedOptions returns opts for a document of the vertical writing mode

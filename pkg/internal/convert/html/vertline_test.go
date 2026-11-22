@@ -226,3 +226,20 @@ func TestVertical_OrthogonalAvailableSpace(t *testing.T) {
 		}
 	}
 }
+
+// TestPrincipalDirection_FromTheBody locks the used direction of the root:
+// the body's (CSS Writing Modes 4, 8), so the root's own line sets its
+// text from the right, while a block the root generates inherits the
+// root's computed direction and sets its text from the left.
+func TestPrincipalDirection_FromTheBody(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>@page { size: 400px 300px; margin: 0 } html { font: 20px "Test Serif" } body { direction: rtl; height: 0; margin: 0 }
+		html::before { content: "AB" } html::after { content: "CD"; display: block }</style><body></body>`, Options{PreferCSSPageSize: true})
+	at := map[string]float64{}
+	for _, g := range glyphOrigins(doc.Pages[0]) {
+		at[g.text] = g.x
+	}
+	if at["A"] != 380 || at["C"] != 0 {
+		t.Errorf("root line's A at %g, want 380; generated block's C at %g, want 0", at["A"], at["C"])
+	}
+}

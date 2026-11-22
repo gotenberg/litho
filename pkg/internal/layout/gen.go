@@ -67,6 +67,7 @@ func (e *engine) generate(root *Node) *box {
 		w.abs = isAbs(st)
 		return w
 	}
+	e.principalDirection(rb, root)
 	cctx := e.enter(root, rb, ctx)
 	rb.elem = cctx.elem
 	// The root is absolutely positioned as any element is (CSS 2.1, 9.3.1;
@@ -83,6 +84,22 @@ func (e *engine) generate(root *Node) *box {
 	}
 	e.genChildren(rb, root.Children, cctx)
 	return rb
+}
+
+// principalDirection gives the root box rb of the element root the
+// direction of its body ([principalChild]), under the browser rules: CSS Writing Modes 4, 8 takes the used
+// direction of the root from the body's computed one and leaves the
+// root's computed value, which its children inherit, as it is.
+func (e *engine) principalDirection(rb *box, root *Node) {
+	if !e.opts.BrowserRules {
+		return
+	}
+	if k := principalChild(root); k != nil && k.Style.Direction != rb.st.Direction {
+		st := *rb.st
+		st.Direction = k.Style.Direction
+		e.holdStyle(&st)
+		rb.st = &st
+	}
 }
 
 // newBox returns a box of node with style st, counting it against
