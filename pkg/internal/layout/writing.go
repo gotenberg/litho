@@ -219,7 +219,7 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 		}
 	}
 	lo, hi := formatterFor(b.kids[0]).intrinsic(e, b.kids[0])
-	return min(max(lo, e.orthoAvailable(b)), hi)
+	return min(max(lo, e.orthoAvailable(b)-vEdges(b)-b.m[css.Top]-b.m[css.Bottom]), hi)
 }
 
 // orthoAvailable returns the space an orthogonal flow root b whose
@@ -227,6 +227,8 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 // Writing Modes 4, 7.3.1): the smaller of the containing block's inner
 // max-height, floored by its min-height, and the initial containing
 // block's height, the page area's. The nearest scrollport is not counted.
+// The root's margin box fits in it, as fit-content sizes a box (CSS
+// Sizing 3, 5.2).
 func (e *engine) orthoAvailable(b *box) float64 {
 	avail := e.areaH(0)
 	if p := b.parent; p != nil && !b.abs && b.float == css.FloatNone {
