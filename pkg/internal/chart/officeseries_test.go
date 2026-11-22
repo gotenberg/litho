@@ -152,3 +152,32 @@ func TestRender_InvertedNegativeBars(t *testing.T) {
 		t.Fatalf("inverted bars %+v, want one outlined in black", inv)
 	}
 }
+
+// TestRender_OfficeSpanCap labels a tall Office value axis over -4 to 5 by
+// 1 from -5 to 6, eleven intervals, and refuses the unit 0.5 whose span
+// with its ends takes 19.8; and one over 1 to 5 from 0 to 6 by 1, refusing
+// the unit 0.5 whose extent with its end takes 10.5.
+func TestRender_OfficeSpanCap(t *testing.T) {
+	c := barChart(-4, 2, 3, 4, 5)
+	c.Rules = OfficeRules
+	c.Axes[1].Labels = LabelNextTo
+	frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 300, Height: 400})
+	got := texts(frags)
+	for _, w := range []string{"-5", "0", "6"} {
+		if !slices.Contains(got, w) {
+			t.Errorf("labels %q, want %q", got, w)
+		}
+	}
+	for _, r := range []string{"0.5", "7", "-6"} {
+		if slices.Contains(got, r) {
+			t.Errorf("labels %q, want no %q", got, r)
+		}
+	}
+	c = barChart(1, 2, 3, 4, 5)
+	c.Rules = OfficeRules
+	c.Axes[1].Labels = LabelNextTo
+	got = texts(Render(context.Background(), ahem(t), c, typeset.Rect{Width: 300, Height: 400}))
+	if !slices.Contains(got, "6") || slices.Contains(got, "0.5") {
+		t.Errorf("labels %q, want 0 to 6 by 1", got)
+	}
+}

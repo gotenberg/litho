@@ -474,6 +474,41 @@ func officeIntervals(length, lineH float64) int {
 	return officeClampIntervals(math.Floor(length/h) - 1)
 }
 
+// officeLabelIntervals returns the intervals officeIntervals counts for a
+// value axis length points long whose labels are lineH points high,
+// without its cap of ten: at least one, at most maxIntervals.
+func officeLabelIntervals(length, lineH float64) int {
+	h := officeLabelLine(lineH)
+	if !numeric.Positive(h) {
+		return maxAutoTicks
+	}
+	return int(math.Max(1, math.Min(math.Floor(length/h)-1, maxIntervals)))
+}
+
+// officeSpanCap is the most units Office's automatic unit gives the data's
+// extent on a two-dimensional value axis up the chart, a twentieth of the
+// extent added at each end the border rule may extend: ten. The axis,
+// rounded out to the unit with the border rule's intervals, may then take
+// more, up to as many as its labels fit.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: columns of -4 to 5 in frames 6, 9, 12, 16 and 22 rows
+//     high print from -5 to 10 by 5, -6 to 6 by 2, then -5 to 6 by 1 three
+//     times in Excel: eleven intervals where labels fit twelve and more,
+//     the extent 9.9 units of 1 and 19.8 of 0.5, refused though the
+//     tallest axis has room for twenty-five labels.
+//   - libreoffice/xlsx: chart2/invertIfNeg_bar.xlsx's columns of -4 to 5
+//     run from -5 to 6 by 1 in Excel; chart2/majorTickMark.xlsx's,
+//     data_label.xlsx's and fdo54361-1.xlsx's of 1 to 5 from 0 to 6 by 1,
+//     the extent 10.5 units of 0.5, with room for twelve and thirteen
+//     labels; bar_chart_simple.xlsx's of -2 to 3 from -3 to 4 by 1, 11
+//     units of 0.5.
+//   - litho/xlsx, litho/docx: charts_line_area's and charts-line-area's
+//     100% stacked areas run from 0 to 100% by 10%, ten units of 10%, an
+//     axis the border rule does not extend.
+const officeSpanCap = maxAutoTicks
+
 // officeHorizontalIntervals returns the most major intervals Office's
 // automatic scale gives a value axis drawn across the chart, length points
 // long, whose labels are lineH points high: one interval for every

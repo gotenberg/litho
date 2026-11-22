@@ -714,6 +714,12 @@ func (rd *renderer) fitScale(d *dim) {
 			lineH := faceLineHeight(b.lines[0], b.style.Size)
 			if d.vertical {
 				opt.maxCount = officeIntervals(d.length()+rd.officeLabelExcess(d.other), lineH)
+				if !d.trimEnds {
+					// Office caps the data's span, not the axis
+					// (officeSpanCap).
+					opt.maxCount = officeLabelIntervals(d.length()+rd.officeLabelExcess(d.other), lineH)
+					opt.spanCap = officeSpanCap
+				}
 			} else {
 				opt.maxCount = officeHorizontalIntervals(d.length(), lineH, rd.c.PowerPoint)
 			}

@@ -60,8 +60,14 @@ type scaleOptions struct {
 	// border adds an interval when a value lies within 1/21 of the range
 	// of the axis end.
 	border bool
-	// maxCount is the most major intervals, from 1 to 10.
+	// maxCount is the most major intervals, from 1 to 10, or to
+	// maxIntervals when spanCap is set.
 	maxCount int
+	// spanCap, when above 0, is the most units the data's extent takes,
+	// a twentieth of it added at each end the border rule may extend:
+	// Office's cap (officeSpanCap), where maxCount counts the whole axis
+	// against its labels alone.
+	spanCap int
 }
 
 // autoScale returns the scale of an axis over the values [lo, hi], with
@@ -97,7 +103,11 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	if opt.maxCount < 1 {
 		opt.maxCount = 1
 	}
-	opt.maxCount = min(opt.maxCount, maxAutoTicks)
+	limit := maxAutoTicks
+	if opt.spanCap > 0 {
+		limit = maxIntervals
+	}
+	opt.maxCount = min(opt.maxCount, limit)
 	if lo > hi {
 		if autoMax || !autoMin {
 			hi = lo
@@ -189,6 +199,16 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 			dist = norm * mag
 		}
 		aMin, aMax = tMin, tMax
+		// span is the data's extent, a twentieth of it added at each end
+		// the border rule may extend, in units (scaleOptions.spanCap).
+		ext := tMax - tMin
+		if opt.border && autoMax && tMax != 0 {
+			ext += float64((tMax - tMin) / 20)
+		}
+		if opt.border && autoMin && tMin != 0 {
+			ext += float64((tMax - tMin) / 20)
+		}
+		span := ext / dist
 		if autoMin {
 			aMin = floorAt(aMin, dist, base)
 			if opt.border && aMin != 0 && (aMax-srcMin)/(aMax-aMin) > 20.0/21.0 {
@@ -202,7 +222,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 			}
 		}
 		count := math.Floor((aMax-aMin)/dist + 1e-9)
-		if count <= float64(maxCount) {
+		if count <= float64(maxCount) && (opt.spanCap <= 0 || !autoDist || span <= float64(opt.spanCap)+1e-9) {
 			break
 		}
 		autoDist = true
