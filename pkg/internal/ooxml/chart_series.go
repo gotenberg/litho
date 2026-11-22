@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -346,6 +347,9 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	}
 	if g.Kind == chart.Line || g.Kind == chart.Scatter || g.Kind == chart.Radar {
 		s.Marker = p.marker(e.Child(NSChart, "marker"), lineMarkers)
+	}
+	if g.Kind == chart.Bar && boolVal(e, "invertIfNegative", false) {
+		s.Invert = p.invertFill(e)
 	}
 	s.Smooth = boolVal(e, "smooth", g.Kind == chart.Line && !p.mso2007)
 	if v := floatVal(e, "explosion"); v > 0 {
@@ -761,4 +765,25 @@ func markerSymbol(name string) (chart.MarkerSymbol, bool) {
 		return chart.MarkerAuto, true
 	}
 	return chart.MarkerAuto, false
+}
+
+// nsChart14 is the namespace of Office 2010's chart extensions (MS-ODRAWXML,
+// 2.3.1 c14).
+const nsChart14 = "http://schemas.microsoft.com/office/drawing/2007/8/2/chart"
+
+// invertFill returns the fill of the negative bars of the series e, which
+// asks to invert them (ECMA-376 Part 1, 21.2.2.86 invertIfNegative): the
+// fill its c14:invertSolidFillFmt extension states (MS-ODRAWXML, 2.3.1.13),
+// else white, as Office fills them.
+func (p *chartReader) invertFill(e *Element) *chart.Paint {
+	for _, ext := range e.Child(NSChart, "extLst").Kids() {
+		for _, k := range ext.Kids() {
+			if k.Is(nsChart14, "invertSolidFillFmt") {
+				if f, ok := p.fill(k.Child(nsChart14, "spPr")); ok && f != nil {
+					return f
+				}
+			}
+		}
+	}
+	return &chart.Paint{Color: typeset.Color{R: 1, G: 1, B: 1, A: 1}}
 }

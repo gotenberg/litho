@@ -234,7 +234,16 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 			} else {
 				r = typeset.Rect{X: math.Min(p0, p1), Y: math.Min(v0, v1), Width: math.Abs(p1 - p0), Height: math.Abs(v1 - v0)}
 			}
-			rd.paint(rectPath(r).Ops, rd.fillOf(g, s, j), rd.borderOf(g, s, j))
+			fill, border := rd.fillOf(g, s, j), rd.borderOf(g, s, j)
+			if s.Invert != nil && sv.raw[i][j] < 0 {
+				if pt := rd.point(s, j); pt == nil || pt.Fill == nil {
+					fill = s.Invert
+					if border == nil || border.None {
+						border = officeInvertBorder
+					}
+				}
+			}
+			rd.paint(rectPath(r).Ops, fill, border)
 			lb := rd.labelsAt(g, s, j)
 			if lb.Any() {
 				raw, neg := sv.raw[i][j], v < b

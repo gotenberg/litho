@@ -309,6 +309,10 @@ type Series struct {
 	// line: none for filled series, a line in the automatic colour for
 	// lines.
 	Border *Stroke
+	// Invert, when set, fills the bars whose value is negative in place of
+	// Fill, outlined in black when the series has no outline (ECMA-376
+	// Part 1, 21.2.2.86 invertIfNegative; officeInvertBorder).
+	Invert *Paint
 	// Marker is the symbol drawn at each point of a line, scatter or radar
 	// series.
 	Marker Marker

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -724,5 +725,28 @@ func TestChartFromElement_BubbleWidthAndSizeLabels(t *testing.T) {
 	}
 	if s := c.Groups[0].Series; len(s) != 1 || !s[0].Labels.ShowSize || s[0].Labels.ShowValue {
 		t.Errorf("labels %+v, want the sizes alone", c.Groups[0].Series[0].Labels)
+	}
+}
+
+func TestChartFromElement_InvertIfNegative(t *testing.T) {
+	inv := `<c:invertIfNegative val="1"/>`
+	ext := inv + `<c:extLst><c:ext uri="{6F2FDCE9-48DA-4B69-8628-5D25D57E0C4C}" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart">` +
+		`<c14:invertSolidFillFmt><c14:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c14:spPr></c14:invertSolidFillFmt></c:ext></c:extLst>`
+	for _, tc := range []struct {
+		extra string
+		want  *typeset.Color
+	}{
+		{"", nil},
+		{inv, &typeset.Color{R: 1, G: 1, B: 1, A: 1}},
+		{ext, &typeset.Color{R: 1, A: 1}},
+	} {
+		c := readChart(t, chartXML("", "", `<c:barChart><c:barDir val="col"/>`+ser(0, "A", tc.extra, "1", "-2")+`<c:axId val="1"/><c:axId val="2"/></c:barChart>`+axes), false)
+		got := c.Groups[0].Series[0].Invert
+		switch {
+		case tc.want == nil && got != nil, tc.want != nil && got == nil:
+			t.Errorf("%q: invert %+v, want %v", tc.extra, got, tc.want)
+		case tc.want != nil && got.Color != *tc.want:
+			t.Errorf("%q: invert %+v, want %v", tc.extra, got.Color, *tc.want)
+		}
 	}
 }

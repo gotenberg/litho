@@ -581,3 +581,17 @@ const officeBubbleShare = 0.25
 //     half a point inside its advance, their middles within 0.6 pt of the
 //     bubbles' centres.
 const officeBubbleLabelGap = 5.2
+
+// officeInvertBorder outlines a negative bar Office fills inverted when
+// its series has no outline of its own.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/invertIfNeg_bar.xlsx's bar of -4, whose
+//     series states no line and a white inverted fill, prints white with
+//     a black 0.75 pt outline in Excel.
+//   - litho/pptx: chart-bar's bars of -2 and -4, inverted without a fill
+//     of their own, print white with a black outline in PowerPoint.
+//   - litho/xlsx: charts_labels_trend_errors's bar of -5 the same in
+//     Excel.
+var officeInvertBorder = &Stroke{Color: typeset.Black, Width: 0.75}

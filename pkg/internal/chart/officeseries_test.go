@@ -135,3 +135,20 @@ func TestValueText_OfficeGeneralElevenCharacters(t *testing.T) {
 		t.Errorf("LibreOffice: %q, want every digit", got)
 	}
 }
+
+// TestRender_InvertedNegativeBars fills a negative bar of a series that
+// inverts them with the inverted fill, outlined in black when the series
+// has no outline, and leaves its positive bars alone.
+func TestRender_InvertedNegativeBars(t *testing.T) {
+	c := barChart(2, -1)
+	white := typeset.Color{R: 1, G: 1, B: 1, A: 1}
+	c.Groups[0].Series[0].Invert = &Paint{Color: white}
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	if got := len(paths(frags, red)); got != 1 {
+		t.Errorf("%d red bars, want the positive one", got)
+	}
+	inv := paths(frags, white)
+	if len(inv) != 1 || inv[0].Stroke == nil || inv[0].Stroke.Color != typeset.Black {
+		t.Fatalf("inverted bars %+v, want one outlined in black", inv)
+	}
+}
