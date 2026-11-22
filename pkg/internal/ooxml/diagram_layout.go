@@ -158,6 +158,9 @@ type engine struct {
 	// [engine.hierTree]): the algorithms of the shapes it holds leave them
 	// where it put them.
 	hierDone map[*DiagramShape]bool
+	// hierLinks are the bent connectors of those hierarchies, drawn
+	// once the layout is done.
+	hierLinks []hierLink
 }
 
 // walker is one walk of the layout definition: the current presentation
@@ -270,6 +273,7 @@ func (d *Diagram) layOut(w, h int64, fit DiagramTextFit, caps map[string]float64
 		c.visit(d.Layout)
 		l := &walker{e: e, m: modeLayout, cur: rootPt}
 		l.visit(d.Layout)
+		e.drawLinks()
 		found = e.sizeText(fit)
 		sortByZOrder(root, 0)
 		removeEmptyGroups(root, 0)

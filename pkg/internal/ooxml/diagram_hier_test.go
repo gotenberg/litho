@@ -206,6 +206,46 @@ func TestDiagramHierarchy(t *testing.T) {
 	}
 }
 
+// lines lists the straight lines of the connectors under s, in the
+// diagram's coordinates, as "x0,y0-x1,y1".
+func lines(s *DiagramShape, x, y int64, out *[]string) {
+	x, y = x+s.X, y+s.Y
+	if s.Preset() == "line" {
+		*out = append(*out, fmt.Sprintf("%d,%d-%d,%d", x, y, x+s.W, y+s.H))
+	}
+	for _, k := range s.Kids {
+		lines(k, x, y, out)
+	}
+}
+
+// TestDiagramHierarchyConnectors states orgChart1's connectors: to a child
+// of a row, down from the root's bottom centre to bendDist above the
+// child, across and down to its top centre; to an assistant, down to its
+// middle and across to its near side; to a child of a column, alike from
+// the centre of the root's kid that holds no text.
+func TestDiagramHierarchyConnectors(t *testing.T) {
+	nodes := []hierNode{{"Manager", -1, false}, {"E1", 0, false}, {"E2", 0, false}, {"A", 0, true}, {"Manager2", -1, false}}
+	bend := `<dgm:constr type="bendDist" for="des" ptType="parTrans" refType="sp" fact="0.5"/>`
+	d := ParseDiagram(mustParse(t, hierData(nodes, true)), mustParse(t, hierLayout(`<dgm:alg type="hierRoot"/>`, `<dgm:alg type="hierChild"/>`, bend)), nil, nil)
+	root := d.LayOut(14400, 9120, nil)
+	if root == nil {
+		t.Fatal("no layout")
+	}
+	var got []string
+	lines(root, -root.X, -root.Y, &got)
+	slices.Sort(got)
+	// Manager's bottom centre is 5760,2400; the children's tops 6720,
+	// bendDist 480 above them; the assistant's middle 4560, its right
+	// side 5280.
+	want := []string{
+		"2880,6240-2880,6720", "2880,6240-5760,6240", "5280,4560-5760,4560", "5760,2400-5760,4560",
+		"5760,2400-5760,6240", "5760,2400-5760,6240", "5760,6240-8640,6240", "8640,6240-8640,6720",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("lines\n got %v\nwant %v", got, want)
+	}
+}
+
 // TestDiagramHierarchyOfHostileDefinitions lays out hierarchies whose
 // numbers and shapes no chart offers: each ends within its step and depth
 // caps with the root at the diagram's box, a sibling row past the steps

@@ -48,6 +48,11 @@ type hierTree struct {
 	// failed marks a tree the layout cannot place as its definition says;
 	// the shapes are then left to the equal shares of [hierarchy].
 	failed bool
+	// links are the connectors of the tree, drawn once every shape has
+	// its place, style the first connector shape the layout made, the
+	// style of a connector whose container holds none.
+	links []hierLink
+	style *DiagramShape
 	// across marks a tree that grows from left to right (hierAlign lCtrCh,
 	// lT, ...): it is laid out turned, its x and y swapped, and turned
 	// back; mirror one that grows from right to left (rCtrCh, ...).
@@ -310,7 +315,7 @@ func (e *engine) hierTree(a *DiagramAtom, s *DiagramShape, cons []DiagramConstra
 	var sub hierSub
 	switch a.Alg {
 	case "hierChild":
-		sub = t.container(a, s, 0)
+		sub = t.container(a, s, nil, -1, 0)
 	case "hierRoot":
 		sub = t.root(a, s, 0)
 	}
@@ -343,6 +348,23 @@ func (e *engine) hierTree(a *DiagramAtom, s *DiagramShape, cons []DiagramConstra
 	}
 	t.place(s, abs, hierRect{0, 0, t.w, t.h}, 0)
 	e.hierDone[s] = true
+	for _, l := range t.links {
+		if l.bend >= 0 {
+			l.bend = float64(l.bend * f)
+		}
+		if l.style == nil {
+			l.style = t.style
+		}
+		l.across, l.mirror = t.across, t.mirror
+		if l.style != nil {
+			if ka := t.algOf(l.style); ka != nil {
+				l.straight = param(ka, "connRout", "stra") != "bend"
+			}
+		}
+		if l.style != nil {
+			e.hierLinks = append(e.hierLinks, l)
+		}
+	}
 	return true
 }
 
@@ -460,18 +482,23 @@ func (t *hierTree) root(a *DiagramAtom, s *DiagramShape, depth int) hierSub {
 		w, h = h, w
 	}
 	sp := t.spacing(s.Name, "sp")
-	off := 0.0
+	off, bend := 0.0, -1.0
 	cons, _ := t.e.own(s.atom, s.pt)
 	for _, c := range cons {
-		if c.Type == "alignOff" && c.HasValue {
+		switch {
+		case c.Type == "alignOff" && c.HasValue:
 			off = c.Value
+		case c.Type == "bendDist" && c.RefType == "sp" && c.RefForName == "":
+			bend = float64(sp * c.Factor)
+		case c.Type == "bendDist" && c.HasValue:
+			bend = float64(c.Value * 36000)
 		}
 	}
 	out.items = append(out.items, hierItem{comp, hierRect{0, 0, w, h}})
 	line := float64(w / 2)
 	y := float64(h + sp)
 	for i, c := range asst {
-		rows := t.container(asstAlg[i], c, depth+1)
+		rows := t.container(asstAlg[i], c, comp, bend, depth+1)
 		if t.failed {
 			return out
 		}
@@ -483,7 +510,7 @@ func (t *hierTree) root(a *DiagramAtom, s *DiagramShape, depth int) hierSub {
 		y = float64(rows.bounds().y1 + sp)
 	}
 	for i, c := range kids {
-		row := t.container(kidAlg[i], c, depth+1)
+		row := t.container(kidAlg[i], c, comp, bend, depth+1)
 		if t.failed {
 			return out
 		}
@@ -542,7 +569,7 @@ func (t *hierTree) firstLast(row hierSub, c *DiagramShape) (float64, float64) {
 // subtrees before at sibSp (fromL, fromR) or a column sibSp apart (fromT);
 // with secLinDir fromT, rows of two either side of the line through the
 // container's origin, half of sibSp from it, secSibSp apart down.
-func (t *hierTree) container(a *DiagramAtom, s *DiagramShape, depth int) hierSub {
+func (t *hierTree) container(a *DiagramAtom, s, from *DiagramShape, bend float64, depth int) hierSub {
 	var out hierSub
 	if depth >= maxDiagramDepth || t.e.step() {
 		t.failed = true
@@ -551,11 +578,33 @@ func (t *hierTree) container(a *DiagramAtom, s *DiagramShape, depth int) hierSub
 	dir := t.turned(param(a, "linDir", "fromL"))
 	sec := t.turned(param(a, "secLinDir", ""))
 	gap := t.spacing(s.Name, "sibSp")
+	kind := linkRow
+	switch {
+	case sec == "fromT":
+		kind = linkSide
+	case dir == "fromT" || dir == "fromB":
+		kind = linkColumn
+	}
+	var style *DiagramShape
+	for _, k := range s.Kids {
+		if ka := t.algOf(k); ka != nil && ka.Alg == "conn" {
+			style = k
+			if t.style == nil {
+				t.style = k
+			}
+			break
+		}
+	}
 	var subs []hierSub
 	for _, k := range s.Kids {
 		ka := t.algOf(k)
 		if ka == nil || ka.Alg != "hierRoot" {
 			continue
+		}
+		if from != nil {
+			if to := t.compOf(k); to != nil {
+				t.links = append(t.links, hierLink{container: s, style: style, from: from, to: to, kind: kind, bend: bend})
+			}
 		}
 		sub := t.root(ka, k, depth+1)
 		if t.failed {
