@@ -376,6 +376,7 @@ func (r *compositeRun) lay(place bool) {
 	for i, k := range s.Kids {
 		k.W, k.H, k.X, k.Y = boxes[i].w, boxes[i].h, boxes[i].x, boxes[i].y
 		k.user = users[i]
+		customSize(k)
 	}
 	ph, _ := props.get("", "h")
 	if vmin < 0 || vmin > vmax || vmax > ph {
@@ -980,6 +981,33 @@ func shrinkToFit(s *DiagramShape, props layoutProps, ruled map[string]bool, depF
 		}
 	}
 	return out
+}
+
+// customSize stretches a composite's kid about its centre by the size the
+// user gave its point (21.4.3.7 prSet custScaleX, custScaleY), once the
+// composite has placed it: the kids whose edges refer to it keep the
+// places its unstretched box gives them.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-composite-infer-right's vList4 picture
+//     placeholder, custScaleX 70846 on a box 0.2 of a 612-point row wide
+//     (122.4), prints 88.5 points wide in Office's page (its outline from
+//     115.5 to 204), the text beside it where the unstretched box puts it.
+func customSize(k *DiagramShape) {
+	if k.pt == nil {
+		return
+	}
+	if f := k.pt.ScaleX; f > 0 && f != 1 {
+		w := trunc(float64(float64(k.W) * f))
+		k.X -= (w - k.W) / 2
+		k.W = w
+	}
+	if f := k.pt.ScaleY; f > 0 && f != 1 {
+		h := trunc(float64(float64(k.H) * f))
+		k.Y -= (h - k.H) / 2
+		k.H = h
+	}
 }
 
 // customScale returns the factor the user widened a shape by, or the

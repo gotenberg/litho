@@ -37,8 +37,8 @@ const (
 	// maxDiagramDepth caps the nesting of layout nodes and of the data
 	// model's parent chains the engine follows.
 	maxDiagramDepth = 64
-	// maxCustomScale caps the factor a point's custScaleX widens its shape
-	// by: PowerPoint's handles stretch a shape a few times at most, and the
+	// maxCustomScale caps the factor a point's custScaleX or custScaleY
+	// stretches its shape by: PowerPoint's handles stretch a shape a few times at most, and the
 	// cap keeps the lengths a linear layout sums finite.
 	maxCustomScale = 100
 )
@@ -92,9 +92,10 @@ type DiagramPoint struct {
 	// the point states.
 	Dir, HierBranch string
 	DirSet          bool
-	// ScaleX is the width the user gave the point's shape, as a factor of
-	// the width the layout gives it (prSet custScaleX), 0 for none.
-	ScaleX float64
+	// ScaleX and ScaleY are the width and height the user gave the
+	// point's shape, as factors of those the layout gives it (prSet
+	// custScaleX, custScaleY), 0 for none.
+	ScaleX, ScaleY float64
 	// SpPr is the point's dgm:spPr, Text its dgm:t text body; nil for
 	// none.
 	SpPr, Text *Element
@@ -288,6 +289,9 @@ func (d *Diagram) parseData(dm *Element) {
 			// ST_PrSetCustVal: a percentage in thousandths, at 32 bits.
 			if v, err := intconv.Atoi32(strings.TrimSpace(attrOr(pr, "custScaleX"))); err == nil && v > 0 {
 				p.ScaleX = min(float64(v)/100000, maxCustomScale)
+			}
+			if v, err := intconv.Atoi32(strings.TrimSpace(attrOr(pr, "custScaleY"))); err == nil && v > 0 {
+				p.ScaleY = min(float64(v)/100000, maxCustomScale)
 			}
 			for _, v := range pr.Child(NSDgm, "presLayoutVars").Kids() {
 				switch v.Local {

@@ -702,3 +702,23 @@ func TestDiagramDirectionOfTheDiagram(t *testing.T) {
 		t.Errorf("%d nodes, want 2", n)
 	}
 }
+
+// TestDiagramCompositeCustomSize lays out a composite kid the user
+// stretched (21.4.3.7 prSet custScaleX 50000, custScaleY 200000): it
+// keeps its centre, and its neighbour keeps the place the unstretched box
+// gives it.
+func TestDiagramCompositeCustomSize(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w" fact="0.4"/><dgm:constr type="h" for="ch" forName="pict" refType="h" fact="0.2"/>` +
+		`<dgm:constr type="l" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="pict" refType="h" fact="0.4"/>` +
+		`<dgm:constr type="l" for="ch" forName="text" refType="r" refFor="ch" refForName="pict"/><dgm:constr type="r" for="ch" forName="text" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="text" refType="h"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="text"><dgm:shape type="rect"/></dgm:layoutNode>`
+	data := withPresNames(diagramData("a"), 1, "pict", "text")
+	data = strings.Replace(data, `presName="pict"/>`, `presName="pict" custScaleX="50000" custScaleY="200000"/>`, 1)
+	d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(1000, 1000, nil))[1:]
+	if want := []string{"pict rect 100,300 200x400", "text rect 400,0 600x1000"}; strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes %q, want %q", got, want)
+	}
+}
