@@ -1,6 +1,8 @@
 package docx
 
 import (
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -325,6 +327,40 @@ func TestParagraphBorders_GroupByValue(t *testing.T) {
 		}
 		if got := st.Border[css.Bottom].Width > 0; got != want.bottom {
 			t.Errorf("paragraph %d bottom border %v, want %v", i, got, want.bottom)
+		}
+	}
+}
+
+// TestParagraphBorders_CompoundWidths checks the room borders of several
+// lines take, as Word draws them (see compoundWidth).
+func TestParagraphBorders_CompoundWidths(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		val   string
+		sz    int
+		width float64
+	}{
+		{"single", 12, 1.5},
+		{"double", 4, 1.5},
+		{"double", 12, 4.5},
+		{"triple", 24, 15},
+		{"thickThinSmallGap", 24, 4.5},
+		{"thinThickThinSmallGap", 12, 4.5},
+		{"thinThickMediumGap", 12, 3},
+		{"thinThickMediumGap", 2, 0.75},
+		{"thinThickLargeGap", 24, 5.25},
+		{"thinThickThinMediumGap", 18, 6.25},
+		{"thinThickThinLargeGap", 18, 7.5},
+		{"threeDEmboss", 6, 2.25},
+		{"threeDEngrave", 36, 7.5},
+	} {
+		body := `<w:p><w:pPr><w:pBdr><w:top w:val="` + tc.val + `" w:sz="` + strconv.Itoa(tc.sz) + `" w:space="1"/></w:pBdr></w:pPr><w:r><w:t>x</w:t></w:r></w:p>`
+		ps := role(build(t, body, nil).root, "P")
+		if len(ps) != 1 {
+			t.Fatalf("%d paragraphs", len(ps))
+		}
+		if got := ps[0].Style.Border[css.Top].Width; math.Abs(got-tc.width) > 1e-9 {
+			t.Errorf("%s at %d: width %v, want %v", tc.val, tc.sz, got, tc.width)
 		}
 	}
 }

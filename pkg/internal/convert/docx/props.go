@@ -812,6 +812,63 @@ func parseTab(t *ooxml.Element) (tabSpec, bool) {
 	return ts, true
 }
 
+// compoundWidth returns the width a border of several lines takes, its
+// lines and the gaps between them, from w, the width its sz gives (ECMA-376
+// Part 1, 17.18.2 ST_Border names the lines and leaves their widths to the
+// application), as Word draws them: a double line as two lines of w a gap
+// of w apart and a triple one as three; the thick line of a thin-thick or
+// thin-thick-thin border w wide, with thin lines and gaps of 0.75 points
+// for a small gap, of half of w down to a quarter point, at least 0.25,
+// for a medium gap, and a 0.75-point thin line, a gap of w and a thick line
+// of 1.5 points for a large gap; a 3-D emboss or engrave line w wide
+// between two bands of 0.75 points, 1.5 from 3 points up.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/all_gaps_word.docx: Word's table borders
+//     of sizes 2 to 48 eighths of a point: double lines of three bands of
+//     w; thin-thick small gaps of a 0.75 thin line, a 0.75 gap and a thick
+//     line of w; medium gaps of a thin line and a gap of 0.25 up to w of
+//     0.75, then 0.75, 1, 1.5, 2.25 and 3 for w of 1.5, 2.25, 3, 4.5 and 6;
+//     large gaps of a 0.75 thin line, a gap of w and a 1.5 thick line;
+//     3-D lines between bands of 0.75 up to w of 2.25 and 1.5 from 3.
+//   - litho/docx para-borders-shading: at 1.5 points, a triple border of
+//     3 points draws five bands of 3, a thin-thick-thin small gap 0.75,
+//     0.75, 1.5, 0.75 and 0.75.
+//   - libreoffice/docx ooxmlexport/fdo67013.docx: a thick-thin small gap
+//     of 3 points draws 0.75, 0.75 and 3.
+//   - probe, docx: paragraph borders of 0.75, 2.25 and 4.5 points print
+//     thin-thick-thin small gaps of w + 3, medium gaps of thin lines and
+//     gaps of 0.25, 1 and 2.25, large gaps of 0.75, w, 1.5, w, 0.75,
+//     thick-thin medium and large gaps as the thin-thick ones, and 3-D
+//     emboss bands of 0.75, 0.75 and 1.5.
+func compoundWidth(val string, w float64) float64 {
+	half := max(math.Floor(w*2)/4, 0.25)
+	switch val {
+	case "double":
+		return 3 * w
+	case "triple":
+		return 5 * w
+	case "thinThickSmallGap", "thickThinSmallGap":
+		return w + 1.5
+	case "thinThickThinSmallGap":
+		return w + 3
+	case "thinThickMediumGap", "thickThinMediumGap":
+		return w + float64(2*half)
+	case "thinThickThinMediumGap":
+		return w + float64(4*half)
+	case "thinThickLargeGap", "thickThinLargeGap":
+		return w + 2.25
+	case "threeDEmboss", "threeDEngrave":
+		if w >= 3 {
+			return w + 3
+		}
+		return w + 1.5
+	default: // thinThickThinLargeGap
+		return float64(2*w) + 3
+	}
+}
+
 // parseBorder reads one border element (ECMA-376 Part 1, 17.3.4: its val,
 // its sz in eighths of a point, its space in points and its colour).
 func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
@@ -821,16 +878,18 @@ func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
 	if v, ok := ooxml.Int(attrOr(b, "sz")); ok {
 		sz = float64(max(2, min(96, v)))
 	}
-	bs.Width = sz / 8
+	bs.Width = float64(sz / 8)
 	switch val {
 	case "nil", "none", "":
 		bs.Style = css.BorderNone
 		bs.Width = 0
 	case "double", "triple", "thinThickSmallGap", "thickThinSmallGap", "thinThickThinSmallGap",
 		"thinThickMediumGap", "thickThinMediumGap", "thinThickThinMediumGap",
-		"thinThickLargeGap", "thickThinLargeGap", "thinThickThinLargeGap", "doubleWave":
+		"thinThickLargeGap", "thickThinLargeGap", "thinThickThinLargeGap":
 		bs.Style = css.Double
-		// A double line draws its two lines and the gap between them.
+		bs.Width = compoundWidth(val, bs.Width)
+	case "doubleWave":
+		bs.Style = css.Double
 		bs.Width = max(bs.Width*3, 1.5)
 	case "dotted":
 		bs.Style = css.Dotted
@@ -838,8 +897,10 @@ func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
 		bs.Style = css.Dashed
 	case "threeDEmboss":
 		bs.Style = css.Ridge
+		bs.Width = compoundWidth(val, bs.Width)
 	case "threeDEngrave":
 		bs.Style = css.Groove
+		bs.Width = compoundWidth(val, bs.Width)
 	case "outset":
 		bs.Style = css.Outset
 	case "inset":
