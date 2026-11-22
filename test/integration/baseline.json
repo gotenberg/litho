@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-22T22:29:41Z",
+  "captured_at": "2026-11-22T23:08:42Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -54575,11 +54575,11 @@
               "text_f1": 0.9786
             },
             "charts-line-area": {
-              "layout": 0.9026,
+              "layout": 0.9247,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6667,
+              "strict": 1,
               "text_f1": 1
             },
             "charts-pie-doughnut": {
@@ -74310,7 +74310,7 @@
               "text_f1": 1
             },
             "chart-3d": {
-              "layout": 0.2423,
+              "layout": 0.675,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -74318,11 +74318,11 @@
               "text_f1": 0.8531
             },
             "chart-area": {
-              "layout": 0.8202,
+              "layout": 0.9682,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.9016
             },
             "chart-bar": {
@@ -90690,8 +90690,8 @@
     "openxmlsdk/pptx": {
       "features": {
         "diff": {
-          "matched": 114,
-          "mismatched": 34,
+          "matched": 123,
+          "mismatched": 25,
           "skipped": 34,
           "metrics": {
             "convert_error": 0,
@@ -91477,7 +91477,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_.pptx": {
-              "layout": 0.5457,
+              "layout": 0.9598,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91485,7 +91485,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_as_one_object_.pptx": {
-              "layout": 0.5668,
+              "layout": 0.96,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91493,7 +91493,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_by_element_in_category_.pptx": {
-              "layout": 0.5768,
+              "layout": 0.9598,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91501,7 +91501,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_as_one_object_.pptx": {
-              "layout": 0.5811,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91509,7 +91509,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_by_element_in_category_.pptx": {
-              "layout": 0.5789,
+              "layout": 0.9596,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91517,7 +91517,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_as_one_object_.pptx": {
-              "layout": 0.5668,
+              "layout": 0.96,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91525,7 +91525,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_by_element_in_category_.pptx": {
-              "layout": 0.5768,
+              "layout": 0.9598,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91533,7 +91533,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_as_one_object_.pptx": {
-              "layout": 0.5811,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91541,7 +91541,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_by_element_in_category_.pptx": {
-              "layout": 0.5789,
+              "layout": 0.9596,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91677,12 +91677,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/SalesPropPres_TP10220213.potx": {
-              "layout": 0.8422,
+              "layout": 0.8587,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.1875,
-              "text_f1": 0.9844
+              "text_f1": 0.9917
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx": {
               "layout": 0.9669,
@@ -95787,7 +95787,7 @@
               "text_f1": 0.9741
             },
             "O14ISOStrict/Excel/xl8galry.xlsx": {
-              "layout": 0.6814,
+              "layout": 0.7012,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -95819,12 +95819,12 @@
               "text_f1": 0.5
             },
             "O14ISOStrict/Graphics/Axis_Title-O12-XL-ChartProperties.xlsx": {
-              "layout": 0.0646,
+              "layout": 0.2423,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8564
+              "text_f1": 0.8714
             },
             "O14ISOStrict/Graphics/Bevel-O12-XL-OartEffects.xlsx": {
               "layout": 0.9165,
@@ -95987,12 +95987,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/O12_templates/BusinessPerformancetest21_with_content_TP10209823.xltx": {
-              "layout": 0.7621,
+              "layout": 0.7564,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.4118,
-              "text_f1": 0.9147
+              "text_f1": 0.917
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProductCompetitiveAnalysis_TP10186503.xltx": {
               "layout": 0.7642,
@@ -113880,7 +113880,7 @@
               "text_f1": 1
             },
             "spreadsheet/56557.xlsx": {
-              "layout": 0,
+              "layout": 0.2912,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
