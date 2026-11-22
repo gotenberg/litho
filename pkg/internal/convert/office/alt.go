@@ -17,7 +17,10 @@ const MaxAltText = 4096
 
 // ShownText returns the text of nodes, its white space collapsed and a
 // space between blocks, at most [MaxAltText] bytes cut at a character:
-// the alt of a Figure that shows text, such as a text box.
+// the alt of a Figure that shows text, such as a text box. A text node
+// with an ActualText reads as it, not as the characters it draws: a
+// symbol font's codes drawn in OpenSymbol are private-use characters,
+// which no Alt may hold (ISO 14289-2, 8.4.3).
 func ShownText(nodes []*layout.Node) string {
 	var sb strings.Builder
 	stack := slices.Clone(nodes)
@@ -27,6 +30,8 @@ func ShownText(nodes []*layout.Node) string {
 		stack = stack[:len(stack)-1]
 		switch {
 		case n == nil:
+		case n.Kind == layout.Text && n.ActualText != "":
+			sb.WriteString(n.ActualText)
 		case n.Kind == layout.Text:
 			sb.WriteString(n.Text)
 		case n.Kind == layout.LineBreak:

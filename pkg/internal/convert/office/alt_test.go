@@ -24,6 +24,10 @@ func TestShownText(t *testing.T) {
 	if got := ShownText(nodes); got != "Hello big world next line" {
 		t.Errorf("ShownText = %q", got)
 	}
+	sym := &layout.Node{Kind: layout.Text, Style: inline, Text: "\ue570", ActualText: "\ufffd"}
+	if got := ShownText([]*layout.Node{p(txt("phone "), sym, txt(" mail"))}); got != "phone \ufffd mail" {
+		t.Errorf("ShownText of a symbol run = %q, want its ActualText", got)
+	}
 	long := ShownText([]*layout.Node{p(txt(strings.Repeat("é", MaxAltText)))})
 	if len(long) > MaxAltText || !strings.HasPrefix(long, "éé") || strings.ContainsRune(long, '�') {
 		t.Errorf("long text cut to %d bytes", len(long))
