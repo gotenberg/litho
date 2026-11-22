@@ -850,7 +850,8 @@ func sizedByStyle(st *css.Style) bool {
 
 // control builds a form control styled st as an inline-block holding the
 // text it shows (HTML Standard, 15.5): an input's value or placeholder, a
-// select's selected option, a textarea's text or placeholder. An input's text
+// select's selected option, a textarea's text or placeholder; a select
+// shown as a list box holds its rows ([builder.listBox]). An input's text
 // stays on one line, as a single-line text entry widget shows it
 // (15.5.15). Under field-sizing: fixed, the initial value, the control
 // takes its default size from its attributes and its font
@@ -876,6 +877,9 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 			ctl = &layout.Control{Kind: layout.ControlTextField, Chars: positiveAttr(n, "size", defaultInputSize)}
 		}
 	case atom.Select:
+		if rows := displaySize(n); rows > 1 {
+			return b.listBox(n, st, rows)
+		}
 		s = selectText(n)
 		ctl = &layout.Control{Kind: layout.ControlDropDown}
 		for _, r := range selectRows(n) {
@@ -943,6 +947,25 @@ func textEntry(n *dom.Node) bool {
 	return true
 }
 
+// displaySize returns the display size of the select n (HTML Standard,
+// 4.10.7): its size attribute, else 4 when it is multiple and 1 when not.
+// A select of display size 1 is a drop-down box, any other a list box
+// (15.5.16); a multiple select of size 1 is a drop-down box too, as
+// Chromium prints it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a select
+//     of multiple size="1" as a drop-down box showing its selected option.
+func displaySize(n *dom.Node) int {
+	_, multiple := attr(n, "multiple")
+	def := 1
+	if multiple {
+		def = 4
+	}
+	return positiveAttr(n, "size", def)
+}
+
 // selectRow is one row a select lists: an option, or an optgroup's
 // heading.
 type selectRow struct {
@@ -1000,6 +1023,117 @@ func optionLabel(o *dom.Node) string {
 		return label
 	}
 	return collapse(textContent(o))
+}
+
+// Chromium's list box, in CSS pixels and colours.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints the rows
+//     of a list box with 2 pixels of padding either side and 1 below,
+//     each at least 1.2 em tall, an option of an optgroup 20 pixels further
+//     in, its optgroup's label bold, a selected option on #cecece, and the
+//     box on the text's bottom.
+var (
+	listRowPadding  = [4]css.Dimension{css.Pts(0), css.Pts(2 * css.Pt), css.Pts(1 * css.Pt), css.Pts(2 * css.Pt)}
+	listGroupIndent = 20 * css.Pt
+	listSelected    = css.Color{R: 0xce / 255.0, G: 0xce / 255.0, B: 0xce / 255.0, A: 1}
+)
+
+// listBox builds a select styled st shown as a list box whose display
+// size is rows (HTML Standard, 15.5.16): an inline-block of one block a row, each option's
+// label on a line of its own, an optgroup's label in bold above its
+// options, the selected options marked, and empty rows below the last;
+// the rows from the one that brings the last selected option into the
+// box, as Chromium scrolls a list box to it. What its rows pass, the box
+// clips ([layout.Control]).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a select
+//     of size 3 whose fifth option is selected as its third to fifth
+//     options; a multiple select of two options as two rows and two empty
+//     ones.
+func (b *builder) listBox(n *dom.Node, st *css.Style, rows int) []*layout.Node {
+	all := selectRows(n)
+	ctl := &layout.Control{Kind: layout.ControlListBox, Rows: rows}
+	first, last := 0, -1
+	for i, r := range all {
+		l := layout.ControlLabel{Text: r.label, Bold: r.heading}
+		if r.grouped {
+			l.Indent = listGroupIndent
+		}
+		ctl.Labels = append(ctl.Labels, l)
+		if r.selected {
+			last = i
+		}
+	}
+	if last >= rows {
+		first = last - rows + 1
+	}
+	box := st
+	if st.VerticalAlign.Kind == css.Baseline {
+		c := *st
+		c.VerticalAlign = css.VerticalAlign{Kind: css.TextBottom}
+		box = &c
+	}
+	node := &layout.Node{Kind: layout.Element, Style: box, Control: ctl}
+	node.ID, _ = attr(n, "id")
+	for i := first; i < len(all) && i < first+rows; i++ {
+		r := all[i]
+		rs := b.listRowStyle(r, st)
+		row := &layout.Node{Kind: layout.Element, Style: rs}
+		if r.label != "" {
+			row.Children = []*layout.Node{{Kind: layout.Text, Style: rs, Text: r.label}}
+		} else {
+			row.Children = []*layout.Node{{Kind: layout.LineBreak, Style: rs}}
+		}
+		node.Children = append(node.Children, row)
+	}
+	plain := b.listRowStyle(selectRow{}, st)
+	for range rows - len(node.Children) {
+		node.Children = append(node.Children, &layout.Node{Kind: layout.Element, Style: plain, Children: []*layout.Node{{Kind: layout.LineBreak, Style: plain}}})
+	}
+	return []*layout.Node{node}
+}
+
+// listRowStyle returns the style of the row r of a list box whose select
+// is styled st: the computed style of its option or optgroup, the
+// select's font and colour for an empty row, as a block on one line with
+// the padding, least height and weight of Chromium's list box rows: an
+// optgroup's label bold, an option in the select's weight (Chromium's
+// option { font-weight: normal } under a bold optgroup); a selected option
+// on Chromium's mark unless its own style gives it a background.
+func (b *builder) listRowStyle(r selectRow, st *css.Style) *css.Style {
+	base := st
+	if r.n != nil {
+		if os := b.computed.Style(r.n); os != nil {
+			base = os
+		}
+	}
+	c := *base
+	if r.n == nil {
+		c = *css.Initial()
+		c.Color, c.FontFamilies, c.FontSize, c.FontWeight, c.FontStyle = st.Color, st.FontFamilies, st.FontSize, st.FontWeight, st.FontStyle
+	}
+	c.Display = css.Block
+	c.WhiteSpace = css.Pre
+	c.Padding = listRowPadding
+	if r.grouped {
+		c.Padding[css.Left] = css.Pts(float64(listRowPadding[css.Left].Value) + listGroupIndent)
+	}
+	c.MinHeight = css.Pts(float64(1.2 * c.FontSize))
+	c.Width, c.Height = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	switch {
+	case r.heading && c.FontWeight < 600:
+		c.FontWeight = 700
+	case !r.heading:
+		c.FontWeight = st.FontWeight
+	}
+	if r.selected && c.BackgroundColor.A == 0 {
+		c.BackgroundColor = listSelected
+	}
+	return &c
 }
 
 // inputText returns the text an <input> shows.

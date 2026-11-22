@@ -453,6 +453,41 @@ func TestPrepare_FormControlsSayTheirDefaultSize(t *testing.T) {
 	}
 }
 
+// TestPrepare_ListBoxShowsItsRows draws a select of display size above 1
+// as a list box (HTML Standard, 15.5.16): a row for each option and each
+// optgroup's label, as many rows as its display size, from the one that
+// shows its last selected option, the selected marked, the rows past its
+// options a line break alone ("|").
+func TestPrepare_ListBoxShowsItsRows(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<select id=a size=3><option>One<option>Two<option>Three<option>Four<option selected>Five</select>`+
+		`<select id=b multiple><optgroup label=Group><option selected>In</optgroup><option>Out</select>`, Options{})
+	for id, want := range map[string][]string{"a": {"Three", "Four", "Five"}, "b": {"Group", "In", "Out", "|"}} {
+		n := byID(t, p.root, id)
+		if n.Control == nil || n.Control.Kind != layout.ControlListBox || n.Control.Rows != len(want) {
+			t.Fatalf("%s: control %+v, want a list box of %d rows", id, n.Control, len(want))
+		}
+		if len(n.Children) != len(want) {
+			t.Fatalf("%s: %d rows, want %d", id, len(n.Children), len(want))
+		}
+		for i, row := range n.Children {
+			if got := treeText(row); got != want[i] || row.Style.Display != css.Block {
+				t.Errorf("%s: row %d %q display %v, want %q as a block", id, i, got, row.Style.Display, want[i])
+			}
+		}
+		if n.Style.VerticalAlign.Kind != css.TextBottom {
+			t.Errorf("%s: vertical-align %v, want text-bottom", id, n.Style.VerticalAlign)
+		}
+	}
+	a, b := byID(t, p.root, "a"), byID(t, p.root, "b")
+	if a.Children[2].Style.BackgroundColor != listSelected || a.Children[1].Style.BackgroundColor.A != 0 {
+		t.Error("the selected option is not the one marked")
+	}
+	if g, in := b.Children[0].Style, b.Children[1].Style; g.FontWeight < 700 || in.FontWeight != 400 || in.Padding[css.Left].Value <= g.Padding[css.Left].Value {
+		t.Errorf("group label weight %d, option weight %d, indents %v and %v", g.FontWeight, in.FontWeight, g.Padding[css.Left], in.Padding[css.Left])
+	}
+}
+
 func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><audio>v</audio><math><mi>m</mi></math>`+
