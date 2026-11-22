@@ -203,6 +203,10 @@ type engine struct {
 	// the painter hung the document's structure from it, which a second
 	// paint does not hang again ([painter.embedded]); nil for none.
 	embeds map[*typeset.StructElem]int
+	// frameLeaves holds the group each frame's document paints as
+	// ([painter.embedded]), so that a frame left out under too many groups
+	// is named as one ([engine.fitLeaf]); nil for none.
+	frameLeaves map[typeset.Fragment]bool
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

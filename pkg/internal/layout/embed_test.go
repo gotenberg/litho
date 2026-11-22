@@ -212,3 +212,26 @@ func TestEmbed_ViewportOnWholePixels(t *testing.T) {
 		t.Errorf("viewport %v by %v px, want 3 by 3", gotW/css.Pt, gotH/css.Pt)
 	}
 }
+
+// A frame whose document has no room left under the groups around it is
+// left out with a warning that says it is a frame's document.
+func TestEmbed_DroppedUnderGroupsIsNamed(t *testing.T) {
+	make := func(float64, float64) *Embedded {
+		d := redDoc(4)
+		for range MaxEmbedDepth {
+			d.Content = []typeset.Fragment{&typeset.Group{Opacity: 1, Content: d.Content}}
+		}
+		return d
+	}
+	n := &Node{Kind: Replaced, Style: sty(width(3), height(2)), Role: "DocumentFragment", Picture: embedded(make)}
+	for range maxGroupDepth {
+		n = el(sty(func(s *css.Style) { s.Opacity = 0.5 }), n)
+	}
+	res := run(t, doc(n), page(4, 4))
+	if !hasWarning(res, warn.LimitReached, "a frame's document under groups") {
+		t.Errorf("warnings %v, want the frame named", res.Warnings)
+	}
+	if hasWarning(res, warn.LimitReached, "a vector picture") {
+		t.Errorf("warnings %v name a vector picture", res.Warnings)
+	}
+}

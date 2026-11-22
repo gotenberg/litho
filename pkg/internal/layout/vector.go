@@ -105,18 +105,24 @@ func fragNodes(f typeset.Fragment) int {
 }
 
 // fitLeaf returns f, a leaf of the paint tree under depth open groups, or
-// nil, with a warning, when it is a group too deep for the room the page
-// group and those groups leave in the typeset model.
+// nil, with a warning that names it, a frame's document or a vector
+// picture, when it is a group too deep for the room the page group and
+// those groups leave in the typeset model.
 func (e *engine) fitLeaf(f typeset.Fragment, depth int) typeset.Fragment {
 	g, ok := f.(*typeset.Group)
 	if !ok {
 		return f
 	}
-	if 1+depth+depthOf([]typeset.Fragment{g}) > typesetGroupDepth {
-		e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", typesetGroupDepth-1-MaxVectorDepth), -1)
+	inner := depthOf([]typeset.Fragment{g})
+	if 1+depth+inner <= typesetGroupDepth {
+		return f
+	}
+	if e.frameLeaves[f] {
+		e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a frame's document under groups nested deeper than %d levels was left out", typesetGroupDepth-1-inner), -1)
 		return nil
 	}
-	return f
+	e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", typesetGroupDepth-1-MaxVectorDepth), -1)
+	return nil
 }
 
 // naturalPicture returns pic as a background or an object-fit sizes it

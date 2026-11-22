@@ -61,6 +61,10 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 	}
 	c := p.holder(b, false)
 	c.kids = append(c.kids, &ditem{frag: f, y0: box.Y, y1: box.Y + box.Height, page: page})
+	if p.e.frameLeaves == nil {
+		p.e.frameLeaves = map[typeset.Fragment]bool{}
+	}
+	p.e.frameLeaves[f] = true
 	if p.artifact {
 		return
 	}
