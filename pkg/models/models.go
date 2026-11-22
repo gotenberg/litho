@@ -414,8 +414,9 @@ type Table struct {
 // other reads of the Reader that returned the value, while that Reader stays
 // open.
 type EmbeddedFile struct {
-	// Name is the base name of the file, read from the file specification's
-	// /UF or /F entry. It is "embedded" when the specification has neither.
+	// Name is the file name the file specification's /UF or /F entry holds,
+	// as the PDF holds it: it may carry a path, such as "../evil.png". It is
+	// "embedded" when the specification has neither.
 	Name string `json:"name"`
 	// MIMEType is the stream's /Subtype name, such as application/pdf, or
 	// empty when the stream has none.

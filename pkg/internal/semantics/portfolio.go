@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -178,8 +177,9 @@ func extractFileSpec(ctx context.Context, doc *document.Document, obj ast.PdfObj
 			filename = document.DecodePdfString(fStr)
 		}
 	}
-	// Sanitize to prevent directory traversal.
-	filename = filepath.Base(filename)
+	// The name stays as the PDF holds it, so that it matches the name tree key
+	// a writer removes it by. It may hold a path: a caller that writes it to
+	// disk or into an archive must make it safe.
 
 	// Get the /EF dictionary containing the actual file stream.
 	efObj, ok := specDict["EF"]

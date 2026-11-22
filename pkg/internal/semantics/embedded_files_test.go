@@ -117,6 +117,30 @@ func TestExtractEmbeddedFilesFindsAnnotationAttachment(t *testing.T) {
 // TestExtractPortfolioItemsIgnoresAnnotationAttachment is the control: the
 // portfolio view is the name tree, and an annotation attachment is not a
 // portfolio item.
+// The name comes back as the PDF holds it, path included, so it matches the
+// name the writer removes the file by. Making it safe is the caller's job.
+func TestExtractEmbeddedFilesKeepsTheRawName(t *testing.T) {
+	t.Parallel()
+
+	const payload = "hello attachment"
+	pdf := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Type /Filespec /F (../../evil.png) /UF (../../evil.png) /EF << /F 5 0 R >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
+		"<< /Names [(../../evil.png) 4 0 R] >>",
+	})
+
+	files, err := ExtractEmbeddedFiles(context.Background(), openBytes(t, pdf))
+	if err != nil {
+		t.Fatalf("ExtractEmbeddedFiles: %v", err)
+	}
+	if len(files) != 1 || files[0].Name != "../../evil.png" {
+		t.Fatalf("files = %+v, want one named %q", files, "../../evil.png")
+	}
+}
+
 func TestExtractPortfolioItemsIgnoresAnnotationAttachment(t *testing.T) {
 	t.Parallel()
 
