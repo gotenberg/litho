@@ -270,3 +270,39 @@ func TestStaticPosition_InlineInARightToLeftLine(t *testing.T) {
 		}
 	}
 }
+
+// TestVertical_FixedBoxesIgnoreRelativeOffsetsAround locks the fixed boxes
+// of an orthogonal flow whose root and horizontal ancestor are moved by
+// relative offsets: a box with insets sits where they put it in the page
+// area, unmoved (CSS 2.1, 9.4.3 and 10.1), and a box at its static
+// position moves with the offsets of the boxes around it, on the page's
+// axes.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints each box
+//     where the table below has it, to the pixel at 96 dpi.
+func TestVertical_FixedBoxesIgnoreRelativeOffsetsAround(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ mode, green, yellow string }{
+		{"vertical-rl", "370,36+30x20", "383,41+30x20"},
+		{"vertical-lr", "150,36+30x20", "163,41+30x20"},
+		{"sideways-rl", "370,36+30x20", "383,41+30x20"},
+	} {
+		doc := convertDoc(t, `<style>@page { size: 600px 400px; margin: 0 } html, body { margin: 0 }
+			.h { position: relative; top: 15px; left: 25px; margin: 10px; width: 450px; height: 300px; border: 2px solid gray }
+			.v { writing-mode: `+c.mode+`; position: relative; top: 7px; left: 11px; width: 250px; height: 200px; margin-left: 100px; border: 2px solid gray }
+			.f { position: fixed; width: 30px; height: 20px }
+			#a { left: 200px; top: 100px; background: red } #b { background: lime }
+			#c { position: absolute; right: 10px; top: 10px; width: 30px; height: 20px; background: fuchsia }
+			.in { position: relative; top: 5px; left: 13px }</style>
+			<div class=h><div class=v><div class=f id=a></div><div class=f id=b></div><div id=c></div><div class=in><div class=f style="background: yellow"></div></div></div></div>`,
+			Options{PreferCSSPageSize: true})
+		got := pxBoxes(doc)[0]
+		for k, w := range map[string]string{"r": "200,100+30x20", "g": c.green, "m": "360,46+30x20", "y": c.yellow} {
+			if got[k] != w {
+				t.Errorf("%s, box %s: %q, want %q", c.mode, k, got[k], w)
+			}
+		}
+	}
+}

@@ -814,6 +814,17 @@ func (p *painter) unit(b *box, own bool) {
 			if inv, ok := invertMatrix(turn); ok {
 				inv.E, inv.F = 0, 0
 				fx.transform = &inv
+				if t := innerTurner(b); t != nil {
+					// The relative offsets of the boxes around the turned
+					// flow move the flow's turn, on the page, and the
+					// painter, in the flow: the box, which they do not
+					// move (CSS 2.1, 9.4.3 and 10.1), takes both back.
+					dx, dy := ancestorOffset(t)
+					ix, iy := applyPoint(inv, dx, dy)
+					sdx, sdy := p.dx, p.dy
+					p.dx, p.dy = float64(p.dx+dx)-ix, float64(p.dy+dy)-iy
+					defer func() { p.dx, p.dy = sdx, sdy }()
+				}
 			}
 		}
 		push(&ditem{group: true, fx: fx})
