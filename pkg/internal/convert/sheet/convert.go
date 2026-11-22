@@ -390,16 +390,37 @@ func tableOf(st *typeset.StructElem) *typeset.StructElem {
 	return nil
 }
 
-// paper returns the page size of a sheet: its own, or the options'
-// paper in its own orientation, turned to landscape when the options ask
-// (office.Options.Paper).
+// paper returns the page size of a sheet: its own, as Excel prints it
+// under Excel's rules ([excelPaper]), or the options' paper in its own
+// orientation, turned to landscape when the options ask
+// (office.Options.Paper). A paper the options give is the caller's size
+// and is kept as given.
 func (b *builder) paper(sh *Sheet) (float64, float64) {
 	w, h := sh.Page.Width, sh.Page.Height
-	if !numeric.Positive(w) || !numeric.Positive(h) {
+	switch {
+	case !numeric.Positive(w) || !numeric.Positive(h):
 		w, h = b.opts.DefaultPage(FallbackWidth, FallbackHeight)
+	case b.doc.ExcelRules:
+		w, h = excelPaper(w), excelPaper(h)
 	}
 	w, h = b.opts.Paper(w, h)
 	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)
+}
+
+// excelPaper returns a paper side of v points as Excel prints it: in whole
+// printer pixels, the nearest. ECMA-376 Part 1, 18.3.1.63 names a paper by
+// its code; the rounding is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: the paper-grid references print A4 on 595.32 by 841.92
+//     points (4,961 by 7,016 pixels, 210 by 297 mm being 4,960.6 by
+//     7,015.7), A5 on 419.52 by 595.32, A3 on 1,190.52 by 841.92, JIS B5
+//     on 515.88 by 728.52; headers_footers_codes fits 48 rows of 121
+//     pixels on its A4 page with 1-inch margins, 5,808 of the 5,816
+//     pixels left, where 841.89 points would leave 5,815.75.
+func excelPaper(v float64) float64 {
+	return math.Round(v/excelPixel) * excelPixel
 }
 
 // planSheet returns how the sheet sh prints. The builder's context stops

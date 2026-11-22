@@ -443,3 +443,29 @@ func TestPlan_ExcelRowsAPage(t *testing.T) {
 		})
 	}
 }
+
+// TestConvert_ExcelPaper locks the paper Excel prints on: each side in
+// whole printer pixels, the nearest, A4 on 4,961 by 7,016 pixels; Calc's
+// paper stays as the sheet states it, and the options' paper as given.
+func TestConvert_ExcelPaper(t *testing.T) {
+	for _, excel := range []bool{false, true} {
+		sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "a", nil)}}}}
+		doc := newDoc(sh)
+		if excel {
+			doc = excelDoc(sh)
+		}
+		pg := convert(t, doc, office.Options{}).Pages[0]
+		w, h := 595.28, 841.89
+		if excel {
+			w, h = 4961*excelPixel, 7016*excelPixel
+		}
+		if !near(pg.Width, w, 1e-9) || !near(pg.Height, h, 1e-9) {
+			t.Errorf("Excel's rules %v: paper %v by %v, want %v by %v", excel, pg.Width, pg.Height, w, h)
+		}
+		// A paper the options give is the caller's size, kept as given.
+		pg = convert(t, doc, office.Options{PageWidth: 419.53, PageHeight: 595.28}).Pages[0]
+		if !near(pg.Width, 419.53, 1e-9) || !near(pg.Height, 595.28, 1e-9) {
+			t.Errorf("Excel's rules %v: the options' paper printed %v by %v, want 419.53 by 595.28", excel, pg.Width, pg.Height)
+		}
+	}
+}
