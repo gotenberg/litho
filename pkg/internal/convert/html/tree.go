@@ -850,14 +850,18 @@ func sizedByStyle(st *css.Style) bool {
 
 // control builds a form control styled st as an inline-block holding the
 // text it shows (HTML Standard, 15.5): an input's value or placeholder, a
-// select's selected option, a textarea's text or placeholder. The box
-// takes the size of that text, as field-sizing: content asks (15.5.6 and
-// 15.5.17); the default preferred size of field-sizing: fixed is not laid
-// out. An input's text stays on one line, as a single-line text entry
-// widget shows it (15.5.6).
+// select's selected option, a textarea's text or placeholder. An input's text
+// stays on one line, as a single-line text entry widget shows it
+// (15.5.15). Under field-sizing: fixed, the initial value, the control
+// takes its default size from its attributes and its font
+// ([layout.Control]): a text field its size, 20 without one, a textarea
+// its cols and rows, 20 and 2 without them, a select its options; under
+// field-sizing: content its text sizes it (CSS Form Control Styling 1,
+// 7.1).
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 	var s string
+	var ctl *layout.Control
 	textSt := st
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
@@ -868,20 +872,134 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 			c.WhiteSpace = css.Pre
 			textSt = &c
 		}
+		if textEntry(n) {
+			ctl = &layout.Control{Kind: layout.ControlTextField, Chars: positiveAttr(n, "size", defaultInputSize)}
+		}
 	case atom.Select:
 		s = selectText(n)
+		ctl = &layout.Control{Kind: layout.ControlDropDown}
+		for _, r := range selectRows(n) {
+			if !r.heading {
+				ctl.Labels = append(ctl.Labels, layout.ControlLabel{Text: r.label})
+			}
+		}
 	default:
 		s = textContent(n)
 		if s == "" {
 			s, _ = attr(n, "placeholder")
 		}
+		ctl = &layout.Control{Kind: layout.ControlTextArea, Chars: positiveAttr(n, "cols", defaultTextAreaCols), Rows: positiveAttr(n, "rows", defaultTextAreaRows)}
 	}
-	node := &layout.Node{Kind: layout.Element, Style: st}
+	node := &layout.Node{Kind: layout.Element, Style: st, Control: ctl}
 	node.ID, _ = attr(n, "id")
 	if s != "" {
 		node.Children = []*layout.Node{{Kind: layout.Text, Style: textSt, Text: s}}
 	}
 	return []*layout.Node{node}
+}
+
+// The default sizes of the text entry widgets: an input's size, a
+// textarea's cols and rows (HTML Standard, 4.10.5.3.2 and 4.10.11).
+const (
+	defaultInputSize    = 20
+	defaultTextAreaCols = 20
+	defaultTextAreaRows = 2
+)
+
+// maxControlChars bounds the characters a size, cols or rows attribute
+// sizes a control by: 10,000. Anti-DoS guard, not spec-mandated: the
+// attribute is the author's, and a page shows a hundred or so characters
+// across.
+const maxControlChars = 10_000
+
+// positiveAttr returns the attribute key of n parsed with the rules for
+// parsing non-negative integers (HTML Standard, 2.3.4.2), def when it is
+// absent, fails or is zero (4.10.5.3.2, 4.10.11), at most
+// [maxControlChars].
+func positiveAttr(n *dom.Node, key string, def int) int {
+	v, ok := attr(n, key)
+	if !ok {
+		return def
+	}
+	i, ok := parseInteger(v)
+	if !ok || i <= 0 {
+		return def
+	}
+	return min(i, maxControlChars)
+}
+
+// textEntry reports an input shown as a single-line text entry widget:
+// of type text, search, tel, url, email or password, or of a type litho
+// does not know, which is text (HTML Standard, 15.5.15 and 4.10.5).
+func textEntry(n *dom.Node) bool {
+	typ, _ := attr(n, "type")
+	switch strings.ToLower(strings.TrimSpace(typ)) {
+	case "", "text", "search", "tel", "url", "email", "password":
+		return true
+	case "hidden", "checkbox", "radio", "file", "submit", "image", "reset", "button", "range", "color",
+		"number", "date", "month", "week", "time", "datetime-local":
+		return false
+	}
+	return true
+}
+
+// selectRow is one row a select lists: an option, or an optgroup's
+// heading.
+type selectRow struct {
+	label    string
+	heading  bool
+	grouped  bool
+	selected bool
+	n        *dom.Node
+}
+
+// maxSelectRows bounds the rows of a select litho reads: 10,000.
+// Anti-DoS guard, not spec-mandated: each is a box of a list box and a
+// label shaped to size the select, and a form lists a few hundred at most.
+const maxSelectRows = 10_000
+
+// selectRows returns the rows of the select n in tree order (HTML
+// Standard, 4.10.7, the list of options): its options and those of its
+// optgroup children, each optgroup's label heading its options; at most
+// [maxSelectRows].
+func selectRows(n *dom.Node) []selectRow {
+	var rows []selectRow
+	add := func(o *dom.Node, grouped bool) {
+		if len(rows) < maxSelectRows {
+			_, sel := attr(o, "selected")
+			rows = append(rows, selectRow{label: optionLabel(o), grouped: grouped, selected: sel, n: o})
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != dom.ElementNode || c.Namespace != "" {
+			continue
+		}
+		switch c.DataAtom { //nolint:exhaustive // other children list nothing
+		case atom.Option:
+			add(c, false)
+		case atom.Optgroup:
+			if len(rows) < maxSelectRows {
+				label, _ := attr(c, "label")
+				rows = append(rows, selectRow{label: collapse(label), heading: true, n: c})
+			}
+			for o := c.FirstChild; o != nil; o = o.NextSibling {
+				if o.Type == dom.ElementNode && o.Namespace == "" && o.DataAtom == atom.Option {
+					add(o, true)
+				}
+			}
+		}
+	}
+	return rows
+}
+
+// optionLabel returns the label of the option o (HTML Standard, 4.10.10):
+// its label attribute when not empty, else its text, white space
+// collapsed.
+func optionLabel(o *dom.Node) string {
+	if label, ok := attr(o, "label"); ok && label != "" {
+		return label
+	}
+	return collapse(textContent(o))
 }
 
 // inputText returns the text an <input> shows.

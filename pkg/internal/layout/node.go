@@ -163,6 +163,10 @@ type Node struct {
 	// ID names the node as a link target. [Result.Anchors] records where it
 	// lands. An empty ID names nothing.
 	ID string
+	// Control, when not nil, makes the Element a form control whose
+	// default size its font and Control give under field-sizing: fixed
+	// ([Control]).
+	Control *Control
 	// Href makes the subtree a link: "#id" targets the node with that ID,
 	// or the top of the document under [Options.BrowserRules] when the
 	// fragment says so; anything else is an external URI the converter has

@@ -91,6 +91,9 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 		e.fail(fmt.Errorf("%w: more than %d", ErrTooManyBoxes, MaxBoxes))
 	}
 	e.charge(boxCost, "boxes")
+	if n != nil && n.Control != nil {
+		st = e.controlStyle(n.Control, st, ctx.lang)
+	}
 	if ctx.vertical {
 		st = e.turnedStyle(st, ctx.frame)
 	}

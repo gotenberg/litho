@@ -411,9 +411,8 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 }
 
 // TestPrepare_SizesFormControlsByTheirText holds a control to the text
-// it shows, as field-sizing: content sizes it (HTML Standard, 15.5.6 and
-// 15.5.17): an empty textarea shows its placeholder, and an input's text
-// stays on one line.
+// it shows (HTML Standard, 15.5.15 and 15.5.17): an empty textarea shows
+// its placeholder, and an input's text stays on one line.
 func TestPrepare_SizesFormControlsByTheirText(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<textarea id=ta placeholder="Tell us"></textarea><input id=in value="a long answer" style="width: 5px">`, Options{})
@@ -426,6 +425,31 @@ func TestPrepare_SizesFormControlsByTheirText(t *testing.T) {
 	}
 	if in.Style.WhiteSpace == css.Pre {
 		t.Error("the input's own style changed: the computed style is shared")
+	}
+}
+
+// TestPrepare_FormControlsSayTheirDefaultSize gives each control the
+// attributes its default size comes from (HTML Standard, 15.5.15 to
+// 15.5.17): a text field its size, 20 when absent, zero or invalid, a
+// textarea its cols and rows, a select its option labels; a button and a
+// checkbox none.
+func TestPrepare_FormControlsSayTheirDefaultSize(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<input id=a><input id=b size=5><input id=c size=0><input id=d size=x type=email><input id=e type=checkbox>`+
+		`<input id=f type=submit><textarea id=g cols=7 rows=4></textarea><textarea id=h cols=-3></textarea>`+
+		`<select id=i><option>one<optgroup label=G><option label="Two">2</optgroup></select><select id=j multiple size=1><option>x</select>`, Options{})
+	for id, want := range map[string]*layout.Control{
+		"a": {Kind: layout.ControlTextField, Chars: 20}, "b": {Kind: layout.ControlTextField, Chars: 5},
+		"c": {Kind: layout.ControlTextField, Chars: 20}, "d": {Kind: layout.ControlTextField, Chars: 20},
+		"e": nil, "f": nil,
+		"g": {Kind: layout.ControlTextArea, Chars: 7, Rows: 4}, "h": {Kind: layout.ControlTextArea, Chars: 20, Rows: 2},
+		"i": {Kind: layout.ControlDropDown, Labels: []layout.ControlLabel{{Text: "one"}, {Text: "Two"}}},
+		"j": {Kind: layout.ControlDropDown, Labels: []layout.ControlLabel{{Text: "x"}}},
+	} {
+		got := byID(t, p.root, id).Control
+		if (got == nil) != (want == nil) || got != nil && fmt.Sprint(*got) != fmt.Sprint(*want) {
+			t.Errorf("%s: control %+v, want %+v", id, got, want)
+		}
 	}
 }
 
