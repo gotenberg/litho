@@ -401,7 +401,7 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 	for a := s.parent; a != nil && depth < maxDiagramDepth; a, depth = a.parent, depth+1 {
 		ac, ar := z.e.own(a.atom, a.pt)
 		for _, c := range ac {
-			if (c.Type == "w" || c.Type == "h") && strings.HasPrefix(c.RefType, "user") {
+			if _, ok := a.user[c.RefType]; (c.Type == "w" || c.Type == "h") && strings.HasPrefix(c.RefType, "user") && (!ok || c.RefForName != "") {
 				t.unresolved = true
 			}
 		}

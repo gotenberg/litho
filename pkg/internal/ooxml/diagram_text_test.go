@@ -322,3 +322,43 @@ func TestDiagramTextSizeByLevel(t *testing.T) {
 		}
 	}
 }
+
+// TestDiagramTextSizeOfAResolvedUserVariable lays out a node whose width
+// refers to a user-defined variable the enclosing composite sets on its
+// row (userA, 21.4.7.21): the box is the one PowerPoint computes, so its
+// text is sized as any other, at the largest whole point that fits.
+func TestDiagramTextSizeOfAResolvedUserVariable(t *testing.T) {
+	var pts, cxns strings.Builder
+	pts.WriteString(`<dgm:pt modelId="0" type="doc"/>`)
+	pts.WriteString(`<dgm:pt modelId="p0" type="pres"><dgm:prSet presAssocID="0" presName="root"/><dgm:spPr/></dgm:pt>`)
+	pts.WriteString(`<dgm:pt modelId="pr" type="pres"><dgm:prSet presAssocID="0" presName="row"/><dgm:spPr/></dgm:pt>`)
+	pts.WriteString(`<dgm:pt modelId="n0"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:p><a:r><a:t>abcdefghijkl</a:t></a:r></a:p></dgm:t></dgm:pt>`)
+	pts.WriteString(`<dgm:pt modelId="pn0" type="pres"><dgm:prSet presAssocID="n0" presName="node"/><dgm:spPr/></dgm:pt>`)
+	cxns.WriteString(`<dgm:cxn modelId="c0" type="presOf" srcId="0" destId="p0"/><dgm:cxn modelId="c1" type="presParOf" srcId="p0" destId="pr"/>`)
+	cxns.WriteString(`<dgm:cxn modelId="x0" srcId="0" destId="n0" srcOrd="0"/><dgm:cxn modelId="o0" type="presOf" srcId="n0" destId="pn0"/><dgm:cxn modelId="r0" type="presParOf" srcId="pr" destId="pn0"/>`)
+	data := `<dgm:dataModel ` + dgmNS + `><dgm:ptLst>` + pts.String() + `</dgm:ptLst><dgm:cxnLst>` + cxns.String() + `</dgm:cxnLst></dgm:dataModel>`
+	layout := diagramLayout(`<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="row" refType="w"/><dgm:constr type="h" for="ch" forName="row" refType="h"/>` +
+		`<dgm:constr type="userA" for="ch" forName="row" refType="w" refFor="ch" refForName="row" fact="0.5"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="row"><dgm:alg type="lin"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="node" op="equ" val="65"/><dgm:constr type="w" for="ch" forName="node" refType="userA"/></dgm:constrLst>` +
+		`<dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/>` +
+		noMargins + `<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst></dgm:layoutNode></dgm:forEach></dgm:layoutNode>`)
+	root := ParseDiagram(mustParse(t, data), mustParse(t, layout), nil, nil).LayOut(6*914400, 2*914400, charFit)
+	var node *DiagramShape
+	var walk func(s *DiagramShape)
+	walk = func(s *DiagramShape) {
+		if s.Name == "node" {
+			node = s
+		}
+		for _, k := range s.Kids {
+			walk(k)
+		}
+	}
+	walk(root)
+	// Half the row, 216 points, holds twelve letters at half an em each
+	// up to 36 points.
+	if node == nil || node.W != 3*914400 || node.FontSize != 36 || node.Autofit {
+		t.Fatalf("node %+v", node)
+	}
+}
