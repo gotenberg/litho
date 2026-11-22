@@ -104,3 +104,23 @@ func TestSymbolCodes_RestoreGivesTheGlyphsTheirCodes(t *testing.T) {
 		t.Errorf("other glyph stands for %q, want a", got)
 	}
 }
+
+// TestSymbolCodes_RestoreNamesTheGlyphsOfArtifacts locks that a glyph of
+// an artifact, which has no structure element to carry an ActualText,
+// drawn as a private-use character in place of a symbol code takes the
+// character the ActualText names, and that a glyph of an artifact drawing
+// a character that is no private-use one keeps it.
+func TestSymbolCodes_RestoreNamesTheGlyphsOfArtifacts(t *testing.T) {
+	t.Parallel()
+	codes := NewSymbolCodes()
+	codes.record("�✓", "", "")
+	footer := &typeset.Text{Glyphs: []typeset.Glyph{{Text: ""}, {Text: ""}, {Text: "2"}}}
+	codes.Restore(&typeset.Page{Content: []typeset.Fragment{footer}})
+	var got []string
+	for _, g := range footer.Glyphs {
+		got = append(got, g.Text)
+	}
+	if want := []string{"�", "✓", "2"}; !slices.Equal(got, want) {
+		t.Errorf("artifact glyphs stand for %q, want %q", got, want)
+	}
+}

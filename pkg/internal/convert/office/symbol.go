@@ -29,11 +29,15 @@ type SymbolCodes struct {
 	// actual holds the ActualText of every run recorded, which tells its
 	// glyphs from those of other runs.
 	actual map[string]bool
+	// names maps a private-use character drawn in place of a code to the
+	// character the run's ActualText gives the code, itself no
+	// private-use character.
+	names map[rune]rune
 }
 
 // NewSymbolCodes returns an empty [SymbolCodes].
 func NewSymbolCodes() *SymbolCodes {
-	return &SymbolCodes{codes: map[rune]rune{}, actual: map[string]bool{}}
+	return &SymbolCodes{codes: map[rune]rune{}, actual: map[string]bool{}, names: map[rune]rune{}}
 }
 
 // Restore gives every glyph of pg that draws a recorded character, in a
@@ -41,6 +45,12 @@ func NewSymbolCodes() *SymbolCodes {
 // the code the source wrote as its text: the text a symbol font's glyph
 // stands for in the printed text, as Word and LibreOffice write it, while
 // the ActualText names it for a reader (ISO 19005-2, 6.2.11.7.3).
+//
+// A run of an artifact, a header's or a footer's, has no structure
+// element to carry an ActualText: a glyph of it that draws a recorded
+// private-use character takes the character the ActualText would give
+// it, so that no private-use value is left without its replacement text
+// (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
 func (c *SymbolCodes) Restore(pg *typeset.Page) {
 	if c == nil || len(c.codes) == 0 {
 		return
@@ -53,7 +63,11 @@ func (c *SymbolCodes) restore(frags []typeset.Fragment) {
 	for _, f := range frags {
 		switch v := f.(type) {
 		case *typeset.Text:
-			if v.Parent == nil || !c.actual[v.Parent.ActualText] {
+			if v.Parent == nil {
+				c.name(v)
+				continue
+			}
+			if !c.actual[v.Parent.ActualText] {
 				continue
 			}
 			for i := range v.Glyphs {
@@ -70,8 +84,26 @@ func (c *SymbolCodes) restore(frags []typeset.Fragment) {
 	}
 }
 
+// name gives the glyphs of t, a run of an artifact, that draw a recorded
+// private-use character the character its ActualText names.
+func (c *SymbolCodes) name(t *typeset.Text) {
+	if len(c.names) == 0 {
+		return
+	}
+	for i := range t.Glyphs {
+		t.Glyphs[i].Text = strings.Map(func(r rune) rune {
+			if n, ok := c.names[r]; ok {
+				return n
+			}
+			return r
+		}, t.Glyphs[i].Text)
+	}
+}
+
 // record notes that draw, the text of a run whose ActualText is actual,
-// stands for src, character by character.
+// stands for src, character by character, and that each private-use
+// character of draw is named by the character of actual in its place,
+// when actual names each character of draw with one of its own.
 func (c *SymbolCodes) record(actual, src, draw string) {
 	if c == nil || actual == "" || len(c.actual) >= maxSymbolTexts {
 		return
@@ -81,10 +113,14 @@ func (c *SymbolCodes) record(actual, src, draw string) {
 		return
 	}
 	c.actual[actual] = true
+	a := []rune(actual)
 	i := 0
 	for _, d := range draw {
 		if _, ok := c.codes[d]; !ok && d != s[i] {
 			c.codes[d] = s[i]
+		}
+		if _, ok := c.names[d]; !ok && len(a) == len(s) && unicode.Is(unicode.Co, d) && !unicode.Is(unicode.Co, a[i]) {
+			c.names[d] = a[i]
 		}
 		i++
 	}
