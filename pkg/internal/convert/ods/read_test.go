@@ -739,3 +739,27 @@ func TestRead_RowsCalcMeasures(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_NamedStyleOverColumn locks an empty cell that names the
+// Default style under a column whose default cell style draws a border:
+// it is listed in the Default style, where the border does not reach,
+// and a cell that names no style is left to the column's.
+func TestRead_NamedStyleOverColumn(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="ce1" style:family="table-cell" style:parent-style-name="Default"><style:table-cell-properties fo:border="0.06pt solid #000000"/></style:style>` +
+			`<style:style style:name="ce2" style:family="table-cell" style:parent-style-name="Default"><style:text-properties fo:font-size="18pt"/></style:style>`,
+		body: table("S", `<table:table-column table:default-cell-style-name="ce1" table:number-columns-repeated="2"/>`+
+			`<table:table-row><table:table-cell table:style-name="Default"/><table:table-cell/><table:table-cell table:style-name="ce2"/></table:table-row>`),
+	}
+	doc, _ := read(t, f.bytes())
+	sh := doc.Sheets[0]
+	if c := cellAt(sh, 0, 0); c == nil || c.Style != &doc.Default {
+		t.Errorf("cell naming Default = %+v, want listed in the Default style", c)
+	}
+	if c := cellAt(sh, 0, 1); c != nil {
+		t.Errorf("cell naming no style = %+v, want left to its column", c)
+	}
+	if c := cellAt(sh, 0, 2); c == nil || c.Style == nil || c.Style.Font.Size != 18 {
+		t.Errorf("empty cell of 18 points = %+v, want listed", c)
+	}
+}

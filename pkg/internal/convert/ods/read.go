@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -290,6 +291,9 @@ type tableState struct {
 	headerRows, headerCols *sheet.Range
 	// rowHidden reports the row whose frames are being read hidden.
 	rowHidden bool
+	// rowStyle is the default cell style of the row being read, nil for
+	// none.
+	rowStyle *sheet.Style
 }
 
 // pendingRows is n copies of row, without cells, from row.Index.
@@ -566,6 +570,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		ts.headerRows = extend(ts.headerRows, ts.row, ts.row+n-1, true)
 	}
 	start := ts.row
+	ts.rowStyle = tmpl.Style
 	cells, merges, frames := r.rowCells(ts, el)
 	if n >= visAttrStop && !hasValue(cells) {
 		// A long run of rows whose cells only carry a style: Calc leaves
@@ -643,6 +648,46 @@ const visAttrStop = 84
 func hasValue(cells []sheet.Cell) bool {
 	for _, c := range cells {
 		if c.Value.Kind != sheet.Empty {
+			return true
+		}
+	}
+	return false
+}
+
+// overrides reports an empty cell of column col of the row being read,
+// in the style st it names, that must be listed though it shows nothing:
+// a cell that names its style is in that style, not in the default cell
+// style of its row or column (ODF 1.3, Part 3, 19.615
+// table:default-cell-style-name), which the builder gives a cell it does
+// not list.
+func (r *reader) overrides(ts *tableState, col int, st *sheet.Style) bool {
+	inherited := ts.rowStyle
+	if inherited == nil {
+		cols := ts.sh.Columns
+		i := sort.Search(len(cols), func(i int) bool { return cols[i].Last >= col })
+		if i < len(cols) && cols[i].First <= col {
+			inherited = cols[i].Style
+		}
+	}
+	return inherited != nil && inherited != st
+}
+
+// setsApart reports a cell style name, resolved as st, that an empty cell
+// must be listed for: its style:map conditions apply to the cells that
+// name it, empty ones included (16.3), and a font of another size than
+// the document default's sets the height Calc measures its row to.
+func (r *reader) setsApart(name string, st *sheet.Style) bool {
+	return st.Font.Size != r.doc.Default.Font.Size || r.mapped(name)
+}
+
+// mapped reports a cell style that holds style:map conditions.
+func (r *reader) mapped(name string) bool {
+	st := r.styles.Style(odf.ScopeContent, odf.FamilyCell, name)
+	if st == nil {
+		return false
+	}
+	for _, m := range st.El.Children {
+		if m.Is(odf.NSStyle, "map") {
 			return true
 		}
 	}
@@ -764,6 +809,14 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 			continue
 		}
 		cell, ok := r.cell(c)
+		name := c.A(odf.NSTable, "style-name")
+		named := name != ""
+		if named && cell.Style == nil {
+			cell.Style = &r.doc.Default
+		}
+		// An empty cell is listed for its style alone when the style
+		// sets something the builder reads off the cells it lists.
+		own := named && !ok && r.setsApart(name, cell.Style)
 		cs := repeat(c, "number-columns-spanned", maxColumns-col)
 		rs := repeat(c, "number-rows-spanned", maxRows-ts.row)
 		for _, k := range c.Children {
@@ -781,7 +834,7 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 			}
 		}
 		for i := range n {
-			if ok && len(cells) < sheet.MaxCells {
+			if (ok || own || named && r.overrides(ts, col+i, cell.Style)) && len(cells) < sheet.MaxCells {
 				cell.Column = col + i
 				cells = append(cells, cell)
 			}
