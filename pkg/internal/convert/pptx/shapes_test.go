@@ -575,3 +575,24 @@ func TestShapes_StoplessGradient(t *testing.T) {
 		t.Errorf("fill %+v under a stopless theme gradient, want none", f)
 	}
 }
+
+// TestShapes_LinkedPictureLeavesItsShape checks that a picture that does
+// not load prints its style's fill and line, and one without either
+// prints nothing.
+func TestShapes_LinkedPictureLeavesItsShape(t *testing.T) {
+	t.Parallel()
+	pic := func(style string) string {
+		return `<p:pic><p:nvPicPr><p:cNvPr id="4" name="Linked"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:link="rIdX"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+			`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="127000" cy="127000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>` + style + `</p:pic>`
+	}
+	rels := `<Relationship Id="rIdX" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="http://example.com/x.png" TargetMode="External"/>`
+	styled := `<p:style><a:lnRef idx="2"><a:schemeClr val="lt1"/></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"/></p:style>`
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: pic(styled), rels: rels}, {tree: pic(""), rels: rels}}})
+	shapes := doc.Slides[0].Shapes
+	if len(shapes) != 1 || shapes[0].Kind != slides.KindGeometry || !sameColor(shapes[0].Fill.Color, rgb(0x4F81BD)) || shapes[0].Line.Width != 2 {
+		t.Fatalf("linked picture %+v, want an accent1 box with a 2-point line", shapes)
+	}
+	if n := len(doc.Slides[1].Shapes); n != 0 {
+		t.Errorf("a linked picture without a style prints %d shapes, want none", n)
+	}
+}

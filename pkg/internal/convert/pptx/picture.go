@@ -47,10 +47,16 @@ func asPicture(el *ooxml.Element) *ooxml.Element {
 // placeholder's transform. A picture with a geometry other than a
 // rectangle, or with an outline, is a geometry filled with the picture.
 // The poster frame of a video or a sound prints as any picture,
-// stretched over its box.
+// stretched over its box. A picture that does not load, a linked one,
+// prints the shape without it: its fill, its style's fill reference
+// included, its line and its effects, as PowerPoint prints it.
 //
 // # Corpus evidence
 //
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/linkedpicture.pptx's
+//     picture linked to a web address, of style fillRef 1 in accent1 and
+//     lnRef 3 in lt1, prints an accent1 box edged with a 3-point line
+//     over a soft shadow.
 //   - libreoffice/pptx: sd/narration-non-media-shape's 480 by 360 point
 //     video of a square poster prints the poster stretched over the
 //     whole box, its transparent part showing the slide.
@@ -71,15 +77,22 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	ref := ooxml.ParsePicture(asPicture(el))
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	pic := blipEffects(r.ctx, r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"), fc.colorChoice)
-	if pic == nil {
-		return nil
-	}
-	pic = ooxml.Cropped(pic, ref.Crop)
 	style := styleRefs(chain)
 	s.Line = r.shapeLine(fc, chain, style)
 	s.Geometry = r.geometryOf(chain)
 	r.effects(chain, s)
 	r.effectList(chain, style, fc, s)
+	if pic == nil {
+		// A picture that does not load leaves the shape: its fill, its
+		// style's included, its line and its effects print.
+		s.Kind = slides.KindGeometry
+		s.Fill = r.shapeFill(fc, chain, style)
+		if s.Fill.Kind == slides.FillNone && s.Line.Width == 0 {
+			return nil
+		}
+		return s
+	}
+	pic = ooxml.Cropped(pic, ref.Crop)
 	if s.Geometry != nil || s.Line.Width > 0 {
 		s.Kind = slides.KindGeometry
 		s.Fill = slides.Fill{Kind: slides.FillPicture, Picture: pic}
