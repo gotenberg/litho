@@ -470,6 +470,9 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 			d.textBoxEffectsOmitted(fx)
 		}
 		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		if id == "" && bodyPr.Child(ooxml.NSA, "spAutoFit") == nil {
+			d.anchorVertical(n, bodyVert(attrOr(bodyPr, "vert")), attrOr(bodyPr, "anchor"), h)
+		}
 		turnTextBox(n, spPr, bodyPr, id == "")
 		return n
 	}
@@ -747,6 +750,47 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		kids = append([]*layout.Node{pic}, kids...)
 	}
 	n.Children = kids
+}
+
+// anchorVertical keeps the text box n of vertical text, of direction dir
+// ("" for horizontal text, which it leaves alone), h points tall, and
+// places its lines across the box by the anchor of its text (ECMA-376
+// Part 1, 20.1.2.1.1 bodyPr anchor, 20.1.10.59 ST_TextAnchoringType; VML
+// v-text-anchor): t at the box's block start, the side its first line
+// takes, ctr in its middle, b at its block end. The lines of a vertical
+// box run along its height, which they do not grow.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo69636.docx and
+//     ooxmlimport/btlr-frame-vml.docx: Word sets the one line of a text
+//     box 57 points wide reading bottom to top, anchored ctr (v-text-anchor
+//     middle), in the middle of the box's width.
+//   - libreoffice/docx ooxmlexport/btlr-textbox.docx: Word starts the
+//     lines of a box reading bottom to top at the bottom of its 90-point
+//     height, where its text's length alone would set them at its top.
+func (d *document) anchorVertical(n *layout.Node, dir, anchor string, h float64) {
+	if dir == "" || n == nil || n.Style == nil {
+		return
+	}
+	bs := n.Style
+	bs.MinHeight = css.Pts(0)
+	bs.Height = css.Pts(max(h, 1))
+	if anchor != "ctr" && anchor != "b" || bs.Width.Kind != css.Points {
+		return
+	}
+	area := d.blockStyle()
+	area.Display = css.Flex
+	area.FlexDirection = css.FlexColumn
+	// The flow is laid out unturned, then turned: the area's height is
+	// the box's width less its insets and side borders.
+	inner := bs.Width.Value - bs.Padding[css.Left].Value - bs.Padding[css.Right].Value - bs.Border[css.Left].Width - bs.Border[css.Right].Width
+	area.Height = css.Pts(max(inner, 0))
+	area.JustifyContent = css.BoxCenter
+	if anchor == "b" {
+		area.JustifyContent = css.BoxFlexEnd
+	}
+	n.Children = []*layout.Node{{Kind: layout.Element, Style: area, Children: []*layout.Node{{Kind: layout.Element, Style: d.blockStyle(), Children: n.Children}}}}
 }
 
 // fitToText makes the text box n, built by [document.textBox], as tall as

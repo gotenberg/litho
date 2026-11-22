@@ -194,7 +194,11 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 			if rot := vmlRotation(vs); rot != 0 {
 				setTransform(n.Style, rot, false, false)
 			} else {
-				d.turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
+				flow := vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style")))
+				d.turn(n, flow)
+				if ooxml.ParseVMLStyle(attrOr(tb, "style"))["mso-fit-shape-to-text"] != "t" {
+					d.anchorVertical(n, flow, vmlAnchor(vs["v-text-anchor"]), h)
+				}
 			}
 			return n
 		}
@@ -253,6 +257,18 @@ func vmlFlow(vs ooxml.VMLStyle) string {
 		return "btLr"
 	}
 	return "tbRl"
+}
+
+// vmlAnchor maps a VML v-text-anchor (MS-OI29500, 2.1.1394) onto the
+// DrawingML anchor it stands for: t, ctr or b.
+func vmlAnchor(v string) string {
+	switch {
+	case strings.HasPrefix(v, "middle"):
+		return "ctr"
+	case strings.HasPrefix(v, "bottom"):
+		return "b"
+	}
+	return "t"
 }
 
 // vmlRotation returns the rotation of a VML shape's style in degrees.

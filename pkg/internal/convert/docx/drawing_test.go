@@ -321,6 +321,39 @@ func TestTextBox_ShapeAndAnchor(t *testing.T) {
 	}
 }
 
+// TestTextBox_VerticalAnchor keeps a text box of vertical text at its
+// height, its lines running along it, and places its lines across its
+// width by its anchor: centred for ctr, at the block end for b.
+func TestTextBox_VerticalAnchor(t *testing.T) {
+	t.Parallel()
+	box := func(anchor string) *layout.Node {
+		t.Helper()
+		body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="2540000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>up</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr vert="vert270" lIns="0" rIns="0" anchor="` + anchor + `"/></wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+		figs := role(build(t, body, nil).root, "Figure")
+		if len(figs) != 1 {
+			t.Fatalf("%d figures, want 1", len(figs))
+		}
+		return figs[0]
+	}
+	for _, tc := range []struct {
+		anchor  string
+		justify css.BoxAlign
+	}{{"ctr", css.BoxCenter}, {"b", css.BoxFlexEnd}} {
+		n := box(tc.anchor)
+		if n.Style.Height != css.Pts(200) || n.Style.WritingMode != css.SidewaysLR {
+			t.Errorf("%s: height %v mode %v, want 200 points, sideways", tc.anchor, n.Style.Height, n.Style.WritingMode)
+		}
+		if len(n.Children) != 1 || n.Children[0].Style.JustifyContent != tc.justify || n.Children[0].Style.Height != css.Pts(100) {
+			t.Errorf("%s: lines not placed across the box's 100 points", tc.anchor)
+		}
+	}
+	if n := box("t"); n.Style.Height != css.Pts(200) || len(n.Children) != 1 || n.Children[0].Style.Display == css.Flex {
+		t.Errorf("t: height %v, want 200 points and the lines at the block start", n.Style.Height)
+	}
+}
+
 // TestTextBox_DashedOutline checks that a rectangular text box with a
 // dashed outline (ECMA-376 Part 1, 20.1.8.48 prstDash) draws its outline
 // as a path behind its text, which no border can dash, and that a solid
@@ -678,5 +711,15 @@ func TestDrawings_LinkedPicture(t *testing.T) {
 	}
 	if pics := find(links[0], func(n *layout.Node) bool { return n.Kind == layout.Replaced }); len(pics) != 1 {
 		t.Errorf("the link holds %d pictures, want the picture", len(pics))
+	}
+}
+
+// TestVMLAnchor maps the VML text anchors onto DrawingML's.
+func TestVMLAnchor(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{"": "t", "top": "t", "middle": "ctr", "middle-center": "ctr", "bottom-baseline": "b"} {
+		if got := vmlAnchor(in); got != want {
+			t.Errorf("vmlAnchor(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
