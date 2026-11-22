@@ -2,6 +2,7 @@ package slides
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
@@ -98,15 +99,40 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 			// The kid's box mapped from the child space onto the group's
 			// box; the kid keeps its own turn and flips.
 			kk := *k
-			kk.Box = typeset.Rect{
-				X: box.X + float64((k.Box.X-child.X)*sx), Y: box.Y + float64((k.Box.Y-child.Y)*sy),
-				Width: k.Box.Width * sx, Height: k.Box.Height * sy,
-			}
+			kk.Box = kidBox(k, child, box, sx, sy)
 			frags = append(frags, b.shape(&kk, inner, depth+1, parent)...)
 		}
 		out = group(sm, frags)
 	}
 	b.link(s, then(sm, m), box, parent)
+	return out
+}
+
+// kidBox returns the box of k, a kid of a group whose child space child
+// maps onto the group's box by the scales sx and sy (ECMA-376 Part 1,
+// 20.1.7.6 chOff and chExt). The box's centre maps through the scales;
+// its extents scale with them, swapped for a kid turned nearer a quarter
+// turn than a half one, whose width then runs along the group's height,
+// so that the kid keeps its shape where a group stretches it, as
+// PowerPoint draws it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: oox/tdf141463_GroupTransform.pptx's 226.8 by 113.4
+//     point shape turned 80 degrees in a group that scales y by 2/3 prints
+//     151.2 by 113.4 points.
+func kidBox(k *Shape, child, box typeset.Rect, sx, sy float64) typeset.Rect {
+	out := typeset.Rect{
+		X: box.X + float64((k.Box.X-child.X)*sx), Y: box.Y + float64((k.Box.Y-child.Y)*sy),
+		Width: float64(k.Box.Width * sx), Height: float64(k.Box.Height * sy),
+	}
+	if r := math.Mod(math.Mod(k.Rotation, 180)+180, 180); r < 45 || r >= 135 || sx == sy {
+		return out
+	}
+	w, h := float64(k.Box.Width*sy), float64(k.Box.Height*sx)
+	out.X += float64((out.Width - w) / 2)
+	out.Y += float64((out.Height - h) / 2)
+	out.Width, out.Height = w, h
 	return out
 }
 

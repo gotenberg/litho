@@ -1361,10 +1361,7 @@ func (b *builder) groupFits(shapes []*Shape) map[int]fit {
 						continue
 					}
 					kk := *k
-					kk.Box = typeset.Rect{
-						X: s.Box.X + float64((k.Box.X-child.X)*sx), Y: s.Box.Y + float64((k.Box.Y-child.Y)*sy),
-						Width: k.Box.Width * sx, Height: k.Box.Height * sy,
-					}
+					kk.Box = kidBox(k, child, s.Box, sx, sy)
 					kids = append(kids, &kk)
 				}
 				walk(kids, depth+1)

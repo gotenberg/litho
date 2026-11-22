@@ -283,3 +283,27 @@ func inside(ops []typeset.PathOp, x0, x1 float64) int {
 	}
 	return n
 }
+
+// TestShape_GroupKidKeepsItsShape checks that a kid turned near a quarter
+// turn in a group that scales one axis keeps its proportions, its extents
+// scaled along the axes they run on after the turn, its centre where the
+// group maps it.
+func TestShape_GroupKidKeepsItsShape(t *testing.T) {
+	child := typeset.Rect{X: 0, Y: 0, Width: 300, Height: 300}
+	box := typeset.Rect{X: 10, Y: 10, Width: 300, Height: 200}
+	for _, tc := range []struct {
+		rot  float64
+		want typeset.Rect
+	}{
+		{0, typeset.Rect{X: 10, Y: 76.67, Width: 200, Height: 66.67}},
+		{80, typeset.Rect{X: 43.33, Y: 60, Width: 133.33, Height: 100}},
+		{270, typeset.Rect{X: 43.33, Y: 60, Width: 133.33, Height: 100}},
+		{170, typeset.Rect{X: 10, Y: 76.67, Width: 200, Height: 66.67}},
+	} {
+		k := &Shape{Box: typeset.Rect{X: 0, Y: 100, Width: 200, Height: 100}, Rotation: tc.rot}
+		got := kidBox(k, child, box, box.Width/child.Width, box.Height/child.Height)
+		if !near(got.X, tc.want.X, 0.01) || !near(got.Y, tc.want.Y, 0.01) || !near(got.Width, tc.want.Width, 0.01) || !near(got.Height, tc.want.Height, 0.01) {
+			t.Errorf("turned %g: %+v, want %+v", tc.rot, got, tc.want)
+		}
+	}
+}
