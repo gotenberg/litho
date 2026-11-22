@@ -342,6 +342,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 		if pic == nil && ref.Link != "" {
 			r.warn(warn.PictureMissing, warn.Omitted, "a linked picture is left out: linked files are not read")
 		}
+		pic = r.colorChange(pic, obj.Child(nsXDR, "blipFill").Child(ooxml.NSA, "blip"))
 		if pic != nil {
 			*out = append(*out, leaf{x: x, y: y, w: bw, h: bh, rot: ref.Rotation, flipH: ref.FlipH, flipV: ref.FlipV, pic: pic, crop: ref.Crop, fx: r.effectList(obj.Child(nsXDR, "spPr"), obj.Child(nsXDR, "style"))})
 		}
