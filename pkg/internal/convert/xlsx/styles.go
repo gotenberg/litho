@@ -358,9 +358,7 @@ func (r *reader) normal() sheet.Style {
 }
 
 // font reads a font record (ECMA-376 Part 1, 18.8.22): what it does not
-// set takes LibreOffice's default font, Cambria at 11 points. The scheme
-// element is not read, as LibreOffice does not: the name decides the
-// face.
+// set takes LibreOffice's default font, Cambria at 11 points.
 func (r *reader) font(e *ooxml.Element) sheet.Font {
 	f := sheet.Font{Families: []string{defaultFontName}, Size: defaultFontSize}
 	r.fontProps(e, &f)
@@ -368,14 +366,18 @@ func (r *reader) font(e *ooxml.Element) sheet.Font {
 }
 
 // fontProps applies the properties of a font record or a rich text run's
-// rPr (ECMA-376 Part 1, 18.4.7) to f.
+// rPr (ECMA-376 Part 1, 18.4.7) to f. A font of the theme's major or
+// minor scheme takes the theme's face ([reader.schemeFace]).
 func (r *reader) fontProps(e *ooxml.Element, f *sheet.Font) {
+	scheme := ""
 	for _, c := range e.Kids() {
 		if c.Space != nsMain {
 			continue
 		}
 		val, has := c.Attr("val")
 		switch c.Local {
+		case "scheme":
+			scheme = strings.TrimSpace(val)
 		case "name", "rFont":
 			if has && strings.TrimSpace(val) != "" {
 				f.Families = []string{strings.TrimSpace(val)}
@@ -406,6 +408,38 @@ func (r *reader) fontProps(e *ooxml.Element, f *sheet.Font) {
 			f.Color, _ = r.color(c)
 		}
 	}
+	if face := r.schemeFace(scheme); face != "" {
+		f.Families = []string{face}
+	}
+}
+
+// schemeFace returns the face a font of the theme's font scheme draws in:
+// the theme's minor Latin font for the minor scheme, its major one for the
+// major scheme, whatever the record's name says; "" for no scheme or a
+// theme that names no such face. ECMA-376 Part 1, 18.8.35 makes a font of
+// a scheme part of the theme, to follow the theme's major or minor font,
+// and 18.8.29 its name the face; Excel draws the theme's face, which
+// LibreOffice does not: it draws the name.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: a Normal font named Arial in the minor scheme of a
+//     theme whose minor font is Calibri prints its cells in Calibri in
+//     Excel for the web, and in Liberation Sans, Arial's stand-in, in
+//     LibreOffice (Gotenberg 9.4.1).
+//   - litho/xlsx: fonts prints its record named Cambria in the major
+//     scheme of a theme whose major font is Calibri in Calibri.
+func (r *reader) schemeFace(scheme string) string {
+	if r.theme == nil {
+		return ""
+	}
+	switch scheme {
+	case "minor":
+		return r.theme.Minor.Latin
+	case "major":
+		return r.theme.Major.Latin
+	}
+	return ""
 }
 
 // maxFontSize caps a font size in points. Anti-DoS guard, not

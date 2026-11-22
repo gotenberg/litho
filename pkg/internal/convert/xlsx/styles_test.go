@@ -220,6 +220,38 @@ func TestRead_SystemThemeColors(t *testing.T) {
 	}
 }
 
+// TestRead_SchemeFontsTakeTheThemeFace checks that a font of the minor or
+// major scheme draws in the theme's minor or major Latin face whatever its
+// name, a cell's and the Normal style's alike, a rich text run's too, and
+// that a font of no scheme, or of a scheme the theme names no face for,
+// keeps its name.
+func TestRead_SchemeFontsTakeTheThemeFace(t *testing.T) {
+	t.Parallel()
+	theme := strings.Replace(testTheme, `</a:clrScheme>`, `</a:clrScheme><a:fontScheme name="f">`+
+		`<a:majorFont><a:latin typeface="Major Face"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>`+
+		`<a:minorFont><a:latin typeface="Minor Face"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>`, 1)
+	styles := `<fonts><font><sz val="11"/><name val="Arial"/><scheme val="minor"/></font>` +
+		`<font><scheme val="major"/><name val="Cambria"/></font><font><name val="Cambria"/></font><font><name val="Cambria"/><scheme val="none"/></font></fonts>` +
+		`<cellStyleXfs><xf numFmtId="0" fontId="0"/></cellStyleXfs><cellXfs><xf fontId="0"/><xf fontId="1"/><xf fontId="2"/><xf fontId="3"/></cellXfs>` +
+		`<cellStyles><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>`
+	sst := `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><r><rPr><rFont val="Arial"/><scheme val="major"/></rPr><t>run</t></r></si></sst>`
+	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"><v>1</v></c><c r="D1" t="s"><v>0</v></c></row></sheetData>`}},
+		styles, "", "", map[string]string{"xl/theme/theme1.xml": theme, "xl/sharedStrings.xml": sst})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	if f := doc.Default.Font; f.Families[0] != "Minor Face" {
+		t.Errorf("Normal font named Arial in the minor scheme draws in %v, want the theme's minor face", f.Families)
+	}
+	for i, want := range []string{"Major Face", "Cambria", "Cambria"} {
+		if got := styleOf(t, doc, i).Font.Families[0]; got != want {
+			t.Errorf("cell %d draws in %q, want %q", i, got, want)
+		}
+	}
+	c, ok := cellAt(doc.Sheets[0], 0, 3)
+	if !ok || len(c.Runs) == 0 || c.Runs[0].Font == nil || c.Runs[0].Font.Families[0] != "Major Face" {
+		t.Errorf("a run named Arial in the major scheme draws in %+v, want the theme's major face", c.Runs)
+	}
+}
+
 // TestRead_SubstituteFamily checks that a Normal font no installed face
 // serves measures its columns in Noto Sans, LibreOffice's substitute.
 func TestRead_SubstituteFamily(t *testing.T) {
