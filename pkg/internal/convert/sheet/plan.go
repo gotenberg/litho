@@ -18,10 +18,10 @@ const (
 )
 
 // excelGridLine is the room Excel gives the grid line beside a page's
-// columns, in points: a screen pixel drawn as 8 printer pixels, kept
-// whatever the print scale. The specification gives a page's printable
-// width as the paper less its margins (ECMA-376 Part 1, 18.3.1.62); the
-// line's room is Excel's, measured.
+// columns and below its rows, in points: a screen pixel drawn as 8
+// printer pixels, kept whatever the print scale. The specification gives
+// a page's printable width and height as the paper less its margins
+// (ECMA-376 Part 1, 18.3.1.62); the line's room is Excel's, measured.
 //
 // # Corpus evidence
 //
@@ -30,6 +30,11 @@ const (
 //     on the next page.
 //   - litho/xlsx: minimal and column_widths clip their cells from 0.96
 //     points right of the left margin, at 100% and at 77.6%.
+//   - litho/xlsx: the 30 paper-grid sheets whose second page is full print
+//     rows of 121 printer pixels as many a page as fit their paper less
+//     the margins and from 5 to 11 pixels more:
+//     paper-grid-margins-narrow-a5-portrait fits 35 in 4,361 pixels (36
+//     take 4,356), paper-grid-b5-landscape 28 in 3,399 (28 take 3,388).
 const excelGridLine = 8 * excelPixel
 
 // The print zoom bounds, in percent: Calc's ZOOM_MIN
@@ -94,8 +99,8 @@ type sheetPlan struct {
 // points: the paper less the margins, divided by the zoom, less the
 // headings (ScPrintFunc::GetDocPageSize), the room of a header and a
 // footer in the margins unscaled. Under Excel's rules the margins divide
-// whole, and the grid line that closes a page's last column takes its
-// room too, unscaled ([excelGridLine]).
+// whole, and the grid line that closes a page's last column and the one
+// below its last row take their room too, unscaled ([excelGridLine]).
 //
 // # Corpus evidence
 //
@@ -125,6 +130,9 @@ func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 		bottom = ps.FooterBottom/z + sp.margin[2] - ps.FooterBottom
 	}
 	h := sp.height/z - top - bottom
+	if sp.g.doc.ExcelRules {
+		h -= excelGridLine / z
+	}
 	if sp.g.sh.Page.Headings {
 		w -= headingWidth
 		h -= headingHeight
@@ -227,7 +235,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 			}
 		}
 		start := false
-		h := g.layoutRowHeight(r)
+		h := sp.pagedRowHeight(r, zoom)
 		if (size+h > pageH+epsilon && !sp.single) || rowBreak[r] {
 			if r != a.FirstRow {
 				rstarts[r] = true
@@ -239,7 +247,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		}
 		if start && repR != nil && r > repR.first && !rowFound {
 			for i := repR.first; i <= repR.last; i++ {
-				pageH -= g.layoutRowHeight(i)
+				pageH -= sp.pagedRowHeight(i, zoom)
 			}
 			for i := r; i <= repR.last; i++ {
 				delete(rstarts, i)
@@ -298,6 +306,27 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		flush(a.LastRow)
 	}
 	return cols, rows, hidden, nil
+}
+
+// pagedRowHeight returns the room row r takes on a page at zoom percent,
+// in sheet points: its height, which under Excel's rules a zoom other than
+// 100 prints rounded to a whole printer pixel, row by row.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: paper-fit and paper-fit-letter-portrait, fitted to the
+//     width of a Letter page at 60%, print rows of 121 printer pixels 73
+//     apart (72.6 rounded) and 76 rows under the header row on the first
+//     page, where rows of 72.6 would fit 77; paper-fit-a3-portrait at 87%
+//     prints them 105 apart (105.27), paper-fit-a5-landscape at 58% 70
+//     (70.18), fit_to_page at 39% 47 (47.19).
+func (sp *sheetPlan) pagedRowHeight(r, zoom int) float64 {
+	h := sp.g.layoutRowHeight(r)
+	if !sp.g.doc.ExcelRules || zoom == 100 || zoom <= 0 || sp.single {
+		return h
+	}
+	z := float64(zoom) / 100
+	return math.Round(float64(h*z)/excelPixel) * excelPixel / z
 }
 
 // epsilon absorbs the rounding of sums of lengths in points.
