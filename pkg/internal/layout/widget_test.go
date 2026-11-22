@@ -269,3 +269,35 @@ func TestWidget_GripFollowsResize(t *testing.T) {
 		t.Errorf("resize none: %d grip strokes, want none", got)
 	}
 }
+
+// TestStructure_FormHoldsNoElement hangs what a Form element shows, a
+// button's spans and paragraphs, from the Form itself, which ISO/TS
+// 32005, Table 5 lets hold no P, Span or other Form, and keeps its
+// PrintField attributes.
+func TestStructure_FormHoldsNoElement(t *testing.T) {
+	t.Parallel()
+	button := &Node{Kind: Element, Style: widgetStyle(), Role: "Form", PrintField: typeset.PrintField{Role: typeset.PrintPushButton},
+		Control: &Control{Kind: ControlButton}}
+	button.Children = []*Node{
+		{Kind: Element, Style: sty(), Role: "P", Children: []*Node{txt(sty(), "Go")}},
+		{Kind: Element, Style: inlineSty(), Role: "Span", Children: []*Node{txt(sty(), "now")}},
+	}
+	res := run(t, doc(el(sty(), button)), page(200, 100))
+	var form *typeset.StructElem
+	var walk func(e *typeset.StructElem)
+	walk = func(e *typeset.StructElem) {
+		if e.Role == "Form" {
+			form = e
+		}
+		for _, k := range e.Kids {
+			walk(k)
+		}
+	}
+	walk(res.Structure)
+	if form == nil || form.PrintField.Role != typeset.PrintPushButton {
+		t.Fatalf("Form %+v, want one with its PrintField", form)
+	}
+	if len(form.Kids) != 0 {
+		t.Errorf("the Form holds %d elements, want none", len(form.Kids))
+	}
+}

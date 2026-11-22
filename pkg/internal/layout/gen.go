@@ -24,6 +24,9 @@ type genCtx struct {
 	// label reports content inside a Lbl element, which holds no block
 	// (see [labelForbids]).
 	label bool
+	// form reports content inside a Form element, which starts no
+	// element of its own.
+	form  bool
 	link  *link
 	lang  string
 	decos []deco
@@ -145,6 +148,13 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		// 14.9.4): a node without a role takes a Span to carry it.
 		role = "Span"
 	}
+	if ctx.form {
+		// What a form control shows, a button's content, hangs from its
+		// Form element, which ISO/TS 32005, Table 5 lets hold no
+		// paragraph, span, link, heading, list item or other Form, and
+		// which a reader reads as one field.
+		role = ""
+	}
 	parent := ctx.elem
 	if (role == "Lbl" || role == "LBody") && parent != nil && parent.Role == "L" && ctx.structDepth+1 < maxStructDepth {
 		parent = listGroup(parent, role)
@@ -176,6 +186,7 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			}
 			if n.Role == "Form" {
 				el.PrintField = n.PrintField
+				out.form = true
 			}
 			if n.Alt != "" && (n.Kind == Replaced || role == "Figure" || role == "Link") {
 				el.Alt = n.Alt
