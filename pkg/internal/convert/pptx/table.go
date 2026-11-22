@@ -93,7 +93,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) (*slides.Table, error) {
 		return nil, nil
 	}
 	pr := tbl.Child(ooxml.NSA, "tblPr")
-	t := &slides.Table{}
+	t := &slides.Table{VerticalFitsRow: true}
 	for _, g := range tbl.Child(ooxml.NSA, "tblGrid").Kids() {
 		if !g.Is(ooxml.NSA, "gridCol") {
 			continue

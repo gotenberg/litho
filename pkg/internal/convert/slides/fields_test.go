@@ -279,6 +279,37 @@ func TestTable_VerticalCells(t *testing.T) {
 	}
 }
 
+// TestTable_VerticalCellsFitTheRow checks PowerPoint's vertical cells:
+// lines as long as the row is tall, the row kept, a clockwise cell's
+// first line at its right edge.
+func TestTable_VerticalCellsFitTheRow(t *testing.T) {
+	a20 := arial(20)
+	cell := TableCell{Text: &TextBody{Paragraphs: []Paragraph{para("A rather long line of vertical text", a20)}, Wrap: true, Vertical: css.SidewaysRL}}
+	tbl := &Shape{Kind: KindTable, Box: typeset.Rect{X: 100, Y: 100, Width: 150, Height: 120}, Table: &Table{
+		ColumnWidths:    []float64{150},
+		Rows:            []TableRow{{Height: 120, Cells: []TableCell{cell}}},
+		VerticalFitsRow: true,
+	}}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{tbl}}), office.Options{}).Pages[0]
+	var xs []float64
+	maxY := 0.0
+	for _, r := range runs(pg) {
+		xs = append(xs, r.x)
+		maxY = max(maxY, r.y)
+	}
+	// The lines wrap within the 120-point row and stack leftwards from
+	// the cell's right edge, at 250.
+	if len(xs) < 3 {
+		t.Fatalf("runs at %v, want three lines or more", xs)
+	}
+	if r := find(t, pg, "A"); r.x < 250-30 || r.x > 250 {
+		t.Errorf("first line at %.2f, want within 30 points of the right edge, 250", r.x)
+	}
+	if maxY > 220 {
+		t.Errorf("text reaches %.2f, past the row's end at 220", maxY)
+	}
+}
+
 // TestInsetRect checks the text rectangle of insets that overlap, exceed
 // the box or are negative (sd-data/TextDistancesInsets3.pptx).
 func TestInsetRect(t *testing.T) {

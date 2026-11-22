@@ -843,6 +843,13 @@ type Table struct {
 	// Rows are the rows, each with its height in points and its cells, one
 	// per column: a cell a span covers is listed with Covered set.
 	Rows []TableRow
+	// VerticalFitsRow lays the lines of a vertical cell out as long as its
+	// row is tall, stacked from the side its turn starts them at, the row
+	// not grown for them, as PowerPoint prints a PresentationML table
+	// (ECMA-376 Part 1, 21.1.3.17 tcPr vert); false lays them out as long
+	// as the cell is wide, grows the row to them, and puts a clockwise
+	// cell's top-anchored text at its left edge, as Impress prints it.
+	VerticalFitsRow bool
 }
 
 // TableRow is one row of a table.

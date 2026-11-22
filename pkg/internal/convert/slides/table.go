@@ -21,10 +21,10 @@ const maxTableCells = 1 << 14
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/tdf100926.pptx's 213-point columns of vert and vert270 text
-//     wrap "Top to Bottom vertical text" before "text" and grow the 119-point
-//     row to 204; sd/tcPr-vert-roundtrip.pptx's 148-point line in a
-//     320-point column leaves its 173-point row as it is.
+//   - libreoffice/pptx: sd/tdf100926.pptx's 213-point columns of vert and
+//     vert270 text wrap in Impress "Top to Bottom vertical text" before
+//     "text" and grow the 119-point row to 204; sd/tcPr-vert-roundtrip.pptx's
+//     148-point line in a 320-point column leaves its 173-point row as it is.
 func (b *builder) verticalCellHeight(body *TextBody, w float64) float64 {
 	nb := *body
 	nb.Wrap = false
@@ -39,16 +39,19 @@ func (b *builder) verticalCellHeight(body *TextBody, w float64) float64 {
 // merged cell one TD with its spans and nothing for the cells it covers,
 // a row the source lists short padded with empty TDs, so every row counts
 // the table's columns (ISO 14289-1, 7.2; ISO 32000-1, 14.8.5.7). The
-// model carries no header row, so every cell is a TD. A cell's text turned
-// a quarter turn clockwise (vert) sits at the cell's left edge when
-// anchored at its top, at its right edge at its bottom, as Impress prints
-// it.
+// model carries no header row, so every cell is a TD. Under Impress's
+// rules a cell's text turned a quarter turn clockwise (vert) sits at the
+// cell's left edge when anchored at its top, at its right edge at its
+// bottom; under [Table.VerticalFitsRow] it sits as a turned shape's text
+// does, its first line at the right edge.
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/tdf100926.pptx and sd/tcPr-vert-roundtrip.pptx
-//     print their vert cells' text anchored at the top against the cell's
-//     left edge.
+//   - libreoffice/pptx: sd/tdf100926.pptx prints in Impress its vert
+//     cells' text anchored at the top against the cell's left edge, and in
+//     PowerPoint its vert and vert270 cells' lines as long as the 119-point
+//     row less its insets, the first line at the right and left edge, the
+//     row not grown.
 func (b *builder) table(s *Shape, parent *typeset.StructElem) []typeset.Fragment {
 	t := s.Table
 	if t == nil || len(t.ColumnWidths) == 0 || len(t.Rows) == 0 {
@@ -89,7 +92,9 @@ func (b *builder) table(s *Shape, parent *typeset.StructElem) []typeset.Fragment
 			inner := insetRect(typeset.Rect{Width: w, Height: max(hs[r], 1)}, cell.Text.Insets)
 			tb := side(cell.Text.Insets[css.Top]) + side(cell.Text.Insets[css.Bottom])
 			if cell.Text.Vertical.Vertical() {
-				hs[r] = max(hs[r], b.verticalCellHeight(cell.Text, inner.Width)+tb)
+				if !t.VerticalFitsRow {
+					hs[r] = max(hs[r], b.verticalCellHeight(cell.Text, inner.Width)+tb)
+				}
 				continue
 			}
 			if lay := b.layoutBody(cell.Text, inner.Width, inner.Height, noFit); lay != nil {
@@ -135,7 +140,7 @@ func (b *builder) table(s *Shape, parent *typeset.StructElem) []typeset.Fragment
 			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc), shape.FillNorm)...)
 			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
 				body := cell.Text
-				if body.Vertical == css.SidewaysRL {
+				if body.Vertical == css.SidewaysRL && !t.VerticalFitsRow {
 					// Impress puts a vert cell's text at the left edge
 					// anchored at its top, at the right edge at its bottom:
 					// the two anchors swap.
