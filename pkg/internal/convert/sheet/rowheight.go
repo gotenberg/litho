@@ -49,6 +49,20 @@ func (b *builder) optimalHeights(g *grid) error {
 	if fit {
 		b.excelDrops(g)
 	}
+	// The fit of a cell's own font, by its format, where no conditional
+	// format changes it: a sheet holds few formats and many cells.
+	fitOf := map[*Style]float64{}
+	cellFit := func(ri int, c *Cell) float64 {
+		cache := g.cond == nil && len(c.Runs) == 0
+		if h, ok := fitOf[c.Style]; ok && cache {
+			return h
+		}
+		h := b.cellScreenFit(g, ri, c)
+		if cache {
+			fitOf[c.Style] = h
+		}
+		return h
+	}
 	budget := maxMeasuredCells
 	for k, ri := range g.rowOrder {
 		if k%rowsPerCheck == 0 {
@@ -73,7 +87,7 @@ func (b *builder) optimalHeights(g *grid) error {
 			if !hasContent(c) {
 				if fit && c.Style != nil {
 					// An empty cell's font counts when Excel measures a row.
-					need = max(need, b.screenFit(b.measuredFont(g, ri, c)))
+					need = max(need, cellFit(ri, c))
 				}
 				continue
 			}
@@ -92,7 +106,7 @@ func (b *builder) optimalHeights(g *grid) error {
 			// not by its wrapped lines.
 			if excel && ((fit && row.Height > 0) || (!g.style(ri, c.Column, c).Align.Wrap && !strings.Contains(c.Value.Text, "\n"))) {
 				if fit {
-					need = max(need, b.cellScreenFit(g, ri, c))
+					need = max(need, cellFit(ri, c))
 				}
 				continue
 			}
@@ -243,6 +257,24 @@ func (b *builder) excelDrops(g *grid) {
 	def.excel = true
 	base := b.m.descent(def) + b.m.lineGap(def)
 	budget := maxMeasuredCells
+	// The depth of a cell's own font, by its format, where no conditional
+	// format changes it; -1 for a face no font serves.
+	depthOf := map[*Style]float64{}
+	depth := func(ri int, c *Cell) float64 {
+		if d, ok := depthOf[c.Style]; ok && g.cond == nil {
+			return d
+		}
+		f := b.measuredFont(g, ri, c)
+		f.excel, f.script = true, Baseline
+		d := -1.0
+		if b.m.served(f) {
+			d = b.m.descent(f) + b.m.lineGap(f)
+		}
+		if g.cond == nil {
+			depthOf[c.Style] = d
+		}
+		return d
+	}
 	for _, ri := range g.rowOrder {
 		row := g.rows[ri]
 		deep := base
@@ -254,12 +286,16 @@ func (b *builder) excelDrops(g *grid) {
 			budget--
 			// A script counts at its full size, the size its baseline is
 			// set from ([pageBuilder.excelScriptShift]).
-			f := b.measuredFont(g, ri, c)
-			f.excel, f.script = true, Baseline
-			if !b.m.served(f) {
+			d := depth(ri, c)
+			if d < 0 {
 				continue
 			}
-			deep = max(deep, b.m.descent(f)+b.m.lineGap(f))
+			deep = max(deep, d)
+			if len(c.Runs) == 0 {
+				continue
+			}
+			f := b.measuredFont(g, ri, c)
+			f.excel, f.script = true, Baseline
 			for _, r := range c.Runs {
 				if r.Font != nil {
 					rf := overlay(f, r.Font)
