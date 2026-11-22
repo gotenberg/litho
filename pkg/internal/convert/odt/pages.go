@@ -496,10 +496,7 @@ func (f *pageFlow) pageBackground(mp *odf.MasterPage, pp odf.Props, ps paraState
 // style:repeat repeat; stretched over the area under stretch; drawn once
 // at draw:fill-image-ref-point under no-repeat.
 func (b *builder) fillImage(st *css.Style, p odf.Props) {
-	if b.drawStyles == nil {
-		b.drawStyles = odf.NewDrawStyles(b.pkg)
-	}
-	el := b.drawStyles.FillImages[p.Get("draw:fill-image-name")]
+	el := b.draws().FillImages[p.Get("draw:fill-image-name")]
 	if el == nil {
 		return
 	}

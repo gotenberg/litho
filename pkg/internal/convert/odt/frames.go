@@ -315,10 +315,10 @@ func (b *builder) frameBox(g frameGeom) *css.Style {
 			st.BackgroundColor = cssColor(col)
 		}
 	}
-	if g.props.Get("draw:fill") == "solid" {
-		if col, ok := odf.ParseColor(g.props.Get("draw:fill-color")); ok {
-			st.BackgroundColor = cssColor(col)
-		}
+	switch g.props.Get("draw:fill") {
+	case "solid", "gradient", "bitmap", "hatch":
+		st.BackgroundColor = css.Color{}
+		b.frameFill(st, g.props, g.w, g.h)
 	}
 	return st
 }
