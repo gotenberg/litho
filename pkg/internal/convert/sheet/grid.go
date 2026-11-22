@@ -62,6 +62,9 @@ type grid struct {
 	// zoom is, under Excel's rules, the print scale the rows are printed
 	// at, 0 for 100% ([excelZoomed]).
 	zoom float64
+	// colCap is the widest a column prints, 0 for no bound
+	// ([sheetPlan.columnCap]).
+	colCap float64
 	// cond is the sheet's conditional formatting, nil for none.
 	cond *conditions
 	// need measures the room a text cell needs on one line, nil for no
@@ -251,16 +254,17 @@ func calcPrinted(v float64) float64 {
 // on, 0 when hidden.
 func (g *grid) layoutColWidth(c int) float64 {
 	col := g.column(c)
-	if col == nil {
-		return g.defW
-	}
-	if col.Hidden {
+	if col != nil && col.Hidden {
 		return 0
 	}
-	if col.Width > 0 {
-		return min(col.Width, maxSide)
+	w := g.defW
+	if col != nil && col.Width > 0 {
+		w = min(col.Width, maxSide)
 	}
-	return g.defW
+	if g.colCap > 0 {
+		w = min(w, g.colCap)
+	}
+	return w
 }
 
 // rowHidden reports a row that does not print.

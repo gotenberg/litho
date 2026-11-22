@@ -309,6 +309,40 @@ func TestPlan_ExcelPrintsMergedPages(t *testing.T) {
 	}
 }
 
+// TestPlan_ExcelColumnCap locks Excel's bound on a column's width: a
+// column wider than the page prints as wide as the page, at the sheet's
+// scale, and a text overflows from it into the columns after it; Calc
+// keeps the width.
+func TestPlan_ExcelColumnCap(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		excel bool
+		scale int
+		want  float64
+		pages int
+	}{
+		{"Calc", false, 100, 999.98, 2},
+		{"Excel", true, 100, 523.32, 3},
+		{"Excel at 50%", true, 50, 1000, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", Page: a4(), Columns: []Column{{First: 0, Last: 0, Width: 1000}, {First: 1, Last: 1, Width: 600}}}
+			sh.Page.Scale = tc.scale
+			sh.Rows = []Row{{Index: 0, Cells: []Cell{textCell(0, strings.Repeat("x", 220), nil)}}}
+			doc := newDoc(sh)
+			doc.ExcelRules = tc.excel
+			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+			sp := b.planOf(t, 0, sh)
+			if got := sp.g.colWidth(0); math.Abs(got-tc.want) > 0.01 {
+				t.Errorf("column A prints %.2f wide, want %.2f", got, tc.want)
+			}
+			if n := len(sp.pages); n != tc.pages {
+				t.Errorf("%d pages, want %d", n, tc.pages)
+			}
+		})
+	}
+}
+
 // TestPlan_ExcelPrintsBlankPages locks the pages of a range Excel prints:
 // every page in the page order up to the last that holds something, the
 // blank ones between included, where Calc prints the pages that hold

@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -139,6 +140,37 @@ func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 		h -= headingHeight
 	}
 	return w, h
+}
+
+// columnCap returns the widest a column prints under Excel's rules, in
+// sheet points: the paper less its side margins and the headings, at the
+// sheet's scale; 0, no bound, under Calc's rules and for a sheet fitted
+// to pages, whose zoom is not known yet. Excel cuts a wider column to the
+// page, and the text of its cells overflows from the narrower column. No
+// clause of ECMA-376 bounds a column's width by the page (18.3.1.13 col
+// width stops at 255 characters); the rule is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: wide_columns, columns A and B of 255 and 120 characters
+//     on a Letter page of 0.7 inch margins, prints A on page 1 and B on
+//     page 2, and the text of A2 on pages 2 and 3 starting 511.3 and
+//     1022.6 points left of the margin: both columns print 511.2 points
+//     wide, and the text overflows over B into C.
+func (sp *sheetPlan) columnCap() float64 {
+	ps := &sp.g.sh.Page
+	if !sp.g.doc.ExcelRules || sp.single || (ps.Scale <= 0 && (ps.FitWidth > 0 || ps.FitHeight > 0)) {
+		return 0
+	}
+	z := 1.0
+	if ps.Scale > 0 {
+		z = float64(min(max(ps.Scale, minZoom), maxZoom)) / 100
+	}
+	w := (sp.width - sp.margin[css.Left] - sp.margin[css.Right]) / z
+	if ps.Headings {
+		w -= headingWidth
+	}
+	return max(w, 0)
 }
 
 // layoutPages cuts the range a into pages at zoom percent, as Calc's

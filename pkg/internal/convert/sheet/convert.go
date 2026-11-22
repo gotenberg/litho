@@ -431,9 +431,6 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 		b.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("sheet %s merges more than %d cells into one; such a merge is drawn as its first cell", quote(sh.Name), maxMergeCells))
 	}
 	g.need, g.overflowBudget = b.textNeed(g), maxOverflowCells
-	if err := b.optimalHeights(g); err != nil {
-		return nil, err
-	}
 	sp := &sheetPlan{g: g, idx: i, zoom: 1, single: b.opts.SinglePageSheets}
 	sp.width, sp.height = b.paper(sh)
 	for k, m := range sh.Page.Margin {
@@ -448,6 +445,10 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 	}
 	if !sp.single {
 		b.growMargins(sp)
+		g.colCap = sp.columnCap()
+	}
+	if err := b.optimalHeights(g); err != nil {
+		return nil, err
 	}
 	if n := unevaluated(g); n > 0 {
 		b.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, unknown icon sets) are not applied", quote(sh.Name), n))
