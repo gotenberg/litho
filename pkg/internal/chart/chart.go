@@ -799,6 +799,9 @@ type Labels struct {
 	// ShowValue, ShowCategory, ShowSeries and ShowPercent choose the parts
 	// of a label; ShowKey draws the legend symbol before it.
 	ShowValue, ShowCategory, ShowSeries, ShowPercent, ShowKey bool
+	// ShowSize shows a bubble's size after its value (ECMA-376 Part 1,
+	// 21.2.2.178 showBubbleSize); only a bubble group reads it.
+	ShowSize bool
 	// Separator joins the parts; empty takes the kind's default, a line
 	// break for pies and "; " otherwise.
 	Separator string
@@ -846,7 +849,7 @@ const (
 
 // Any reports labels that show something.
 func (l Labels) Any() bool {
-	return l.ShowValue || l.ShowCategory || l.ShowSeries || l.ShowPercent || len(l.Custom) > 0
+	return l.ShowValue || l.ShowCategory || l.ShowSeries || l.ShowPercent || l.ShowSize || len(l.Custom) > 0
 }
 
 // MarkerSymbol is the shape of a data point's marker. The standard shapes

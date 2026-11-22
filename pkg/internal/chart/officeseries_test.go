@@ -5,6 +5,8 @@ import (
 	"math"
 	"slices"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestDims_OfficeDeletedAxisSharesTheFirstScale holds a group whose value
@@ -81,5 +83,30 @@ func TestRender_OfficeBubbleSizes(t *testing.T) {
 	c.Groups[0].BubbleWidth = true
 	if w := widths(c); len(w) != 2 || math.Abs(w[0]/w[1]-0.25) > 0.01 {
 		t.Errorf("sized by width: %v, want the small one a quarter as wide", w)
+	}
+}
+
+// TestRender_OfficeBubbleSizeLabels holds a bubble's size label to the
+// right of the bubble under OfficeRules, when the file states no
+// position.
+func TestRender_OfficeBubbleSizeLabels(t *testing.T) {
+	c := bubbleChart(OfficeRules, 7)
+	c.Groups[0].Series[0].Labels = Labels{ShowSize: true}
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	if got := texts(frags); !slices.Contains(got, "7") {
+		t.Fatalf("texts %q, want the size 7", got)
+	}
+	bubble := bounds(paths(frags, red)[0])
+	var label *typeset.Text
+	walk(frags, 0, func(f typeset.Fragment, _ int) {
+		if tx, ok := f.(*typeset.Text); ok && len(tx.Glyphs) == 1 && tx.Glyphs[0].Text == "7" {
+			label = tx
+		}
+	})
+	if label == nil {
+		t.Fatal("no label")
+	}
+	if x := label.Origin.X; x < bubble.X+bubble.Width+officeBubbleLabelGap-0.5 {
+		t.Errorf("label at x %.2f, want right of the bubble's edge %.2f", x, bubble.X+bubble.Width)
 	}
 }

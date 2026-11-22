@@ -569,3 +569,15 @@ func (rd *renderer) officeSharesAxis(own, first *Axis) bool {
 //   - litho/pptx: chart-scatter-bubble's largest bubble is 97.2 pt across
 //     in PowerPoint, 0.250 of its plot area's 388.9 pt height.
 const officeBubbleShare = 0.25
+
+// officeBubbleLabelGap is the distance from a bubble's edge to its data
+// label, which Office sets right of the bubble, centred on it, when the
+// file states no position.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_scatter_bubble's bubble-size labels start 5.2 to
+//     5.7 pt right of their bubbles' edges in Excel, the ink of a digit
+//     half a point inside its advance, their middles within 0.6 pt of the
+//     bubbles' centres.
+const officeBubbleLabelGap = 5.2

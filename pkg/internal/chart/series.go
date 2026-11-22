@@ -376,6 +376,12 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 		}
 		parts = append(parts, formatLabel(f, v, rd.c.Locale))
 	}
+	if lb.ShowSize && g.Kind == Bubble {
+		sz := rd.data(s.Sizes)
+		if z, ok := sz.number(j); ok {
+			parts = append(parts, formatLabel(sz.Format, z, rd.c.Locale))
+		}
+	}
 	if lb.ShowPercent && !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
 		f := lb.PercentFormat
 		if f == "" {
@@ -703,6 +709,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 			pts = append(pts, typeset.Point{X: x.valuePixel(x.sc.clamp(xv)), Y: y.valuePixel(y.sc.clamp(yv))})
 			idx = append(idx, j)
 		}
+		radii := make([]float64, len(pts))
 		if g.Kind == Bubble {
 			for k, p := range pts {
 				v, ok := sizes.number(idx[k])
@@ -713,6 +720,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 				if g.BubbleWidth {
 					r = rmax * v / maxSize
 				}
+				radii[k] = r
 				rd.paint(ellipse(p.X, p.Y, r, r), rd.fillOf(g, s, idx[k]), rd.borderOf(g, s, idx[k]))
 			}
 		} else {
@@ -732,7 +740,13 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 				continue
 			}
 			v, _ := vals.number(j)
-			labels = append(labels, func() { rd.pointLabel(g, s, j, v, lb, p, rd.markerOf(g, s, j).Size) })
+			ms := rd.markerOf(g, s, j).Size
+			if g.Kind == Bubble && rd.office() && lb.Placement == LabelAuto {
+				// Office sets a bubble's label right of it (officeBubbleLabelGap).
+				lb.Placement = LabelRight
+				ms = float64(2 * (radii[k] + officeBubbleLabelGap - labelSpacing))
+			}
+			labels = append(labels, func() { rd.pointLabel(g, s, j, v, lb, p, ms) })
 		}
 	}
 	return labels

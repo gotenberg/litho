@@ -480,6 +480,7 @@ func (p *chartReader) labelFlags(e *Element, l *chart.Labels) {
 	flag("showCatName", &l.ShowCategory)
 	flag("showSerName", &l.ShowSeries)
 	flag("showPercent", &l.ShowPercent)
+	flag("showBubbleSize", &l.ShowSize)
 	flag("showLegendKey", &l.ShowKey)
 	if sep := e.Child(NSChart, "separator"); sep != nil {
 		l.Separator = sep.Text
