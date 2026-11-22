@@ -493,7 +493,7 @@ func (e *engine) groundOf(canvas, rb *box, fitH float64) func(int) []typeset.Fra
 		e.paintCanvas(pg, canvas, rb, pb, k)
 		var g []typeset.Fragment
 		if len(pg.Content) > 0 {
-			flow := typeset.Matrix{A: 1, D: 1, E: -pb.Margin[css.Left], F: e.pageTop(k) - e.noteShift(k) - pb.Margin[css.Top]}
+			flow := typeset.Matrix{A: 1, D: 1, E: -pb.Margin[css.Left], F: e.pageTop(k) - e.noteShift(k) - e.pageAlignShift(k) - pb.Margin[css.Top]}
 			g = []typeset.Fragment{&typeset.Group{Transform: flow, Opacity: 1, Content: pg.Content}}
 		}
 		drawn[k] = g

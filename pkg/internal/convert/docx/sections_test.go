@@ -413,3 +413,19 @@ func TestHeaders_PageAnchoredDrawing(t *testing.T) {
 		t.Fatalf("no WM run in %q", pageText(doc.Pages[0]))
 	}
 }
+
+// TestSections_VerticalAlign maps a section's vAlign onto the fraction of
+// its pages' room their text moves down by: none for top and for both,
+// which warns, a half for center, all of it for bottom.
+func TestSections_VerticalAlign(t *testing.T) {
+	t.Parallel()
+	for v, want := range map[string]float64{"top": 0, "center": 0.5, "bottom": 1, "both": 0} {
+		b := build(t, `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:sectPr><w:vAlign w:val="`+v+`"/></w:sectPr>`, nil)
+		if got := b.secs[0].align; got != want {
+			t.Errorf("vAlign %s: %v, want %v", v, got, want)
+		}
+		if warned := len(b.d.warnings) > 0; warned != (v == "both") {
+			t.Errorf("vAlign %s: warnings %v", v, b.d.warnings)
+		}
+	}
+}

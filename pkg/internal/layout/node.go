@@ -569,6 +569,12 @@ type PageBox struct {
 	// footnote area when the area holds a note, as Word and Writer draw
 	// one. nil draws none; the area's borders come from Footnote.
 	FootnoteRule *FootnoteRule
+	// AlignContent moves the page's slice of the flow down by this
+	// fraction of the room its content leaves in the page area: 0 keeps
+	// it at the top, 0.5 centres it, 1 sets it at the bottom (a word
+	// processor's vertical page alignment), everything the slice holds
+	// with it. Values outside [0, 1] are clamped.
+	AlignContent float64
 }
 
 // PageFrame is a border box drawn on every page it applies to.

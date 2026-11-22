@@ -192,6 +192,7 @@ func (p *pages) sectionBox(s *section, index int) layout.PageBox {
 		Width: s.width, Height: s.height,
 		Margin:       [4]float64{top, right, bottom, left},
 		Frame:        s.frame,
+		AlignContent: s.align,
 		Background:   p.d.background,
 		FootnoteRule: footnoteRule(s.contentWidth()),
 	}

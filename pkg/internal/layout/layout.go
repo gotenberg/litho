@@ -74,6 +74,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		seeds = found
 	}
 	e.placeSticky(rb, viewportBox(rb))
+	e.aligned = rb
 	disp, links, canvas := e.paint(rb)
 	if e.fitFixed(rb, disp) {
 		disp, links, canvas = e.paint(rb)
@@ -321,6 +322,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		// The note area at the top of the page area pushes its slice of
 		// the flow down.
 		shift := e.noteShift(k)
+		aligned := e.pageAlignShift(k)
 		frags := perPage[k]
 		flowStart := len(pg.Content)
 		for i := 0; i < len(frags); {
@@ -344,7 +346,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 				clip = typeset.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}
 			pg.Content = append(pg.Content, &typeset.Group{
-				Transform: typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift},
+				Transform: typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift + aligned},
 				Clip:      &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}},
 				Opacity:   1,
 				Content:   frags[i:j],
@@ -352,7 +354,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 			i = j
 		}
 		if rootGroup(rb) {
-			flow := typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift}
+			flow := typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift + aligned}
 			content := append(slices.Clone(pg.Content[sheet:canvasEnd]), pg.Content[flowStart:]...)
 			rest := slices.Clone(pg.Content[canvasEnd:flowStart])
 			pg.Content = append(append(pg.Content[:sheet], e.rootGroupOf(rb, content, flow, k)), rest...)
@@ -700,7 +702,7 @@ func (e *engine) paintCanvas(pg *typeset.Page, canvas, rb *box, pb PageBox, k in
 		if rb == nil || !rb.laidOut || rb.borderW() <= 0 || rb.borderH() <= 0 || l.Attachment == css.AttachFixed {
 			return whole
 		}
-		r := typeset.Rect{X: pb.Margin[css.Left] + rb.x, Y: pb.Margin[css.Top] - e.pageTop(k) + e.noteShift(k) + rb.y, Width: rb.borderW(), Height: rb.borderH()}
+		r := typeset.Rect{X: pb.Margin[css.Left] + rb.x, Y: pb.Margin[css.Top] - e.pageTop(k) + e.noteShift(k) + e.pageAlignShift(k) + rb.y, Width: rb.borderW(), Height: rb.borderH()}
 		switch l.Origin {
 		case css.BorderEdge, css.TextEdge:
 		case css.PaddingEdge:
@@ -826,7 +828,7 @@ func (e *engine) dest(x, y float64) typeset.Dest {
 func (e *engine) flowDest(x, y float64) typeset.Dest {
 	p := e.pageOf(y)
 	pb := e.box(p)
-	return typeset.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p)}
+	return typeset.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p) + e.pageAlignShift(p)}
 }
 
 // anchors returns where the first box of every node with an ID landed, in
@@ -902,7 +904,7 @@ func (e *engine) pageRect(p int, r typeset.Rect) (typeset.Rect, bool) {
 	if y1 <= y0 {
 		return typeset.Rect{}, false
 	}
-	rect := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
+	rect := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top + e.pageAlignShift(p), Width: r.Width, Height: y1 - y0}
 	if e.turn != css.HorizontalTB {
 		rect = turnRect(pb, e.turn, rect)
 	}

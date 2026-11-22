@@ -70,6 +70,9 @@ type section struct {
 	// balance balances the section's columns: the next section starts
 	// on its page, after a continuous break.
 	balance bool
+	// align is the fraction of a page's free room its text moves down by
+	// (17.6.23 vAlign), 0 for top.
+	align float64
 }
 
 // readPage reads the page size and margins of the sectPr e (17.6.13
@@ -211,8 +214,8 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	if s.gutter > 0 {
 		s.placeGutter(d.settings.gutterAtTop, e.Child(w, "rtlGutter") != nil && ooxml.Toggle(e.Child(w, "rtlGutter")))
 	}
-	if v := e.Child(w, "vAlign"); v != nil && attrOr(v, "val") != "top" {
-		d.warn(warn.PageSetupUnsupported, warn.Approximated, "a section's vertical alignment is laid out from the top")
+	if v := e.Child(w, "vAlign"); v != nil {
+		s.align = d.sectionAlign(attrOr(v, "val"))
 	}
 	if b := e.Child(w, "pgBorders"); b != nil {
 		s.frame = d.pageFrame(b, s)
@@ -582,4 +585,28 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	}
 	kids := append(d.finish(s.blocks, s.index == 0), extra...)
 	return &layout.Node{Kind: layout.Element, Style: st, ID: s.id, Children: kids}
+}
+
+// sectionAlign returns how far a section's text moves down its pages, as
+// a fraction of the room it leaves, by its vAlign (ECMA-376 Part 1,
+// 17.6.23, 17.18.101 ST_VerticalJc): center sets it in the middle of the
+// text area, bottom against its bottom. Word spreads the room of both
+// between the paragraphs, which the layout does not: such a section's
+// text stays at the top, with a warning.
+//
+// # Corpus evidence
+//
+//   - litho/docx sections-valign and sink-report: Word prints a page of a
+//     section of vAlign center with its text centred between the margins,
+//     and one of bottom with its last line against the bottom margin.
+func (d *document) sectionAlign(v string) float64 {
+	switch v {
+	case "center":
+		return 0.5
+	case "bottom":
+		return 1
+	case "both":
+		d.warn(warn.PageSetupUnsupported, warn.Approximated, "a section justified vertically is laid out from the top")
+	}
+	return 0
 }

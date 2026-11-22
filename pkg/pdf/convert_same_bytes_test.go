@@ -36,7 +36,7 @@ var sameBytesCases = []struct {
 	{formatText, "", "0e4db9f2b09fa9340fbd2159128243e13463cacc2cb782f33da207eb4ce928f6"},
 	{formatCSV, "csv/sources/paper-table", "f73035983761a56c117b0c5a008bfb073d396f7b7f2318e5580dc49e8df98c0d"},
 	{formatDOCX, "docx/parts/charts-line-area", "765d4f0d0fbe41a12c944a53227e8ef8e3a52248b98ea9d1545d2bbe628796eb"},
-	{formatDOCX, "docx/parts/sink-report", "1e7181379d6b559d3005c4bf0deff18b8ce09445cbe884071dd87da5b98af523"},
+	{formatDOCX, "docx/parts/sink-report", "80431fd48ffeec5caf4f0d449a10f45370a71a95d39466225908eecc46afd9cb"},
 	{formatDOCX, "docx/parts/shapes-effects-3d", "802e8748188b548d2f00291b77873f2ad1b4b8999e567f6a7c4055ea6177d92b"},
 	{formatXLSX, "xlsx/parts/real_dashboard", "1fdea8f05e7cabe58959837855e5278dc217a38f278e71e950a9c699305709eb"},
 	{formatXLSX, "xlsx/parts/charts_pie_doughnut", "b1e663f0991d016bd470680ef354a81c27528908da8bf987fe57ed013e94938b"},

@@ -194,6 +194,11 @@ type engine struct {
 	// box the footnote area's links and anchors are placed on is the one
 	// trimmed to it ([engine.assembledBox]).
 	fitH float64
+	// aligned is the root box laid out, from which the content of each
+	// page aligned by [PageBox.AlignContent] is measured, and shifts the
+	// measured shifts by page ([engine.pageAlignShift]).
+	aligned *box
+	shifts  map[int]float64
 	// fixedH, when positive, is the height of the page area the fixed
 	// boxes are laid out in: the first page's content under
 	// [Options.FitFirstPage] ([engine.fitFixed]).
