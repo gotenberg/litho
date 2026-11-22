@@ -65,6 +65,12 @@ var opaqueRoles = map[string]bool{
 // It also gives each header cell whose node says nothing a Scope
 // ([headerScopes]).
 //
+// A block-level element that an inline-level box starts (an inline-block,
+// a frame) in a paragraph, a heading or an inline element, which none of
+// them may hold, splits that element around it: the parts keep their role
+// and the block stands between them ([hoistBlocks]). A DocumentFragment
+// whose holder may not hold one gets a Sect of its own ([wrapFragments]).
+//
 // Anonymous elements add two levels at most below [maxStructDepth], and
 // stop once the tree holds [typeset.MaxStructElems] elements: the content
 // past that stays with its element.
@@ -90,6 +96,16 @@ func (e *engine) anonymize(rb *box) {
 	for _, el := range t.order {
 		budget = wrapContent(el, t.events[el], budget)
 	}
+	own := map[*typeset.StructElem]bool{}
+	for _, el := range t.order {
+		for _, ev := range t.events[el] {
+			if ev.leaf != nil && ev.leaf.elem == el || ev.mark != nil && ev.mark.elem == el {
+				own[el] = true
+			}
+		}
+	}
+	budget = hoistBlocks(e.root, own, budget, 0)
+	wrapFragments(e.root, e.root.Role, budget, 0)
 }
 
 // headerScopes sets the Scope of each header cell of the row tr, under
@@ -205,7 +221,9 @@ func wrapContent(el *typeset.StructElem, evs []tagEvent, budget int) int {
 			continue
 		}
 		hasKid = true
-		blockKid = blockKid || ev.run == 0
+		// A block-level element stands among blocks even where an
+		// inline-level box starts it.
+		blockKid = blockKid || ev.run == 0 || blockRoles[ev.kid.Role]
 	}
 	paragraphs := groupingRoles[el.Role] || containerRoles[el.Role] && blockKid
 	switch {
@@ -323,4 +341,138 @@ func segment(ev tagEvent, paragraphs bool) int {
 		return 0
 	}
 	return -1
+}
+
+// phraseRoles are the elements that hold phrasing alone: a paragraph, a
+// heading and the inline elements that ISO 32005, Table 5 forbids every
+// grouping and block-level element in. Each maps to the roles it may not
+// hold: [blockRoles] and the table and list parts, less L and Table under
+// P, which Table 5 lets a paragraph hold. Immutable lookup table.
+var phraseRoles = map[string]func(string) bool{
+	"P": func(r string) bool { return r != "L" && r != "Table" && heldByNone(r) },
+	"H": heldByNone, "H1": heldByNone, "H2": heldByNone, "H3": heldByNone, "H4": heldByNone, "H5": heldByNone, "H6": heldByNone,
+	"Span": heldByNone, "Em": heldByNone, "Strong": heldByNone, "Sub": heldByNone, "Quote": heldByNone,
+}
+
+// heldByNone reports a role no element of [phraseRoles] holds (ISO 32005,
+// Table 5): the grouping and block-level elements, list items and their
+// bodies, captions and the parts of a table.
+func heldByNone(role string) bool {
+	switch role {
+	case "Caption", "LBody", "THead", "TBody", "TFoot", "TR", "TH", "TD", "Title":
+		return true
+	}
+	return blockRoles[role]
+}
+
+// hoistBlocks splits, under el and below it, every element of
+// [phraseRoles] around the kids it may not hold, as [engine.anonymize]
+// says: the kid moves up beside its parent, between the parent's part
+// before it and a copy of the parent, of the same role and language,
+// holding what came after. The deepest elements split first, so a block
+// in a Span in a P rises past both. An element that own says holds
+// content of its own stays whole; so does the tree past [maxStructDepth]
+// levels, and an element whose copies would pass budget. It returns the
+// budget left.
+func hoistBlocks(el *typeset.StructElem, own map[*typeset.StructElem]bool, budget, depth int) int {
+	if depth > maxStructDepth {
+		return budget
+	}
+	var kids []*typeset.StructElem
+	changed := false
+	for i, k := range el.Kids {
+		budget = hoistBlocks(k, own, budget, depth+1)
+		forbids := phraseRoles[k.Role]
+		copies, split := 0, false
+		if forbids != nil && !own[k] {
+			copies, split = splitCopies(k.Kids, forbids)
+		}
+		if !split || copies > budget {
+			if changed {
+				kids = append(kids, k)
+			}
+			continue
+		}
+		if !changed {
+			kids = append(kids, el.Kids[:i]...)
+			changed = true
+		}
+		budget -= copies
+		held := k.Kids
+		part := k
+		part.Kids = nil
+		kids = append(kids, part)
+		for _, c := range held {
+			if forbids(c.Role) {
+				kids = append(kids, c)
+				part = nil
+				continue
+			}
+			if part == nil {
+				part = &typeset.StructElem{Role: k.Role, Lang: k.Lang}
+				kids = append(kids, part)
+			}
+			part.Kids = append(part.Kids, c)
+		}
+	}
+	if changed {
+		el.Kids = kids
+	}
+	return budget
+}
+
+// splitCopies reports whether kids hold one that forbids takes, and how
+// many copies of their parent splitting them around those makes: one for
+// each run of other kids that follows one of them.
+func splitCopies(kids []*typeset.StructElem, forbids func(string) bool) (int, bool) {
+	n, split, after := 0, false, false
+	for _, c := range kids {
+		switch {
+		case forbids(c.Role):
+			split, after = true, true
+		case after:
+			n++
+			after = false
+		}
+	}
+	return n, split
+}
+
+// fragmentHolders are the elements that may hold a DocumentFragment (ISO
+// 32005, Table 5): the grouping elements that Table 5 does not look
+// through, but the index and a table of contents item. Immutable lookup
+// table.
+var fragmentHolders = map[string]bool{
+	"Document": true, "DocumentFragment": true, "Art": true, "Sect": true,
+	"BlockQuote": true, "Aside": true, "Private": true,
+}
+
+// passThroughRoles are the grouping elements ISO 32005, Table 5 looks
+// through: it judges what a Div, a Part or a NonStruct holds as held by
+// the element around it, as veraPDF does (compliance's
+// iso32005PassThroughTypes). Immutable lookup table.
+var passThroughRoles = map[string]bool{"Div": true, "Part": true, "NonStruct": true}
+
+// wrapFragments gives every DocumentFragment under el whose holder may not
+// hold one a Sect of its own, which a table cell, a list body, a caption
+// and a figure may hold and which may hold a DocumentFragment (ISO 32005,
+// Table 5); a Div would not do, Table 5 looking through it. holder is the
+// role of el, or of the element around it when Table 5 looks through el.
+// It goes [maxStructDepth] levels deep and makes at most budget elements.
+func wrapFragments(el *typeset.StructElem, holder string, budget, depth int) int {
+	if depth > maxStructDepth {
+		return budget
+	}
+	for i, k := range el.Kids {
+		kh := k.Role
+		if passThroughRoles[kh] {
+			kh = holder
+		}
+		budget = wrapFragments(k, kh, budget, depth+1)
+		if k.Role == "DocumentFragment" && !fragmentHolders[holder] && budget > 0 {
+			el.Kids[i] = &typeset.StructElem{Role: "Sect", Kids: []*typeset.StructElem{k}}
+			budget--
+		}
+	}
+	return budget
 }

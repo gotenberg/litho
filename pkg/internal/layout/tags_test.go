@@ -235,3 +235,66 @@ func TestTags_EmptyCellsKept(t *testing.T) {
 		t.Errorf("structure %s, want the empty cell kept", got)
 	}
 }
+
+// TestTags_BlocksLeaveParagraphs locks the rule of ISO 32005, Table 5 that
+// a paragraph, a heading and an inline element hold no grouping or
+// block-level element, and that a table cell or a list body holds no
+// DocumentFragment, whatever box starts them: an inline-block division or
+// a frame in a paragraph splits it, rising past the inline elements
+// around it, and a frame in a cell gets a Sect, which Table 5 does not
+// look through as it looks through a Div.
+func TestTags_BlocksLeaveParagraphs(t *testing.T) {
+	in := inlineSty()
+	block := sty(display(css.InlineBlock))
+	frame := func() *Node {
+		return &Node{Kind: Replaced, Style: sty(width(3), height(2), display(css.InlineBlock)), Role: "DocumentFragment",
+			Picture: embedded(func(float64, float64) *Embedded { return redDoc(1) })}
+	}
+	cell := func(kids ...*Node) *Node {
+		return doc(role("Table", el(sty(display(css.Table)), role("TR", el(sty(display(css.TableRow)),
+			role("TD", el(sty(display(css.TableCell)), kids...)))))))
+	}
+	for name, tc := range map[string]struct {
+		root *Node
+		want string
+	}{
+		"inline-block division in a paragraph": {
+			doc(role("P", el(sty(), txt(in, "aa "), role("Div", el(block, txt(block, "bb"))), txt(in, " cc")))),
+			"Document[P[Span#] Div[P#] P[Span#]]",
+		},
+		"frame in a paragraph": {
+			doc(role("P", el(sty(), txt(in, "aa "), frame(), txt(in, " cc")))),
+			"Document[P[Span#] DocumentFragment[P] P[Span#]]",
+		},
+		"frame ending a paragraph": {
+			doc(role("P", el(sty(), txt(in, "aa "), frame()))),
+			"Document[P[Span#] DocumentFragment[P]]",
+		},
+		"frame in a span of a paragraph": {
+			doc(role("P", el(sty(), txt(in, "aa "), role("Span", el(in, txt(in, "bb "), frame(), txt(in, " cc"))), txt(in, " dd")))),
+			"Document[P[Span# Span[Span#]] DocumentFragment[P] P[Span[Span#] Span#]]",
+		},
+		"inline-block division in a heading": {
+			doc(role("H2", el(sty(), txt(in, "aa "), role("Div", el(block, txt(block, "bb"))), txt(in, " cc")))),
+			"Document[H2[Span#] Div[P#] H2[Span#]]",
+		},
+		"frame in a cell's text": {
+			cell(txt(in, "aa "), frame(), txt(in, " cc")),
+			"Document[Table[TR[TD[P# Sect[DocumentFragment[P]] P#]]]]",
+		},
+		"frame alone in a cell": {
+			cell(frame()),
+			"Document[Table[TR[TD[Sect[DocumentFragment[P]]]]]]",
+		},
+		"inline table in a paragraph": {
+			doc(role("P", el(sty(), txt(in, "aa "), role("Table", el(sty(display(css.InlineTable)), role("TR", el(sty(display(css.TableRow)),
+				role("TD", el(sty(display(css.TableCell)), txt(in, "bb"))))))), txt(in, " cc")))),
+			"Document[P[Span# Table[TR[TD#]] Span#]]",
+		},
+	} {
+		res := run(t, tc.root, page(200, 100))
+		if got := shape(res, res.Structure); got != tc.want {
+			t.Errorf("%s: structure %s, want %s", name, got, tc.want)
+		}
+	}
+}
