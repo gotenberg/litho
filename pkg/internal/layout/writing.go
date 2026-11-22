@@ -455,11 +455,21 @@ func turnedRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect
 // text stands upright (CSS Inline 3, 4.2.1, dominant-baseline: auto, in
 // vertical typographic mode with text-orientation mixed or upright), and
 // returns how far that baseline lies above the alphabetic one of its
-// first available font, which a turned flow lays its lines out on: half
-// the difference of the font's em box ascent and descent.
+// first available font, which a turned flow lays its lines out on
+// ([engine.centralRise]).
 func (e *engine) centralBaseline(b *box) (float64, bool) {
-	if b == nil {
+	if !e.centralLine(b) {
 		return 0, false
+	}
+	return e.centralRise(e.faceMetrics(b.st, b.lang)), true
+}
+
+// centralLine reports whether the inline box b lays its line out on the
+// central baseline: its text stands upright in a vertical line (CSS
+// Inline 3, 4.2.1, dominant-baseline: auto).
+func (e *engine) centralLine(b *box) bool {
+	if b == nil {
+		return false
 	}
 	st := b.st
 	if b.anon && b.parent != nil && b.parent.ortho {
@@ -468,11 +478,65 @@ func (e *engine) centralBaseline(b *box) (float64, bool) {
 		// root's.
 		st = b.parent.st
 	}
-	if e.orientation(st) == text.OrientNone {
-		return 0, false
+	return e.orientation(st) != text.OrientNone
+}
+
+// centralRise returns how far the central baseline of a face of metrics
+// m lies above its alphabetic baseline. CSS Inline 3, 4.1 puts the
+// central baseline halfway between the ideographic-under and
+// ideographic-over baselines, the middle of the em box; under the
+// browser rules it is the middle of the face's ascent and descent, as
+// Blink takes it for a vertical line (FontMetrics::IntAscentInternal,
+// kCentral), the part above it the larger half of a content area of odd
+// pixels ([engine.centralOver]).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets the
+//     sideways baseline of a vertical-rl line of Liberation Sans, DejaVu
+//     Sans or Liberation Serif, 10 to 30 px, that also draws Noto Sans CJK
+//     JP, the ascent less the larger half of the content area below the
+//     line's central baseline, on all 63 lines.
+func (e *engine) centralRise(m text.Metrics) float64 {
+	if !e.opts.BrowserRules {
+		return float64((m.EmAscent - m.EmDescent) / 2)
 	}
-	m := e.faceMetrics(b.st, b.lang)
-	return float64((m.EmAscent - m.EmDescent) / 2), true
+	return m.Ascent - e.centralOver(m.Ascent+m.Descent)
+}
+
+// centralOver returns the part of a content area h tall that lies over
+// the central baseline of a vertical line: half of it, and with pixel
+// font metrics the larger half of a content area of odd pixels, as Blink
+// splits a font's height on the central baseline (Height() - Height() /
+// 2).
+func (e *engine) centralOver(h float64) float64 {
+	if !e.opts.PixelFontMetrics {
+		return h / 2
+	}
+	px := math.Round(h / css.Pt)
+	return float64((px - math.Floor(px/2)) * css.Pt)
+}
+
+// uprightShift returns how far the upright glyphs of a run laid out in a
+// vertical line move across it, down in the turned flow, under the
+// browser rules: the text layout centres them on the middle of the em
+// box (CSS Inline 3, 4.1), Blink on the middle of their face's ascent
+// and descent, in halves of a pixel (FontMetrics::FloatAscent,
+// kCentral). ascent and descent are the face's, rounded as the line
+// rounds them; emAscent and emDescent its em box split.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 centres an
+//     upright glyph of Noto Sans CJK JP, 10 to 30 px, (a - d) / 2 above
+//     the alphabetic baseline of its line, a and d the face's rounded
+//     ascent and descent, alone or as the fallback face of Liberation
+//     Sans, DejaVu Sans and Liberation Serif, on all 84 lines.
+func (e *engine) uprightShift(ascent, descent, emAscent, emDescent float64) float64 {
+	if !e.opts.BrowserRules {
+		return 0
+	}
+	return float64((descent-ascent)/2) - float64((emDescent-emAscent)/2)
 }
 
 // mirrorRun reflects the glyph run t of the box b, laid out in a

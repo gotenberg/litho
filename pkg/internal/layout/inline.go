@@ -1537,6 +1537,13 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 	}
 	v.inAligned = parent.inAligned || parent.aligned
 	v.shift = e.alignShift(b.st.VerticalAlign, parent, v.above, v.below, lh)
+	if b.st.VerticalAlign.Kind == css.Baseline && e.opts.BrowserRules && e.centralLine(b) {
+		// A vertical line aligns its boxes on the central baseline (CSS
+		// Inline 3, 4.2.1, dominant-baseline: auto): a box whose face
+		// sets its central baseline at another rise above the alphabetic
+		// one than its parent's moves by the difference.
+		v.shift += float64(e.centralRise(m) - e.centralRise(e.faceMetrics(parent.b.st, parent.b.lang)))
+	}
 	if k := b.st.VerticalAlign.Kind; k == css.AlignTop || k == css.AlignBottom {
 		v.aligned = true
 		v.shift = parent.shift
@@ -1764,6 +1771,9 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		case runText:
 			if sp.Text != nil && s.glyphs+len(sp.Text.Glyphs) <= maxGlyphsPerLine {
 				it.text = sp.Text
+				if d := e.uprightShift(ascent, descent, sp.EmAscent, sp.EmDescent); sp.Text.Upright && d != 0 {
+					it.text = shiftedRun(sp.Text, d)
+				}
 				s.glyphs += len(sp.Text.Glyphs)
 			} else if sp.Text != nil {
 				e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a line of more than %d glyphs was cut short", maxGlyphsPerLine), -1)
@@ -2088,7 +2098,16 @@ func (s *inlineState) vertical(l *lineBox) {
 			// text a fallback face draws taller grows the line.
 			lh := it.ascent + it.descent + max(it.gap, 0)
 			up, down := s.e.leading(lh - (it.ascent + it.descent))
-			include(v, v.shift-wider(it.ascent+up, v.above), v.shift+wider(it.descent+down, v.below))
+			over, under := it.ascent, it.descent
+			if s.e.opts.BrowserRules && s.e.centralLine(v.b) {
+				// On a vertical line the face's content area is aligned
+				// on the central baseline (CSS Inline 3, 4.2.1), which
+				// lies the box's central rise above its alphabetic one.
+				rise := float64(v.ca - s.e.centralOver(v.ca+v.cd))
+				over = float64(s.e.centralOver(it.ascent+it.descent) + rise)
+				under = it.ascent + it.descent - over
+			}
+			include(v, v.shift-wider(over+up, v.above), v.shift+wider(under+down, v.below))
 		} else if it.text != nil || it.box.kind == kindInline && !empty {
 			// Any other line-height lays the box out on its first
 			// available font's metrics alone, whichever face draws its
@@ -2203,6 +2222,18 @@ func (s *inlineState) vertical(l *lineBox) {
 		f.bottom = b + v.cd + f.box.pd[css.Bottom] + f.box.bd[css.Bottom]
 	}
 	s.officeLine(l)
+}
+
+// shiftedRun returns a copy of the glyph run t with its glyphs moved by
+// dy down its space; t is shared with the paragraph's lines.
+func shiftedRun(t *typeset.Text, dy float64) *typeset.Text {
+	c := *t
+	c.Glyphs = make([]typeset.Glyph, len(t.Glyphs))
+	for i, g := range t.Glyphs {
+		g.Y += dy
+		c.Glyphs[i] = g
+	}
+	return &c
 }
 
 // wider returns a when it exceeds b by more than the rounding of shaped
