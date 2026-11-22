@@ -2,6 +2,7 @@ package docx
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -236,24 +237,35 @@ func TestTables_CellSpacing(t *testing.T) {
 
 func TestTables_Floating(t *testing.T) {
 	t.Parallel()
-	table := func(tblpPr string) string {
-		return `<w:tbl><w:tblPr>` + tblpPr + `<w:tblW w:w="2000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+	table := func(tblpPr string, width int) string {
+		w := strconv.Itoa(width)
+		return `<w:tbl><w:tblPr>` + tblpPr + `<w:tblW w:w="` + w + `" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="` + w + `"/></w:tblGrid>` +
 			`<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
 	}
+	// The default page is Letter with 72-point margins: 468 points of
+	// text between them.
+	const auto = -1
 	for _, tc := range []struct {
 		name, tblpPr string
+		width        int
 		float        css.Float
-		auto         bool
+		left         float64
 		top, pageTop float64
 	}{
-		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, css.FloatLeft, false, 0, 0},
-		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, css.FloatRight, false, 0, 0},
-		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, css.FloatNone, true, 20, 0},
-		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, css.FloatNone, true, 0, 20},
+		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, 2000, css.FloatLeft, 9, 0, 0},
+		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, 2000, css.FloatRight, 0, 0, 0},
+		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, 2000, css.FloatNone, 184, 20, 0},
+		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, 2000, css.FloatNone, 184, 0, 20},
+		{"wider, centred on the margins", `<w:tblpPr w:tblpXSpec="center" w:horzAnchor="margin"/>`, 10080, css.FloatNone, -18, 0, 0},
+		{"centred on the page's width", `<w:tblpPr w:tblpXSpec="center" w:horzAnchor="page"/>`, 2000, css.FloatNone, 184, 0, 0},
 	} {
-		b := build(t, table(tc.tblpPr), nil)
+		b := build(t, table(tc.tblpPr, tc.width), nil)
 		tbl := role(b.root, "Table")[0].Style
-		if tbl.Float != tc.float || (tbl.Margin[css.Left].Kind == css.Auto) != tc.auto || tbl.Margin[css.Top].Value != tc.top || tbl.PageTop != tc.pageTop {
+		left := tbl.Margin[css.Left].Value
+		if tbl.Margin[css.Left].Kind == css.Auto {
+			left = auto
+		}
+		if tbl.Float != tc.float || math.Abs(left-tc.left) > 1e-9 || tbl.Margin[css.Top].Value != tc.top || tbl.PageTop != tc.pageTop {
 			t.Errorf("%s: float %v margins %v page top %v", tc.name, tbl.Float, tbl.Margin, tbl.PageTop)
 		}
 	}

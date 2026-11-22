@@ -1031,6 +1031,7 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 	case "center":
 		st.Float = css.FloatNone
 		st.Margin[css.Left], st.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+		d.centreTable(st, attrOr(f, "horzAnchor"))
 		tableOffset(st, f)
 		return
 	}
@@ -1039,6 +1040,31 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 			st.Margin[side] = css.Pts(max(0, v))
 		}
 	}
+}
+
+// centreTable centres the floating table st, of a width in points, on
+// the area its horzAnchor names (17.4.58: the text column by default, the
+// margins or the page), as Word places it: a table wider than the area
+// reaches past both its edges by the same amount, where the auto margins
+// of CSS would start it at the column's start edge.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/fdo48718-1.docx and
+//     ooxmlexport/fdo77887.docx: Word prints a 504-point table centred on
+//     margins 442 points apart 31 points left of the left margin.
+func (d *document) centreTable(st *css.Style, anchor string) {
+	if d.page == nil || st.Width.Kind != css.Points {
+		return
+	}
+	rel := anchor
+	if rel == "text" || rel == "" {
+		rel = "column"
+	}
+	left, width := hArea(d.page, rel)
+	x := left + float64((width-st.Width.Value)/2)
+	st.Margin[css.Left] = css.Pts(x - d.page.margin[css.Left] - d.page.gutter)
+	st.Margin[css.Right] = css.Dimension{Kind: css.Auto}
 }
 
 // tableOffset moves a floating table anchored to the text (17.4.58
