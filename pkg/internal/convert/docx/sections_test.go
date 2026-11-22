@@ -52,6 +52,33 @@ func TestSections_PageBoxes(t *testing.T) {
 	}
 }
 
+// TestSections_ArtPageBorders checks that an art page border (17.18.2)
+// is not drawn, as Word prints it, beside a line border that is, and that
+// leaving it out warns.
+func TestSections_ArtPageBorders(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:t>s</w:t></w:r></w:p><w:sectPr><w:pgBorders w:offsetFrom="page">` +
+		`<w:top w:val="apples" w:sz="20" w:space="24"/><w:bottom w:val="single" w:sz="8" w:space="24"/></w:pgBorders></w:sectPr>`
+	b := build(t, body, nil)
+	f := b.d.newPages(b.secs).box(layout.PageInfo{Name: b.secs[0].name}).Frame
+	if f == nil || f.Style.Border[css.Top].Style != css.BorderNone || f.Style.Border[css.Bottom].Width != 1 {
+		t.Fatalf("page frame %+v", f)
+	}
+	art := 0
+	for _, w := range b.d.warnings {
+		if strings.Contains(w.Message, "art page border") {
+			art++
+		}
+	}
+	if art != 1 {
+		t.Errorf("%d art border warnings, want 1", art)
+	}
+	only := build(t, `<w:p/><w:sectPr><w:pgBorders><w:left w:val="holly" w:sz="16" w:space="24"/></w:pgBorders></w:sectPr>`, nil)
+	if f := only.d.newPages(only.secs).box(layout.PageInfo{Name: only.secs[0].name}).Frame; f != nil {
+		t.Errorf("art border alone framed the page: %+v", f)
+	}
+}
+
 func TestSections_EmptySectionParagraphDropped(t *testing.T) {
 	t.Parallel()
 	const brk = `<w:p><w:pPr><w:sectPr/></w:pPr></w:p>`

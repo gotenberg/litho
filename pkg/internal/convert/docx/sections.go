@@ -351,7 +351,7 @@ func sideInset(owner, s *section) [2]float64 {
 // (offsetFrom text, the default).
 func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 	st := css.Initial()
-	drawn := false
+	drawn, art := false, false
 	var space [4]float64
 	for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
 		e := b.Child(w, name)
@@ -366,6 +366,10 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 		if e == nil {
 			continue
 		}
+		if isArtBorder(attrOr(e, "val")) {
+			art = true
+			continue
+		}
 		bs := d.parseBorder(e)
 		if bs.Style == css.BorderNone {
 			continue
@@ -374,6 +378,9 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 		strokeBorders(st)
 		space[side] = bs.space
 		drawn = true
+	}
+	if art {
+		d.warn(warn.ContentUnsupported, warn.Omitted, "an art page border is left out, as Word prints the document")
 	}
 	if !drawn {
 		return nil
@@ -391,6 +398,36 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 		return nil
 	}
 	return f
+}
+
+// lineBorders are the values of ST_Border (ECMA-376 Part 1, 17.18.2) that
+// name a line style; every other value names an art border, a picture
+// repeated along the side.
+var lineBorders = map[string]bool{
+	"nil": true, "none": true, "single": true, "thick": true, "double": true, "dotted": true,
+	"dashed": true, "dotDash": true, "dotDotDash": true, "triple": true,
+	"thinThickSmallGap": true, "thickThinSmallGap": true, "thinThickThinSmallGap": true,
+	"thinThickMediumGap": true, "thickThinMediumGap": true, "thinThickThinMediumGap": true,
+	"thinThickLargeGap": true, "thickThinLargeGap": true, "thinThickThinLargeGap": true,
+	"wave": true, "doubleWave": true, "dashSmallGap": true, "dashDotStroked": true,
+	"threeDEmboss": true, "threeDEngrave": true, "outset": true, "inset": true,
+}
+
+// isArtBorder reports a page border side of an art style (17.18.2), which
+// Word prints without its picture or any line: the side is not drawn.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx O14ISOStrict/Word: the eight documents whose one page
+//     border is an art border (holly, zigZagStitch, gems, weavingAngles,
+//     cakeSlice, peopleHats, handmade2, whiteFlowers) print a blank page.
+//   - litho/docx sections-page-borders: the pages framed in apples and in
+//     stars print without a frame, where the single, double, dotted and
+//     thick frames of the other pages print.
+//   - poi/docx document/bib-chernigovka.netdo.ru_download_docs_17459.docx:
+//     its mapleMuffins frame does not print.
+func isArtBorder(val string) bool {
+	return val != "" && !lineBorders[val]
 }
 
 // linePitch returns the line pitch in points of the document grid of the
