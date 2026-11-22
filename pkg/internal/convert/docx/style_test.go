@@ -261,6 +261,48 @@ func TestParagraphSpacing(t *testing.T) {
 	}
 }
 
+// TestParagraphSpacing_Automatic checks the automatic spacing of
+// 17.3.1.33 as Word gives it: 14 points, none before the first paragraph
+// of the document or of a cell, none between items of one list.
+func TestParagraphSpacing_Automatic(t *testing.T) {
+	t.Parallel()
+	numbering := `<w:numbering ` + nsDecl + `>` +
+		`<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="-"/></w:lvl></w:abstractNum>` +
+		`<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
+	auto := `<w:spacing w:before="100" w:beforeAutospacing="1" w:after="100" w:afterAutospacing="1"/>`
+	p := func(num, text string) string {
+		pPr := auto
+		if num != "" {
+			pPr = `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="` + num + `"/></w:numPr>` + auto
+		}
+		return `<w:p><w:pPr>` + pPr + `</w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	body := p("", "first") + p("1", "item one") + p("1", "item two") + p("2", "other list") + p("", "plain") +
+		`<w:tbl><w:tr><w:tc>` + p("", "cell") + `</w:tc></w:tr></w:tbl>`
+	b := build(t, body, map[string]string{"word/numbering.xml": numbering})
+	for _, tc := range []struct {
+		text          string
+		before, after float64
+	}{
+		{"first", 0, 14},
+		{"item one", 14, 0},
+		{"item two", 0, 14},
+		{"other list", 14, 14},
+		{"plain", 14, 14},
+		{"cell", 0, 14},
+	} {
+		ps := find(b.root, func(n *layout.Node) bool {
+			return (n.Role == "P" || n.Role == "LI") && strings.HasSuffix(textOf(n), tc.text)
+		})
+		if len(ps) != 1 {
+			t.Fatalf("%q: %d paragraphs", tc.text, len(ps))
+		}
+		if m := ps[0].Style.Margin; m[css.Top] != css.Pts(tc.before) || m[css.Bottom] != css.Pts(tc.after) {
+			t.Errorf("%q: margins %v / %v, want %v / %v", tc.text, m[css.Top], m[css.Bottom], tc.before, tc.after)
+		}
+	}
+}
+
 func TestEmptyParagraphKeepsALine(t *testing.T) {
 	t.Parallel()
 	b := build(t, `<w:p/><w:p><w:pPr><w:rPr><w:sz w:val="48"/></w:rPr></w:pPr></w:p>`, nil)

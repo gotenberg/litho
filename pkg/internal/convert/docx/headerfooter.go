@@ -95,7 +95,7 @@ func (p *pages) content(part string, v *fieldValues) (*layout.Node, []pendingAnc
 	}
 	s := &story{part: part, fields: v}
 	p.d.inMargin, p.d.marginAnchors = true, nil
-	n.Children = p.d.finish(p.d.blocks(s, nil, r, 1))
+	n.Children = p.d.finish(p.d.blocks(s, nil, r, 1), false)
 	anchors := p.d.marginAnchors
 	p.d.inMargin, p.d.marginAnchors = false, nil
 	return n, anchors

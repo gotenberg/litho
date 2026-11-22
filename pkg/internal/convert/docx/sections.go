@@ -555,6 +555,6 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	case "evenPage":
 		st.BreakBefore = css.LeftPage
 	}
-	kids := append(d.finish(s.blocks), extra...)
+	kids := append(d.finish(s.blocks, s.index == 0), extra...)
 	return &layout.Node{Kind: layout.Element, Style: st, ID: s.id, Children: kids}
 }

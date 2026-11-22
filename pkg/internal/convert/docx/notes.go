@@ -37,7 +37,7 @@ func (d *document) noteCall(s *story, c *ooxml.Element, st *css.Style, sink *inl
 	ns := &story{part: part, note: mark, noteID: bodyID, noteBack: "#" + callID}
 	d.nested++
 	restore := d.comments.apart()
-	content := d.finish(d.blocks(ns, nil, body, 1))
+	content := d.finish(d.blocks(ns, nil, body, 1), false)
 	restore()
 	d.nested--
 	noteBody := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), Role: "Note", Children: content}

@@ -64,6 +64,12 @@ type paraInfo struct {
 	contextual        bool
 	borders           map[string]*borderSpec
 	indLeft, indRight float64
+	// autoBefore and autoAfter mark spacing Word sizes itself
+	// (17.3.1.33 beforeAutospacing, afterAutospacing), and list the
+	// numbering instance the paragraph is an item of, nil for none: see
+	// [document.finish].
+	autoBefore, autoAfter bool
+	list                  *numInstance
 }
 
 // blockNode is a block-level node with the paragraph data the post-pass
@@ -169,9 +175,29 @@ const maxNesting = 64
 // share (17.3.1.24: the group draws one box, the between border inside
 // it).
 //
+// Automatic spacing follows Word where it departs from the 14 points
+// [spacingOf] gives (17.3.1.33 leaves the amount to the application, as
+// HTML would space the paragraph): none before the first paragraph of the
+// document or of a table cell, which flowStart marks, and none between two
+// items of one list, as HTML gives a list item no margin.
+//
 // The paragraphs' styles are shared: a paragraph whose spacing or borders
 // its neighbours change takes a changed copy, shared in turn.
-func (d *document) finish(bs []blockNode) []*layout.Node {
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo71834.docx: Word sets the first line
+//     of the document, a list item spaced automatically, on the top margin,
+//     and every later line 14 points higher than with the space.
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/ParaPr/paraspace.docx:
+//     the same for a first paragraph outside a list.
+//   - libreoffice/docx layout/tdf117982.docx: the first paragraph of a
+//     cell, spaced automatically, starts at the cell's top.
+//   - poi/docx document/delins.docx: the items of one list, spaced
+//     automatically, follow each other at their line pitch, 13.75 points
+//     of Times New Roman 10; 14 points more separate the last item of a
+//     list from the next paragraph or the first item of another list.
+func (d *document) finish(bs []blockNode, flowStart bool) []*layout.Node {
 	out := make([]*layout.Node, 0, len(bs))
 	var list *layout.Node
 	for i, b := range bs {
@@ -202,6 +228,12 @@ func (d *document) finish(bs []blockNode) []*layout.Node {
 			next = bs[i+1].info
 		}
 		before, after := info.before, info.after
+		if info.autoBefore && (i == 0 && flowStart || prev != nil && sameList(prev, info)) {
+			before = 0
+		}
+		if info.autoAfter && next != nil && sameList(info, next) {
+			after = 0
+		}
 		if info.contextual && prev != nil && prev.style == info.style {
 			before = 0
 		}
@@ -228,6 +260,12 @@ func (d *document) finish(bs []blockNode) []*layout.Node {
 		}
 	}
 	return out
+}
+
+// sameList reports two paragraphs that are items of one list, one
+// numbering instance (17.9.15).
+func sameList(a, b *paraInfo) bool {
+	return a.list != nil && a.list == b.list
 }
 
 // listOf returns the style of the block grouping list items styled like
@@ -427,6 +465,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		d.frame(n, pst, pp)
 		info := &paraInfo{style: rp.styleID, contextual: boolOf(pp.contextual), borders: pp.borders}
 		info.before, info.after = spacingOf(pp)
+		info.autoBefore, info.autoAfter, info.list = boolOf(pp.beforeAuto), boolOf(pp.afterAuto), rp.num
 		if hardBreak {
 			info.before = 0
 		}

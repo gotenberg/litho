@@ -740,7 +740,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if n := len(bs); n >= 2 && endsWithTableMark(c.xml) && bs[n-2].node.Role == "Table" && bs[n-1].node.Role == "P" && bs[n-1].node.ID == "" {
 				bs = bs[:n-1]
 			}
-			kids := d.finish(bs)
+			kids := d.finish(bs, true)
 			d.inCell--
 			d.nested--
 			role := "TD"
