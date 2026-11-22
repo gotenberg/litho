@@ -2,6 +2,7 @@ package docx
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"image"
 	"image/png"
@@ -13,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -721,5 +723,69 @@ func TestVMLAnchor(t *testing.T) {
 		if got := vmlAnchor(in); got != want {
 			t.Errorf("vmlAnchor(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestLockedCanvas draws the shapes of a locked canvas at their offsets
+// in its child space, scaled to the canvas's extent, and those of a canvas
+// of no extent at their own size, the corner of their bounds at its
+// origin.
+func TestLockedCanvas(t *testing.T) {
+	t.Parallel()
+	canvas := func(cx, cy, grp string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="` + cx + `" cy="` + cy + `"/><wp:docPr id="4" name="c"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas">` +
+			`<lc:lockedCanvas xmlns:lc="http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas">` + grp +
+			`<a:sp><a:spPr><a:xfrm><a:off x="1270000" y="635000"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill></a:spPr></a:sp>` +
+			`</lc:lockedCanvas></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	shapes := func(body string) []*layout.Node {
+		t.Helper()
+		return find(build(t, body, nil).root, func(n *layout.Node) bool {
+			return n.Kind == layout.Replaced && n.Picture != nil && n.Picture.Vector != nil
+		})
+	}
+	// A child space of 400 by 200 points drawn in 200 by 100.
+	scaled := shapes(canvas("2540000", "1270000", `<a:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="5080000" cy="2540000"/><a:chOff x="0" y="0"/><a:chExt cx="5080000" cy="2540000"/></a:xfrm></a:grpSpPr>`))
+	if len(scaled) != 1 || scaled[0].Style.Left != css.Pts(50) || scaled[0].Style.Top != css.Pts(25) || scaled[0].Style.Width != css.Pts(50) {
+		t.Fatalf("scaled canvas: %d shapes, want one at 50, 25, 50 points wide", len(scaled))
+	}
+	bare := shapes(canvas("2540000", "1270000", `<a:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></a:grpSpPr>`))
+	if len(bare) != 1 || bare[0].Style.Left != css.Pts(0) || bare[0].Style.Top != css.Pts(0) || bare[0].Style.Width != css.Pts(100) {
+		t.Fatalf("canvas of no extent: %d shapes, want one at its origin, 100 points wide", len(bare))
+	}
+}
+
+// TestLockedCanvas_PictureAlt describes a picture of a locked canvas by
+// its own non-visual properties, in the DrawingML namespace.
+func TestLockedCanvas_PictureAlt(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="1270000"/><wp:docPr id="4" name="c"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas">` +
+		`<lc:lockedCanvas xmlns:lc="http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas"><a:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="1270000"/><a:chOff x="0" y="0"/><a:chExt cx="1270000" cy="1270000"/></a:xfrm></a:grpSpPr>` +
+		`<a:pic><a:nvPicPr><a:cNvPr id="2" name="p" descr="A statue"/><a:cNvPicPr/></a:nvPicPr><a:blipFill><a:blip r:embed="rIda"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>` +
+		`<a:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="635000" cy="635000"/></a:xfrm><a:prstGeom prst="rect"/></a:spPr></a:pic>` +
+		`</lc:lockedCanvas></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	figs := role(build(t, body, map[string]string{"word/media/a.png": pngData(t, 4, 4)}).root, "Figure")
+	if len(figs) != 1 || figs[0].Alt != "A statue" {
+		t.Fatalf("%d figures, want one described %q", len(figs), "A statue")
+	}
+}
+
+// A group's child space scales onto its canvas by its extent over its
+// child extent; nested groups multiply, so each scale is capped and the
+// coordinates of a hostile canvas stay finite.
+func TestCanvasSpace_ScaleIsCapped(t *testing.T) {
+	xfrm := &ooxml.Element{Space: ooxml.NSA, Local: "xfrm", Children: []*ooxml.Element{
+		{Space: ooxml.NSA, Local: "off", Attrs: []xml.Attr{{Name: xml.Name{Local: "x"}, Value: "0"}, {Name: xml.Name{Local: "y"}, Value: "0"}}},
+		{Space: ooxml.NSA, Local: "ext", Attrs: []xml.Attr{{Name: xml.Name{Local: "cx"}, Value: "9000000000000000000"}, {Name: xml.Name{Local: "cy"}, Value: "9000000000000000000"}}},
+		{Space: ooxml.NSA, Local: "chOff", Attrs: []xml.Attr{{Name: xml.Name{Local: "x"}, Value: "0"}, {Name: xml.Name{Local: "y"}, Value: "0"}}},
+		{Space: ooxml.NSA, Local: "chExt", Attrs: []xml.Attr{{Name: xml.Name{Local: "cx"}, Value: "1"}, {Name: xml.Name{Local: "cy"}, Value: "1"}}},
+	}}
+	c := canvasSpace{scale: [2]float64{1, 1}}
+	for range maxNesting {
+		c = c.childSpace(xfrm)
+	}
+	x, y := c.point(9e18, 9e18)
+	if c.scale[0] > maxCanvasScale || c.scale[1] > maxCanvasScale || math.IsInf(x, 0) || math.IsNaN(x) || math.IsInf(y, 0) || math.IsNaN(y) {
+		t.Fatalf("scale %v, point %v %v: want capped scales and a finite point", c.scale, x, y)
 	}
 }

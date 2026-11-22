@@ -239,6 +239,10 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 		if c := data.Child(nsWPC, "wpc"); c != nil {
 			return d.canvas(s, c, st, w, h, depth)
 		}
+	case uriLockedCanvas:
+		if c := data.Child(uriLockedCanvas, "lockedCanvas"); c != nil {
+			return d.lockedCanvas(s, c, st, w, h, depth)
+		}
 	case uriChart:
 		if n := d.chart(s, data.Child(ooxml.NSChart, "chart"), st, w, h, alt, false); n != nil {
 			return n

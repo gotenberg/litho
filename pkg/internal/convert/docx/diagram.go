@@ -246,7 +246,7 @@ func (d *document) diagramShapeAt(sp *ooxml.Element, st *css.Style, b box4, rot 
 	if body == nil || body.Find(ooxml.NSA, "t") == nil {
 		return out
 	}
-	t := d.drawingText(body, sp.Child(nsDSP, "style").Child(ooxml.NSA, "fontRef"), tb[2], tb[3])
+	t := d.drawingText(body, sp.Child(nsDSP, "style").Child(ooxml.NSA, "fontRef"), tb[2], tb[3], 1)
 	setTransform(t.Style, trot, false, false)
 	return append(out, absolute(t, tb[0], tb[1]))
 }
@@ -278,8 +278,9 @@ func absolute(n *layout.Node, x, y float64) *layout.Node {
 // ST_TextAnchoringType). A run's colour is its own fill, else the colour
 // of the shape's font reference (20.1.4.2.10 fontRef), else black; its
 // face its latin typeface, else the theme font fontRef names, else the
-// theme's minor font.
-func (d *document) drawingText(body, fontRef *ooxml.Element, w, h float64) *layout.Node {
+// theme's minor font. Its type and insets are scaled by zoom, the scale
+// of a group the body is drawn in, 1 for none.
+func (d *document) drawingText(body, fontRef *ooxml.Element, w, h, zoom float64) *layout.Node {
 	bodyPr := body.Child(ooxml.NSA, "bodyPr")
 	bs := d.blockStyle()
 	bs.Width, bs.Height = css.Pts(max(w, 1)), css.Pts(max(h, 1))
@@ -293,16 +294,16 @@ func (d *document) drawingText(body, fontRef *ooxml.Element, w, h float64) *layo
 		bs.JustifyContent = css.BoxFlexEnd
 	}
 	for side, v := range bodyInsets(bodyPr) {
-		bs.Padding[side] = css.Pts(v)
+		bs.Padding[side] = css.Pts(float64(v * zoom))
 	}
 	face := d.themeFace(attrOr(fontRef, "idx"))
 	color := css.Color{A: 1}
 	if c, ok := ooxml.SchemeColor(fontRef, d.theme); ok {
 		color = c
 	}
-	scale := 1.0
+	scale := zoom
 	if fs, ok := ooxml.Int(attrOr(bodyPr.Child(ooxml.NSA, "normAutofit"), "fontScale")); ok && fs > 0 {
-		scale = float64(min(fs, 100000)) / 100000
+		scale = float64(zoom*float64(min(fs, 100000))) / 100000
 	}
 	inner := d.blockStyle()
 	var paras []*layout.Node
