@@ -423,6 +423,23 @@ func excelPaper(v float64) float64 {
 	return math.Round(v/excelPixel) * excelPixel
 }
 
+// excelMargin returns a page margin of v points as Excel prints it: in
+// whole printer pixels, the nearest, so that rows filling the room the
+// margins leave to the pixel all print on the page. ECMA-376 Part 1,
+// 18.3.1.62 gives the margins in inches; the rounding is Excel's,
+// measured.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: three A4 sheets of Calibri 11 rows whose margins leave
+//     36 rows of 121 printer pixels and 7, 8 and 9 pixels more, the bottom
+//     margin written to a millionth of an inch, print 35, 36 and 36 rows
+//     a page in Excel for the web: 36 rows and the grid line's 8 pixels
+//     fill the second sheet's room exactly.
+func excelMargin(v float64) float64 {
+	return math.Round(v/excelPixel) * excelPixel
+}
+
 // planSheet returns how the sheet sh prints. The builder's context stops
 // it.
 func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
@@ -438,6 +455,9 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 	sp.width, sp.height = b.paper(sh)
 	for k, m := range sh.Page.Margin {
 		sp.margin[k] = min(max(m, 0), maxSide)
+		if b.doc.ExcelRules {
+			sp.margin[k] = excelMargin(sp.margin[k])
+		}
 	}
 	// Margins that leave no room shrink to leave one point.
 	if sp.margin[css.Left]+sp.margin[css.Right] >= sp.width-1 {

@@ -634,7 +634,9 @@ func TestConvert_ExcelHeaderPictures(t *testing.T) {
 		}
 	}
 	walk(pg.Content)
-	want := []typeset.Rect{{X: 40, Y: 21.6, Width: 100, Height: 40}, {X: pg.Width - 50 - 30, Y: 21.6, Width: 30, Height: 10}, {X: 40 + (pg.Width-90-80)/2, Y: pg.Height - 18 - 20, Width: 80, Height: 20}}
+	// The margins print in whole printer pixels ([excelMargin]).
+	l, r := excelMargin(40), excelMargin(50)
+	want := []typeset.Rect{{X: l, Y: 21.6, Width: 100, Height: 40}, {X: pg.Width - r - 30, Y: 21.6, Width: 30, Height: 10}, {X: l + (pg.Width-l-r-80)/2, Y: pg.Height - 18 - 20, Width: 80, Height: 20}}
 	if len(got) != len(want) {
 		t.Fatalf("pictures %+v, want %+v", got, want)
 	}

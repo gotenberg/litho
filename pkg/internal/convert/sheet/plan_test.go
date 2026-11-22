@@ -485,15 +485,20 @@ func TestPlan_ExcelRowsAPage(t *testing.T) {
 		scale int
 		// room is the paper's height less its margins, in printer pixels.
 		room float64
+		// hair is added to the bottom margin, in points.
+		hair float64
 		want int
 	}{
 		// 36 rows of 121 pixels take 4,356 of 4,361: the grid line's 8
 		// leave room for 35.
-		{"at 100%", 100, 4361, 35},
-		{"the grid line's room left", 100, 4364, 36},
+		{"at 100%", 100, 4361, 0, 35},
+		{"the grid line's room left", 100, 4364, 0, 36},
+		// A bottom margin written to a millionth of an inch prints in whole
+		// pixels: the room is still 4,364.
+		{"a margin a hair past the pixel", 100, 4364, 3e-5, 36},
 		// At 60% a row prints 73 pixels, 72.6 rounded: 77 take 5,621 of
 		// the 5,692 the grid line leaves, 78 would take 5,694.
-		{"at 60%", 60, 5700, 77},
+		{"at 60%", 60, 5700, 0, 77},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Sheet{Name: "S", DefaultColumnWidth: 50}
@@ -501,7 +506,7 @@ func TestPlan_ExcelRowsAPage(t *testing.T) {
 				sh.Rows = append(sh.Rows, Row{Index: r, Cells: []Cell{textCell(0, fmt.Sprint(r), nil)}})
 			}
 			doc := excelDoc(sh)
-			sh.Page = PageSetup{Width: 500, Height: 72 + tc.room*excelPixel, Margin: [4]float64{36, 36, 36, 36}, Scale: tc.scale}
+			sh.Page = PageSetup{Width: 500, Height: 72 + tc.room*excelPixel, Margin: [4]float64{36, 36, 36 + tc.hair, 36}, Scale: tc.scale}
 			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 			sp := b.planOf(t, 0, sh)
 			if got := sp.pages[0].rows.last - sp.pages[0].rows.first + 1; got != tc.want {
