@@ -18,7 +18,8 @@ import (
 // shape's text at the bottom of a rectangle whose style says so, the text
 // box's at its top left, in Liberation Serif at 12 points where no style
 // sets a font, and that a text box whose style fills nothing paints no
-// fill.
+// fill; each drawing holds the text it shows, which its Figure carries
+// (sheet.Drawing.Text).
 func TestRead_ShapeTextAndTextBoxes(t *testing.T) {
 	dir := filepath.Join("..", "..", "..", "..", "test", "integration", "testdata", "fonts", "liberation-2.1.5")
 	if _, err := os.Stat(dir); err != nil {
@@ -54,6 +55,9 @@ func TestRead_ShapeTextAndTextBoxes(t *testing.T) {
 		low  bool
 	}{{0, "Rect text", true, true}, {1, "Box text", false, false}} {
 		d := ds[tc.i]
+		if d.Text != tc.want {
+			t.Errorf("drawing %d holds the text %q, want %q", tc.i, d.Text, tc.want)
+		}
 		frags := d.Picture.Vector(context.Background(), typeset.Rect{Width: d.Width, Height: d.Height})
 		var got []string
 		var y, size float64

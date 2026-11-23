@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -307,6 +308,9 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				return false
 			}
 			d.Shape = !slices.ContainsFunc(leaves, func(l leaf) bool { return l.pic != nil })
+			if d.Shape {
+				d.Text = leavesText(leaves)
+			}
 			d.Picture = w.r.composite(leaves, d)
 			return d.Picture != nil
 		}
@@ -385,6 +389,25 @@ func generalLabelsFixed(c *chart.Chart) {
 // generalLabelFormat is the number format Excel prints the General values
 // of an Office 2016 chart's data labels in.
 const generalLabelFormat = "0.000000"
+
+// leavesText returns the text the shapes of leaves show, their
+// paragraphs in order ([sheet.Drawing.Text]).
+func leavesText(leaves []leaf) string {
+	var paras []string
+	for _, l := range leaves {
+		if l.text == nil {
+			continue
+		}
+		for _, p := range l.text.paras {
+			var sb strings.Builder
+			for _, r := range p.runs {
+				sb.WriteString(r.Text)
+			}
+			paras = append(paras, sb.String())
+		}
+	}
+	return sheet.ShownText(paras)
+}
 
 // hidden reports a shape its non-visual properties hide (ECMA-376 Part 1,
 // 20.1.2.2.8 cNvPr hidden).

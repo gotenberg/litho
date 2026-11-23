@@ -105,7 +105,8 @@ func TestRead_Drawings(t *testing.T) {
 // TestRead_ShapeText checks a text box's paragraphs drawn over its shape:
 // aligned, anchored and in its runs' sizes and colours, set by the
 // paragraph and its runs or by the text body's list style (see
-// [levelStyle]).
+// [levelStyle]); the drawing holds the text it shows, which its Figure
+// carries (sheet.Drawing.Text).
 func TestRead_ShapeText(t *testing.T) {
 	t.Parallel()
 	red := `<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`
@@ -134,6 +135,9 @@ func shapeTextCase(t *testing.T, body string) {
 	ds := doc.Sheets[0].Drawings
 	if len(ds) != 1 || ds[0].Picture == nil || ds[0].Picture.Vector == nil {
 		t.Fatalf("drawings %+v", ds)
+	}
+	if !ds[0].Shape || ds[0].Text != "Hi" {
+		t.Errorf("shape %v, text %q, want a shape showing \"Hi\"", ds[0].Shape, ds[0].Text)
 	}
 	frags := ds[0].Picture.Vector(context.Background(), typeset.Rect{Width: 200, Height: 100})
 	var texts []*typeset.Text

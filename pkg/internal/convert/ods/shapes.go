@@ -78,6 +78,9 @@ type shapeArt struct {
 	// picture marks the art of a turned picture, which is no shape
 	// ([sheet.Drawing.Shape]).
 	picture bool
+	// text is the text the shape shows ([sheet.Drawing.Text]), "" for
+	// none.
+	text string
 }
 
 // logicBox is a shape's unturned box: its corner (x, y) on the sheet, its
@@ -187,7 +190,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		m := typeset.Matrix{A: sx, D: sy, E: rect.X - float64(b.X*sx), F: rect.Y - float64(b.Y*sy)}
 		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
-	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Shape: !art.picture, Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
+	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Shape: !art.picture, Text: art.text, Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
 	end, resize := cellRef(el.A(odf.NSTable, "end-cell-address"))
 	switch {
 	case at == nil:
@@ -807,6 +810,7 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	}
 	sin, cos := detmath.Sincos(angle)
 	mx, my := (ax+bx)/2, (ay+by)/2
+	art.text = sheet.ShownText([]string{txt})
 	art.draw = func(ctx context.Context) []typeset.Fragment {
 		out := prev(ctx)
 		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: typeset.Color{A: 1}}}}, measureLineWidth, text.Options{Whitespace: text.Preserve})

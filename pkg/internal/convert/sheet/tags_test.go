@@ -6,6 +6,7 @@ import (
 	"image"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -293,6 +294,52 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 	}
 	if len(out.Outline) != 1 || out.Outline[0].Dest.Elem != figs[0] {
 		t.Errorf("outline %+v, want an entry naming the first Figure", out.Outline)
+	}
+}
+
+// TestConvert_ShapeTextIsFigure locks how an undescribed drawing of shapes
+// that shows text reads: its text is real content (ISO 14289-1, 7.1), so
+// the drawing is a Figure whose Alt repeats it (7.3) and not an artifact,
+// and the outline entry of a page that prints only it names that Figure
+// (ISO 14289-2, 8.8). A described one keeps its description.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx sc/tdf106197_import_upright.xlsx,
+//     sc/tdf137000_export_upright.xlsx, sc/tdf142881.xlsx, poi/xlsx
+//     spreadsheet/56514.xlsx, openxmlsdk/xlsx
+//     O14ISOStrict/Graphics/3DRotation-O12-XL-OartTextEffects.xlsx,
+//     libreoffice/ods sc/LargeAnchorOffset.ods,
+//     sc/measurelineHideColSave.ods, sc/tdf137081_RTL_page_anchored.ods:
+//     sheets whose only content is text in shapes or on dimension lines,
+//     drawn as artifacts, left their outline entry no element to name and
+//     failed ISO 14289-2, 8.8; as Figures they pass PDF/UA-1 and PDF/UA-2.
+func TestConvert_ShapeTextIsFigure(t *testing.T) {
+	box := &layout.Picture{Width: 2, Height: 2, Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		return []typeset.Fragment{&typeset.Path{Ops: rectOps(r.X, r.Y, r.Width, r.Height), Fill: &typeset.Fill{}}}
+	}}
+	sh := &Sheet{
+		Name: "S",
+		Drawings: []Drawing{
+			{From: Anchor{Row: 1, Column: 1}, Width: 40, Height: 20, Picture: box, Name: "note", Shape: true, Text: ShownText([]string{" my  styled", "text "})},
+			{From: Anchor{Row: 4, Column: 1}, Width: 40, Height: 20, Picture: box, Name: "described", Shape: true, Text: "shown", Alt: "A callout"},
+		},
+	}
+	out := convert(t, newDoc(sh), office.Options{})
+	var figs []*typeset.StructElem
+	for _, k := range out.Structure.Kids {
+		if k.Role == "Figure" {
+			figs = append(figs, k)
+		}
+	}
+	if len(figs) != 2 || figs[0].Alt != "my styled text" || figs[1].Alt != "A callout" {
+		t.Fatalf("figures %+v, want the shape's text and the description", figs)
+	}
+	if len(out.Outline) != 1 || out.Outline[0].Dest.Elem != figs[0] {
+		t.Errorf("outline %+v, want an entry naming the first Figure", out.Outline)
+	}
+	if long := ShownText([]string{strings.Repeat("é", office.MaxAltText)}); len(long) > office.MaxAltText || !utf8.ValidString(long) {
+		t.Errorf("ShownText of a long text is %d bytes, valid %v", len(long), utf8.ValidString(long))
 	}
 }
 

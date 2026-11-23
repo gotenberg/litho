@@ -5,8 +5,10 @@ import (
 	"context"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -264,7 +266,8 @@ func before(end, start, size float64) bool {
 // and a PDF/UA conversion reports. A drawing its source marks decorative,
 // and one of shapes alone its source does not describe, is an artifact
 // (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1), as the undescribed shapes
-// of a slide or a text document are.
+// of a slide or a text document are. An undescribed drawing of shapes
+// that shows text is a Figure carrying that text ([Drawing.Text]).
 //
 // With derived set, a chart its source does not describe takes the
 // description [chart.AltText] derives from its model, its title first,
@@ -274,8 +277,11 @@ func before(end, start, size float64) bool {
 // and adds the kind, the series, the categories and the axes. A picture
 // is never described so: a workbook gives a picture no caption.
 func figureOf(d *Drawing, derived bool, lang string) *typeset.StructElem {
-	if d.Decorative || (d.Shape && d.Alt == "") {
+	if d.Decorative || (d.Shape && d.Alt == "" && d.Text == "") {
 		return nil
+	}
+	if d.Shape && d.Alt == "" {
+		return &typeset.StructElem{Role: "Figure", Alt: d.Text}
 	}
 	if derived && d.Alt == "" && d.Chart != nil && !d.Formula {
 		return &typeset.StructElem{Role: "Figure", Alt: chart.AltText(d.Chart), Lang: chart.AltTextLang(lang)}
@@ -288,6 +294,31 @@ func figureOf(d *Drawing, derived bool, lang string) *typeset.StructElem {
 		return &typeset.StructElem{Role: "Formula", Alt: alt}
 	}
 	return &typeset.StructElem{Role: "Figure", Alt: alt}
+}
+
+// ShownText returns the text of the paragraphs paras as the Alt of a
+// drawing's Figure repeats it ([Drawing.Text]): its white space collapsed,
+// the paragraphs joined by a space, cut at a character to
+// [office.MaxAltText] bytes.
+func ShownText(paras []string) string {
+	var sb strings.Builder
+	for _, p := range paras {
+		for _, w := range strings.Fields(p) {
+			if sb.Len() > office.MaxAltText {
+				break
+			}
+			if sb.Len() > 0 {
+				sb.WriteByte(' ')
+			}
+			sb.WriteString(w)
+		}
+	}
+	out := sb.String()
+	for len(out) > office.MaxAltText {
+		_, size := utf8.DecodeLastRuneInString(out)
+		out = out[:len(out)-size]
+	}
+	return out
 }
 
 // adopt makes parent the structure element of the fragments frags paint,

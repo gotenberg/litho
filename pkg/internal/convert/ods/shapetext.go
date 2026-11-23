@@ -246,6 +246,19 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box typeset.Re
 	return out
 }
 
+// shown returns the text st shows ([sheet.Drawing.Text]).
+func (st *shapeText) shown() string {
+	paras := make([]string, 0, len(st.paras))
+	for _, p := range st.paras {
+		var sb strings.Builder
+		for _, r := range p.runs {
+			sb.WriteString(r.Text)
+		}
+		paras = append(paras, sb.String())
+	}
+	return sheet.ShownText(paras)
+}
+
 // withText returns art with the text st drawn over it in the shape's
 // unturned box, turned with the shape.
 func (r *reader) withText(art shapeArt, st *shapeText) shapeArt {
@@ -262,6 +275,7 @@ func (r *reader) withText(art shapeArt, st *shapeText) shapeArt {
 	m := lb.lin
 	m.E, m.F = lb.x, lb.y
 	art.logic = &nb
+	art.text = st.shown()
 	art.draw = func(ctx context.Context) []typeset.Fragment {
 		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: local(ctx, typeset.Rect{Width: nb.w, Height: nb.h})}}
 	}
