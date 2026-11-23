@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T17:30:47Z",
+  "captured_at": "2026-11-23T17:38:38Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -19000,8 +19000,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 152,
-          "mismatched": 18,
+          "matched": 155,
+          "mismatched": 15,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19107,7 +19107,7 @@
               "text_f1": 1
             },
             "sd-data/fit-to-size.fodp": {
-              "layout": 0.8302,
+              "layout": 0.833,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19371,7 +19371,7 @@
               "text_f1": 1
             },
             "sd/invalidAudio.odp": {
-              "layout": 0.9927,
+              "layout": 0.9928,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19595,7 +19595,7 @@
               "text_f1": 1
             },
             "sd/tdf100348_Fontwork2TextWarp.odp": {
-              "layout": 0.5332,
+              "layout": 0.5828,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19603,15 +19603,15 @@
               "text_f1": 1
             },
             "sd/tdf100348_FontworkBitmapFill.odp": {
-              "layout": 0.4552,
+              "layout": 0.9898,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/tdf100348_FontworkGradientGlow.odp": {
-              "layout": 0.6425,
+              "layout": 0.652,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19883,7 +19883,7 @@
               "text_f1": 1
             },
             "sd/tdf128985.odp": {
-              "layout": 0,
+              "layout": 0.9944,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19979,7 +19979,7 @@
               "text_f1": 1
             },
             "sd/tdf149311.odp": {
-              "layout": 0.6352,
+              "layout": 0.9977,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31469,8 +31469,8 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 156,
-          "mismatched": 39,
+          "matched": 161,
+          "mismatched": 34,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -32576,12 +32576,12 @@
               "text_f1": 1
             },
             "odfexport/tdf139126.odt": {
-              "layout": 0.9145,
+              "layout": 0.9771,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.48
+              "text_f1": 1
             },
             "odfexport/tdf140437.odt": {
               "layout": 0.9999,
@@ -32696,7 +32696,7 @@
               "text_f1": 0.625
             },
             "odfimport/bnc800714.fodt": {
-              "layout": 0.1111,
+              "layout": 0.4644,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32712,7 +32712,7 @@
               "text_f1": 1
             },
             "odfimport/chained-boxes-in-min-height-cells.fodt": {
-              "layout": 0,
+              "layout": 0.9993,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32761,7 +32761,7 @@
               "text_f1": 1
             },
             "odfimport/emptyParagraphLoosesFontHeight.fodt": {
-              "layout": 0.9082,
+              "layout": 0.9924,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32769,7 +32769,7 @@
               "text_f1": 1
             },
             "odfimport/empty_line_in_text_box.fodt": {
-              "layout": 0,
+              "layout": 0.9714,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32833,7 +32833,7 @@
               "text_f1": 1
             },
             "odfimport/fdo75872_aoo40.odt": {
-              "layout": 0.2938,
+              "layout": 0.976,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32841,7 +32841,7 @@
               "text_f1": 1
             },
             "odfimport/fdo75872_ooo33.odt": {
-              "layout": 0.6102,
+              "layout": 0.9804,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
