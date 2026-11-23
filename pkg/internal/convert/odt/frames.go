@@ -242,20 +242,17 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 	}
 	g.x, _ = odf.Length(c.A(odf.NSSVG, "x"))
 	g.y, _ = odf.Length(c.A(odf.NSSVG, "y"))
-	if c.Is(odf.NSDraw, "line") {
-		// A line states its ends, not its box (ODF 1.3 Part 3, 10.3.3,
-		// svg:x1 to svg:y2): its box spans them, placed as a frame is.
-		x1, _ := odf.Length(c.A(odf.NSSVG, "x1"))
-		y1, _ := odf.Length(c.A(odf.NSSVG, "y1"))
-		x2, _ := odf.Length(c.A(odf.NSSVG, "x2"))
-		y2, _ := odf.Length(c.A(odf.NSSVG, "y2"))
-		g.x, g.y = min(x1, x2), min(y1, y2)
-		g.w, g.h, g.hasW, g.hasH = math.Abs(x2-x1), math.Abs(y2-y1), true, true
-	}
 	g.props = b.styles.Resolve(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"), odf.GraphicProps)
 	g.wrap = g.props.Get("style:wrap")
 	g.hpos, g.hrel = g.props.Get("style:horizontal-pos"), g.props.Get("style:horizontal-rel")
 	g.vpos, g.vrel = g.props.Get("style:vertical-pos"), g.props.Get("style:vertical-rel")
+	if c.Is(odf.NSDraw, "line") {
+		// A line states its ends, not its box (ODF 1.3 Part 3, 10.3.3,
+		// svg:x1 to svg:y2): its box bounds what it draws, its stroke and
+		// its markers, placed as a frame is.
+		box := b.lineOf(c, g).box
+		g.x, g.y, g.w, g.h, g.hasW, g.hasH = box.X, box.Y, box.Width, box.Height, true, true
+	}
 	// LibreOffice writes a position against the page's top or bottom
 	// margin area, which ODF 1.3 does not name, as loext:vertical-rel
 	// beside a style:vertical-rel ODF 1.3 knows.
@@ -1281,7 +1278,7 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 }
 
 // shapeSVG returns an SVG drawing of a shape (ODF 1.3, Part 3, 10.3) in
-// its own box: rectangles, ellipses, circles, lines, polylines, polygons
+// its own box: rectangles, ellipses, circles, polylines, polygons
 // and paths with their viewBox; "" for a shape it does not draw (a custom
 // shape draws through [customShape]).
 func shapeSVG(c *odf.Element, g frameGeom) string {
@@ -1310,14 +1307,6 @@ func shapeSVG(c *odf.Element, g frameGeom) string {
 		body = fmt.Sprintf(`<rect x="0" y="0" width="%g" height="%g" rx="%g" %s/>`, w, h, r, paint)
 	case "ellipse", "circle":
 		body = fmt.Sprintf(`<ellipse cx="%g" cy="%g" rx="%g" ry="%g" %s/>`, w/2, h/2, w/2, h/2, paint)
-	case "line":
-		x1, _ := odf.Length(c.A(odf.NSSVG, "x1"))
-		y1, _ := odf.Length(c.A(odf.NSSVG, "y1"))
-		x2, _ := odf.Length(c.A(odf.NSSVG, "x2"))
-		y2, _ := odf.Length(c.A(odf.NSSVG, "y2"))
-		lw, lh := math.Max(math.Abs(x2-x1), 1), math.Max(math.Abs(y2-y1), 1)
-		return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%gpt" height="%gpt" viewBox="0 0 %g %g"><line x1="%g" y1="%g" x2="%g" y2="%g" stroke="%s" stroke-width="%g"/></svg>`,
-			lw, lh, lw, lh, x1-math.Min(x1, x2), y1-math.Min(y1, y2), x2-math.Min(x1, x2), y2-math.Min(y1, y2), stroke, sw)
 	case "path", "polyline", "polygon":
 		vb := c.A(odf.NSSVG, "viewBox")
 		if vb == "" {
@@ -1605,6 +1594,9 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 	if geom := basicGeometry(c); geom != nil {
 		return b.shapeNode(c, geometryPicture(geom, g))
 	}
+	if c.Is(odf.NSDraw, "line") {
+		return b.shapeNode(c, b.lineOf(c, g).picture())
+	}
 	src := shapeSVG(c, g)
 	if src == "" {
 		b.warnEach("shape-box", c.Name.Local, warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
@@ -1619,10 +1611,6 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 		return nil
 	}
 	pic := &layout.Picture{Width: math.Max(g.w, 1), Height: math.Max(g.h, 1), Vector: doc.Draw}
-	if c.Is(odf.NSDraw, "line") {
-		s := doc.Size()
-		pic.Width, pic.Height = s.Width, s.Height
-	}
 	return b.shapeNode(c, pic)
 }
 
