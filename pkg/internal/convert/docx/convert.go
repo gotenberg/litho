@@ -101,6 +101,11 @@ func (d *document) convert() (*typeset.Document, error) {
 			return nil, err
 		}
 	}
+	if d.sourceLang() == "" {
+		// A document whose styles state no language takes the one most
+		// of its runs state (layout.StatedLang).
+		d.stated = layout.StatedLang(tree)
+	}
 	// The tree is finished: its paragraphs and runs styled alike share
 	// one style.
 	layout.ShareStyles(d.ctx, tree, d.shared)
@@ -214,15 +219,27 @@ func (d *document) endnoteBlocks() []*layout.Node {
 }
 
 // lang returns the document's language: the default run language of its
-// styles, else its theme font language, else the caller's default.
+// styles, else its theme font language, else the language most of its
+// runs state once the document is built (d.stated), else the caller's
+// default.
 func (d *document) lang() string {
+	if l := d.sourceLang(); l != "" {
+		return l
+	}
+	if d.stated != "" {
+		return d.stated
+	}
+	return d.opts.DefaultLang
+}
+
+// sourceLang returns the language the document states for itself: the
+// default run language of its styles, else its theme font language; ""
+// for none.
+func (d *document) sourceLang() string {
 	if l := d.styles.defRun.lang; l != nil && *l != "" {
 		return *l
 	}
-	if d.settings.lang != "" {
-		return d.settings.lang
-	}
-	return d.opts.DefaultLang
+	return d.settings.lang
 }
 
 // assemble returns the document of the layout res: every page with its

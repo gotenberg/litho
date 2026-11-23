@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -89,7 +90,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	root, first := b.document(body)
 	if root.Lang == "" {
-		root.Lang = opts.DefaultLang
+		// A document whose default style states no language takes the one
+		// most of its text states (layout.StatedLang), else the caller's.
+		root.Lang = cmp.Or(layout.StatedLang(root), opts.DefaultLang)
 	}
 	if b.err != nil {
 		return nil, b.err

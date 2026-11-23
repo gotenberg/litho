@@ -57,6 +57,9 @@ type settings struct {
 // document is one conversion's state: the package, its resolved parts
 // and what the build collects.
 type document struct {
+	// stated is the language most of the document's runs state, taken when
+	// its styles state none ([document.lang]); set once the tree is built.
+	stated string
 	// ctx is the conversion's context: a document lives for the one
 	// [Convert] call that makes it.
 	ctx   context.Context

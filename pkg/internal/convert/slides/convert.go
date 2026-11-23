@@ -223,7 +223,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the presentation out: %w", text.ErrNoFonts)
 	}
-	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, statedLang(doc), opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
 	var shown []*Slide
 	for _, s := range doc.Slides {
 		if s != nil && (!s.Hidden || opts.HiddenSlides) {
