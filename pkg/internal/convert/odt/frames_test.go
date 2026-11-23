@@ -244,3 +244,23 @@ func TestBareFrame(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultFillFillsNoFrame locks that the default graphic style's
+// draw:fill fills no text frame whose own styles state none, while its
+// draw:fill-color serves the frames that fill (see [builder.bareFrame]).
+func TestDefaultFillFillsNoFrame(t *testing.T) {
+	yellow := typeset.Color{R: 1, G: 1, B: 0, A: 1}
+	styles := `<style:default-style style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#ffff00"/></style:default-style>` +
+		`<style:style style:name="Frame" style:family="graphic"/>`
+	for _, tc := range []struct {
+		parent string
+		want   bool
+	}{{` style:parent-style-name="Frame"`, false}, {"", true}} {
+		auto := `<style:style style:name="fr" style:family="graphic"` + tc.parent + `><style:graphic-properties style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+		body := `<text:p><draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="page" text:anchor-page-number="1" svg:x="3cm" svg:y="5cm" svg:width="4cm" svg:height="2cm"><draw:text-box><text:p>A</text:p></draw:text-box></draw:frame></text:p>`
+		got := pathColours(convertDoc(t, doc{styles: styles, contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0].Content)
+		if got[yellow] != tc.want {
+			t.Errorf("parent %q: yellow fill %v, want %v", tc.parent, got[yellow], tc.want)
+		}
+	}
+}

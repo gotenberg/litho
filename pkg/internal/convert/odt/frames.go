@@ -1312,7 +1312,8 @@ func cropped(pic *layout.Picture, clip string) *layout.Picture {
 // svg:stroke-color, else #3465a4, unless draw:stroke is none
 // ([bareOutline]), its fo:border never drawn. A frame
 // whose style has a parent, even one the document does not define, or
-// that names no style, keeps no fill and no outline of its own. ODF 1.3,
+// that names no style, keeps no fill and no outline of its own, and takes
+// no draw:fill from the default style. ODF 1.3,
 // Part 3, 20.142 and 20.148 give no default; the colours are Writer's.
 //
 // # Corpus evidence
@@ -1332,11 +1333,20 @@ func cropped(pic *layout.Picture, clip string) *layout.Picture {
 //     no outline, one of draw:fill solid and yellow fills yellow; frames
 //     of styles whose parent is Frame, a common style of no parent or a
 //     style the document does not define, and frames that name no
-//     style, print neither; one of fo:border red under a default style
+//     style, print neither, a default style of draw:fill solid and
+//     yellow included; one of fo:border red under a default style
 //     of draw:stroke none prints no line at all.
 func (b *builder) bareFrame(c *odf.Element, g frameGeom) frameGeom {
 	chain := b.styles.Chain(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"))
 	if len(chain) != 1 || !chain[0].Auto || chain[0].Parent != "" {
+		stated := false
+		for _, st := range chain {
+			stated = stated || st.Props(odf.GraphicProps).Has("draw:fill")
+		}
+		if !stated && g.props.Get("draw:fill") != "" {
+			// The default graphic style's draw:fill fills no text frame.
+			g.props = g.props.Over(odf.PropsOf(&odf.Element{Attr: []xml.Attr{{Name: xml.Name{Space: odf.NSDraw, Local: "fill"}, Value: ""}}}))
+		}
 		return g
 	}
 	var attrs []xml.Attr
