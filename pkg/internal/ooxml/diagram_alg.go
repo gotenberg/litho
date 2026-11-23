@@ -97,7 +97,9 @@ func (e *engine) layoutShape(a *DiagramAtom, s *DiagramShape, cons []DiagramCons
 	case "conn":
 		connAlg(a, s)
 	case "cycle":
-		cycle(a, s)
+		if !e.officeCycle(a, s) {
+			cycle(a, s)
+		}
 	case "hierChild", "hierRoot":
 		if !e.hierDone[s] && !e.hierTree(a, s, cons) {
 			hierarchy(a, s)
