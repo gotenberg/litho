@@ -30,6 +30,9 @@ func TestLineClamp_KeepsLines(t *testing.T) {
 		// The block an inline box split around a block leaves after it
 		// holds phantom line boxes alone, which make no clamp point (CSS
 		// Inline 3, 2.3).
+		// A line a forced break ends counts, empty as it is, and takes
+		// the mark when content follows (CSS Inline 3, 2.3).
+		{"forced break alone", doc(el(sty(clamp(2, auto)), txt(sty(), "aa"), br(sty()), br(sty()), txt(sty(), "bb"))), 100, []string{"aa", "…"}},
 		{"phantom lines make no clamp point", doc(el(sty(clamp(2, auto)), el(sty(display(css.Inline)), el(sty(ws), txt(sty(ws), "a\nb")), txt(sty(), " ")))), 100, []string{"a", "b"}},
 	}
 	for _, tt := range tests {

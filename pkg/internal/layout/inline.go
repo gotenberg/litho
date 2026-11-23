@@ -946,6 +946,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				top = s.belowWriter(top, l.h)
 				top = s.position(top, l.h-l.slack, forced)
 				s.cutSlack(l, top)
+				if p.forced && e.clampOverflows(top, l.h) {
+					return s.discard(d, p, y)
+				}
 				l.y = top
 				if first {
 					mc.commit(top)
@@ -954,6 +957,11 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				y = top + l.h
 				s.lines = append(s.lines, l)
 				room, under = 0, 0
+				if p.forced {
+					// A line ended by a forced break is no phantom line
+					// box (CSS Inline 3, 2.3): a line clamp counts it.
+					e.clampKeep(&clampLine{s: s, p: p, l: l})
+				}
 			}
 			y = s.clearBreak(p, y)
 			continue

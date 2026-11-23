@@ -177,6 +177,10 @@ func (e *engine) clampKeep(cl *clampLine) bool {
 // Overflow 4, 6.4).
 func (s *inlineState) remark(cl *clampLine, mark string) {
 	l := cl.l
+	if cl.p.p == nil || cl.p.p.Len() == 0 {
+		s.markEmpty(l, mark)
+		return
+	}
 	nl := s.marked(cl.p, cl.start, cl.end, l.x, l.w, cl.indent, mark, true)
 	if nl == nil {
 		return
@@ -198,6 +202,50 @@ func (s *inlineState) remark(cl *clampLine, mark string) {
 	}
 	l.items, l.frags, l.hangW = nl.items, nl.frags, nl.hangW
 	s.settle(l)
+}
+
+// markEmpty ends the empty line l, a forced break alone, with mark, at
+// the line's start edge.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints an
+//     ellipsis alone on the second line of a -webkit-line-clamp: 2 box
+//     holding aaa, a line break, a line break and more text.
+func (s *inlineState) markEmpty(l *lineBox, mark string) {
+	e := s.e
+	if mark == "" || e.fontSize(s.root.st) <= 0 {
+		return
+	}
+	dir := text.LeftToRight
+	if s.root.st.Direction == css.RTL {
+		dir = text.RightToLeft
+	}
+	mp, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: mark, Style: e.textStyle(s.root.st, s.root.lang)}}, text.ParagraphOptions{Direction: dir})
+	if err != nil {
+		e.shapeFailed(err, "line clamp's ellipsis", -1)
+		return
+	}
+	if mp.Len() == 0 {
+		return
+	}
+	ml := mp.Line(0, mp.Len(), false)
+	at := 0.0
+	if dir == text.RightToLeft {
+		at = l.w - ml.Width
+	}
+	for _, sp := range ml.Spans {
+		if sp.Text == nil {
+			continue
+		}
+		t := *sp.Text
+		l.items = append(l.items, &lineItem{
+			box: s.root, text: &t, x: at + sp.X, w: sp.Width,
+			baseline: l.baseline, ascent: sp.Ascent, descent: sp.Descent, gap: sp.LineGap,
+			ulPos: sp.UnderlinePosition, ulThick: sp.UnderlineThickness, stPos: sp.StrikeoutPosition, stThick: sp.StrikeoutThickness,
+			rtl: sp.RTL,
+		})
+	}
 }
 
 // overflowMark ends the line l of the characters [start, end) of p, which
