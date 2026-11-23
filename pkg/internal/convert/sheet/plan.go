@@ -579,10 +579,16 @@ func (sp *sheetPlan) lastHolding(ctx context.Context, a Range, rows, cols []band
 // (ScPrintFunc::CalcZoom): a bisection over whole percents, then for a
 // sheet fitted to a width alone 2% less when that saves a page down.
 // Under Excel's rules the width fitted holds the print titles beside the
-// columns of every page, the first one's too. ctx's error stops it.
+// columns of every page, the first one's too, and a manual break adds no
+// page to those the sheet asks for: Excel ignores manual breaks on a
+// sheet it fits to pages. ctx's error stops it.
 //
 // # Corpus evidence
 //
+//   - poi/xlsx: AverageTaxRates.xlsx fits its first sheet, of columns A
+//     to T with a manual break after K, to one page, which Excel prints
+//     on one page, its 11-point text at 7.8 points as on the sheets
+//     without a break.
 //   - probe, xlsx: sheets of A4 landscape fitted one page wide, columns A
 //     to O of 7,478 printer pixels in 6,168 of room (the grid line's 8
 //     out), print in Excel for the web at 82% (0.825), at 71% with A as
@@ -603,8 +609,10 @@ func (sp *sheetPlan) zoomFor(ctx context.Context, a Range) (int, error) {
 	if nW == 0 && nH == 0 {
 		return 100, nil
 	}
-	nW = max(nW, len(ps.ColumnBreaks)+1)
-	nH = max(nH, len(ps.RowBreaks)+1)
+	if !sp.g.doc.ExcelRules {
+		nW = max(nW, len(ps.ColumnBreaks)+1)
+		nH = max(nH, len(ps.RowBreaks)+1)
+	}
 	if ps.FitWidth == 0 {
 		nW = 0
 	}

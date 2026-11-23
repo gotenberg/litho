@@ -599,3 +599,29 @@ func TestPlan_ExcelFitWidth(t *testing.T) {
 		})
 	}
 }
+
+// TestPlan_ExcelFitIgnoresManualBreaks locks Excel's fit of a sheet with a
+// manual column break to one page: the sheet prints on one page at the
+// zoom it takes without the break.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: AverageTaxRates.xlsx fits its first sheet, with a manual
+//     break after column K, on one page.
+func TestPlan_ExcelFitIgnoresManualBreaks(t *testing.T) {
+	plan := func(breaks []int) *sheetPlan {
+		ps := a4()
+		ps.Scale, ps.FitWidth, ps.FitHeight = 0, 1, 0
+		ps.ColumnBreaks = breaks
+		sh := grid150(ps)
+		sh.Rows = sh.Rows[:20]
+		doc := newDoc(sh)
+		doc.ExcelRules = true
+		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+		return b.planOf(t, 0, doc.Sheets[0])
+	}
+	plain, broken := plan(nil), plan([]int{10})
+	if len(broken.pages) != 1 || broken.zoom != plain.zoom {
+		t.Errorf("with a break: %d pages at %v, want 1 at %v", len(broken.pages), broken.zoom, plain.zoom)
+	}
+}
