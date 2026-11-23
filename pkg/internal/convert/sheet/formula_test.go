@@ -64,6 +64,8 @@ func TestApplyFormulas(t *testing.T) {
 		{"AND(A1:B3)", Value{Kind: Bool, Number: 1}, ""},
 		{"AND(A1:A3,0)", Value{Kind: Bool}, ""},
 		{"OR(B1:B3)", Value{Kind: Error, Text: "#VALUE!"}, ""},
+		// ROW and COLUMN read the position of a one-cell reference.
+		{"ROW($T2)*100+COLUMN(C$1)", num(203), ""},
 	}
 	var formulas []string
 	for _, tt := range tests {

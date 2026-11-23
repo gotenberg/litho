@@ -52,6 +52,10 @@ type fval struct {
 	// format is the number format of the first cell a sum or a lone
 	// reference read, which Calc's result takes when its cell has none.
 	format string
+	// row and col are, for the value of a one-cell reference, the cell's
+	// row and column plus one, which ROW and COLUMN read; zero for any
+	// other value.
+	row, col int
 }
 
 // frange is a rectangle of cells of a sheet.
@@ -638,7 +642,9 @@ func (e *formulaEval) reference(s, r0, c0, r1, c1, depth int) fval {
 		return fval{v: Value{Kind: Error, Text: errRef}}
 	}
 	if r0 == r1 && c0 == c1 {
-		return e.cellValue(s, r0, c0, depth)
+		v := e.cellValue(s, r0, c0, depth)
+		v.row, v.col = r0+1, c0+1
+		return v
 	}
 	return fval{rng: &frange{sheet: s, rg: Range{FirstRow: min(r0, r1), FirstColumn: min(c0, c1), LastRow: max(r0, r1), LastColumn: max(c0, c1)}}}
 }
@@ -1162,10 +1168,16 @@ func (e *formulaEval) volatile(fn string, args int) (fval, bool) {
 // HOUR, MINUTE, SECOND and SWITCH, as Calc defines them; false for
 // another function or a wrong count of arguments.
 //
+// ROW and COLUMN of a reference read its first cell's position, a
+// one-cell reference's included (ECMA-376 Part 1, 18.17.7, ROW and
+// COLUMN).
+//
 // # Corpus evidence
 //
 //   - libreoffice/ods: sc/tdf130583.ods, SWITCH matches the number 1
 //     with the text "1".
+//   - poi/xlsx: NewStyleConditionalFormattings.xlsx fills the cells of the
+//     odd rows of T2:T17 in purple by the rule MOD(ROW($T2),2)=1.
 func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 	for _, a := range args {
 		if a.rng != nil && fn != "ROW" && fn != "COLUMN" {
@@ -1200,12 +1212,15 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 		}
 		r, c := p.row, p.col
 		if len(args) == 1 {
-			if args[0].rng == nil {
-				// A one-cell reference reads as its value: the
-				// position is not known.
+			switch a := args[0]; {
+			case a.rng != nil:
+				r, c = a.rng.rg.FirstRow, a.rng.rg.FirstColumn
+			case a.row > 0 && a.col > 0:
+				r, c = a.row-1, a.col-1
+			default:
+				// No reference: no position to read.
 				return fval{}, false
 			}
-			r, c = args[0].rng.rg.FirstRow, args[0].rng.rg.FirstColumn
 		}
 		if r < 0 || c < 0 {
 			return fval{}, false
