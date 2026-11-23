@@ -808,10 +808,12 @@ type treeSheets struct {
 	sheets []*dom.Node
 }
 
-// rootHints returns the presentational hints of the document: HTML's, and
-// on the root the color-scheme a <meta name=color-scheme> gives (HTML
-// Standard, 4.2.5.1, the page's supported color schemes; CSS Color
-// Adjustment 1, 2.1), which the root's own color-scheme overrides.
+// rootHints returns the presentational hints of the document: HTML's,
+// the background attribute's resolved against the document's base URL
+// ([css.BackgroundAttributeHint]), and on the root the color-scheme a
+// <meta name=color-scheme> gives (HTML Standard, 4.2.5.1, the page's
+// supported color schemes; CSS Color Adjustment 1, 2.1), which the root's
+// own color-scheme overrides.
 //
 // # Corpus evidence
 //
@@ -819,14 +821,18 @@ type treeSheets struct {
 //     <meta name=color-scheme content=dark> as one of :root {
 //     color-scheme: dark }.
 func rootHints(s *scan) func(*dom.Node) []css.Declaration {
-	if s.colorScheme == "" {
-		return css.HTMLHints
+	var scheme css.Declaration
+	if s.colorScheme != "" {
+		scheme = css.Hint("color-scheme", s.colorScheme)
 	}
-	hint := css.Hint("color-scheme", s.colorScheme)
+	base := s.resourceBase
 	return func(n *dom.Node) []css.Declaration {
 		h := css.HTMLHints(n)
-		if n == s.root {
-			h = append(h[:len(h):len(h)], hint)
+		if bg, ok := css.BackgroundAttributeHint(n, base); ok {
+			h = append(h[:len(h):len(h)], bg)
+		}
+		if n == s.root && s.colorScheme != "" {
+			h = append(h[:len(h):len(h)], scheme)
 		}
 		return h
 	}

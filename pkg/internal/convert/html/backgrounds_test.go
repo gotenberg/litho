@@ -1,6 +1,7 @@
 package html
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -96,6 +97,33 @@ func TestOmitBackgrounds_DropsEconomyElements(t *testing.T) {
 			if got := byID(t, p.root, id).Style.BackgroundColor.A > 0; got != want {
 				t.Errorf("omit %v: %s background kept %v, want %v", tt.omit, id, got, want)
 			}
+		}
+	}
+}
+
+// TestBackgroundAttribute_SetsTheImage checks the background attribute
+// (HTML Standard, 15.3.2 and 15.3.8): on body and on the table elements
+// its URL, stripped of white space and resolved against the document's
+// base URL, is the background image; an empty value and the attribute on
+// any other element set none, and a style sheet's background-image wins.
+func TestBackgroundAttribute_SetsTheImage(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<!DOCTYPE html><base href="img/"><style>#styled { background-image: url(s.png) }</style>
+<body id=body background="b.png"><table id=table background=" t.png "><tr id=tr background="r.png">
+<td id=td background="d.png">x<th id=empty background="">y<td id=styled background="d.png">z</table>
+<div id=div background="v.png">v</div></body>`, Options{})
+	dir, ok := strings.CutSuffix(byID(t, p.root, "styled").Style.BackgroundImage, "img/s.png")
+	if !ok {
+		t.Fatalf("#styled: background image %q", byID(t, p.root, "styled").Style.BackgroundImage)
+	}
+	for id, want := range map[string]string{
+		"body": "img/b.png", "table": "img/t.png", "tr": "img/r.png", "td": "img/d.png", "empty": "", "div": "",
+	} {
+		if want != "" {
+			want = dir + want
+		}
+		if got := byID(t, p.root, id).Style.BackgroundImage; got != want {
+			t.Errorf("#%s: background image %q, want %q", id, got, want)
 		}
 	}
 }

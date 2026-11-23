@@ -43,8 +43,9 @@ import (
 // The dir and hidden attributes are user agent stylesheet rules, as the
 // HTML Standard writes them, except dir=auto, whose direction comes from
 // the element's text: a direction hint. vlink and alink colour nothing, since
-// :visited and :active never match. The background attribute is not
-// covered.
+// :visited and :active never match. The background attribute, a URL,
+// is [BackgroundAttributeHint]'s: it resolves against the document's
+// base URL.
 func HTMLHints(n *html.Node) []Declaration {
 	if n != nil && n.Type == html.ElementNode && n.Namespace == "math" {
 		return mathHints(n)
@@ -300,6 +301,45 @@ func HTMLHints(n *html.Node) []Declaration {
 		}
 	}
 	return h.list
+}
+
+// BackgroundAttributeHint returns the presentational hint of the
+// background attribute of n, resolved against base: on body (HTML
+// Standard, 15.3.2) and on table, thead, tbody, tfoot, tr, td and th
+// (15.3.8), a value that is not empty sets background-image to the URL
+// it names; any other element, or an empty value, has none. The URL is
+// stripped of leading and trailing ASCII white space, as the URL parser
+// strips it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 tiles the image of a background attribute
+//     over the page from body, and behind a table, a row group, a row and
+//     a cell from each of them, a value padded with spaces included; it
+//     draws nothing for an empty value, for the attribute on a div, or
+//     for an image that does not load, where bgcolor still fills the
+//     cell.
+func BackgroundAttributeHint(n *html.Node, base string) (Declaration, bool) {
+	if n == nil || n.Type != html.ElementNode || n.Namespace != "" {
+		return Declaration{}, false
+	}
+	switch n.Data {
+	case "body", "table", "thead", "tbody", "tfoot", "tr", "td", "th":
+	default:
+		return Declaration{}, false
+	}
+	v, ok := attr(n, "background")
+	if !ok {
+		return Declaration{}, false
+	}
+	v = strings.Trim(v, "\t\n\f\r ")
+	if v == "" {
+		return Declaration{}, false
+	}
+	c := &declCtx{baseURL: base}
+	d := c.declare("background-image", []token{{typ: tURL, value: v}}, false)
+	d.warns = c.warns
+	return d, d.declares()
 }
 
 // htmlInteger parses an integer by the HTML Standard's rules for parsing
