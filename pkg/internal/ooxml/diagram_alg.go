@@ -922,6 +922,9 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 		} else if len(shrink) == 0 || shrink[k.Name] {
 			h = trunc(float64(h) * scaleH)
 		}
+		if !k.Group {
+			w, h = e.ownRatio(k, props, w, h, s, horizontal)
+		}
 		k.W, k.H = w, h
 		// Each kid sits across the direction where nodeVertAlign or
 		// nodeHorzAlign puts it, in the middle by default.
@@ -971,6 +974,38 @@ func spacerLength(cons []DiagramConstraint, props layoutProps, name, along strin
 		return 0, false
 	}
 	return 0, false
+}
+
+// ownRatio returns a linear kid's width and height once its own layout
+// node's constraint sets its length across the layout from its length
+// along it (21.4.2.6 constr for self: a chevron's h refType w fact 0.4),
+// unless the layout's constraints set that length by the kid's name; the
+// length is cut to the layout's box.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-chevron's chevron1 chevrons, h refType w
+//     fact 0.4, print 171.4 by 69.1 points in Office's page, in the middle
+//     of the 320-point frame; smartart-maxdepth's two print 252.7 by 101.5.
+func (e *engine) ownRatio(k *DiagramShape, props layoutProps, w, h int64, s *DiagramShape, horizontal bool) (int64, int64) {
+	from, to := "w", "h"
+	if !horizontal {
+		from, to = "h", "w"
+	}
+	if _, ok := props.get(k.Name, to); ok {
+		return w, h
+	}
+	own, _ := e.own(k.atom, k.pt)
+	for _, c := range own {
+		if (c.For != "self" && c.For != "none" && c.For != "") || c.ForName != "" || c.Type != to || c.RefType != from || c.RefForName != "" || !setsLength(c) || !numeric.Finite(c.Factor) {
+			continue
+		}
+		if horizontal {
+			return w, min(trunc(float64(float64(w)*c.Factor)), s.H)
+		}
+		return min(trunc(float64(float64(h)*c.Factor)), s.W), h
+	}
+	return w, h
 }
 
 // holdToBound holds the length an lte or gte constraint names to the bound it

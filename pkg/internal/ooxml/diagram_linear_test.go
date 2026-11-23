@@ -24,3 +24,16 @@ func TestDiagramLinearKeepsStatedSpacers(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramLinearOwnRatio states that a linear kid's own constraint sets
+// its height from its width once the layout has sized it (21.4.2.6 constr
+// for self), the kid sitting in the middle across.
+func TestDiagramLinearOwnRatio(t *testing.T) {
+	layout := `<dgm:alg type="lin"/><dgm:shape/>` + nodeList("chevron", `<dgm:constrLst><dgm:constr type="h" refType="w" op="equ" fact="0.4"/></dgm:constrLst>`)
+	d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(2000, 1000, nil))
+	want := []string{"background rect 0,0 2000x1000", "node chevron 0,300 1000x400", "node chevron 1000,300 1000x400"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}
