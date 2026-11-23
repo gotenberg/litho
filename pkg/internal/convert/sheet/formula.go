@@ -7,12 +7,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxFormulaLen caps the characters of a formula evaluated. Anti-DoS
@@ -89,6 +92,11 @@ type formulaEval struct {
 	err   error
 	// unsupported records the functions met that are not evaluated.
 	unsupported map[string]bool
+	// now is the moment NOW() and TODAY() read under Calc's rules, the
+	// conversion's print date; zero leaves them unevaluated.
+	now time.Time
+	// locale picks the formats of their results.
+	locale models.Locale
 }
 
 // newFormulaEval returns an evaluator over doc, which the formulas of its
@@ -970,6 +978,9 @@ func (b *builder) applyFormulas(doc *Document) (*Document, error) {
 		return doc, nil
 	}
 	e := newFormulaEval(b.ctx, doc)
+	if !doc.ExcelRules {
+		e.now, e.locale = b.opts.PrintDate, b.opts.Locale
+	}
 	out := *doc
 	out.Sheets = append([]*Sheet(nil), doc.Sheets...)
 	left := 0
@@ -1040,6 +1051,36 @@ func (b *builder) applyFormulas(doc *Document) (*Document, error) {
 	return &out, nil
 }
 
+// volatile returns what Calc's NOW() and TODAY() give as it loads a file,
+// which it computes again whatever result the file holds: the moment the
+// document prints, a serial number of days since 1899-12-30 with the
+// time of day as its fraction, NOW() in the locale's date and time
+// format and TODAY() in its date format when the cell sets none; false
+// with arguments or without a print date.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf126116.fods prints the year of its =TODAY(),
+//     saved in 2021, as the year its reference was printed;
+//     sc/cachedValue.ods prints its =NOW() and a reference to it as
+//     MM/DD/YY HH:MM AM/PM at the moment of printing.
+func (e *formulaEval) volatile(fn string, args int) (fval, bool) {
+	if args != 0 || e.now.IsZero() {
+		return fval{}, false
+	}
+	loc := e.locale
+	if numfmt.IsDefault(loc) {
+		loc = models.LocaleEnUS
+	}
+	y, m, d := e.now.Date()
+	days := float64(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Sub(nullDate) / (24 * time.Hour))
+	if fn == "TODAY" {
+		return fval{v: Value{Kind: Number, Number: days}, format: numfmt.Code(loc, numfmt.CodeDateDDMMYY)}, true
+	}
+	h, mi, sec := e.now.Clock()
+	return fval{v: Value{Kind: Number, Number: days + float64(h*3600+mi*60+sec)/86400}, format: numfmt.Code(loc, numfmt.CodeDateTime)}, true
+}
+
 // scalarFunction computes the functions of scalar arguments the
 // evaluator knows besides the aggregates: ROW and COLUMN of the cell or of
 // a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR, NOT,
@@ -1076,6 +1117,8 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 		return fval{v: Value{Kind: Bool}}, true
 	}
 	switch fn {
+	case "NOW", "TODAY":
+		return p.e.volatile(fn, len(args))
 	case "ROW", "COLUMN":
 		if len(args) > 1 {
 			return fval{}, false

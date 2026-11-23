@@ -3,6 +3,7 @@ package sheet
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -130,5 +131,49 @@ func TestFormulaRanges_StartAtTheirRow(t *testing.T) {
 	}
 	if e.steps > 10*n {
 		t.Errorf("the sums visited %d rows and cells, want at most %d", e.steps, 10*n)
+	}
+}
+
+// TestApplyFormulas_Volatile locks NOW() and TODAY() under Calc's rules:
+// the print date's moment and day, in the locale's date and time and date
+// formats, and a reference to NOW() taking its format; under Excel's
+// rules, and without a print date, they keep their stored results.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf126116.fods prints the year of its =TODAY()
+//     as the year it was printed; sc/cachedValue.ods prints =NOW() and
+//     =[.A1] as MM/DD/YY HH:MM AM/PM at the moment of printing.
+func TestApplyFormulas_Volatile(t *testing.T) {
+	at := time.Date(2026, 11, 12, 9, 37, 30, 0, time.UTC)
+	doc := formulaDoc("NOW()", "TODAY()", "A6", "NOW(1)")
+	out := newBuilder(context.Background(), doc, nil, office.Options{PrintDate: at}).formulasOf(t, doc)
+	row := out.Sheets[0].Rows[3]
+	want := []struct {
+		n      float64
+		format string
+	}{
+		{46338 + (9*3600+37*60+30)/86400.0, "MM/DD/YY HH:MM AM/PM"},
+		{46338, "MM/DD/YY"},
+		{46338 + (9*3600+37*60+30)/86400.0, "MM/DD/YY HH:MM AM/PM"},
+		{-1, ""},
+	}
+	for i, w := range want {
+		c := row.Cells[i]
+		format := ""
+		if c.Style != nil {
+			format = c.Style.Format
+		}
+		if c.Value.Kind != Number || !near(c.Value.Number, w.n, 1e-9) || format != w.format {
+			t.Errorf("cell %d = %+v format %q, want %v %q", i, c.Value, format, w.n, w.format)
+		}
+	}
+	for _, o := range []office.Options{{}, {PrintDate: at}} {
+		doc := formulaDoc("NOW()")
+		doc.ExcelRules = !o.PrintDate.IsZero()
+		out := newBuilder(context.Background(), doc, nil, o).formulasOf(t, doc)
+		if v := out.Sheets[0].Rows[3].Cells[0].Value; v.Number != -1 {
+			t.Errorf("excel %v: NOW() = %+v, want the stored -1", doc.ExcelRules, v)
+		}
 	}
 }
