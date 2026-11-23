@@ -139,14 +139,15 @@ func (m *matcher) infoOf(n *html.Node) *elemInfo {
 }
 
 // langOf returns the language of n: its lang or xml:lang attribute, or
-// its parent's, or the document's (HTML, 3.2.6.2).
+// its parent's, the host's for a top-level element of a shadow tree, or
+// the document's (HTML, 3.2.6.2).
 func (m *matcher) langOf(n *html.Node) string {
 	if i := m.infoOf(n); i.langDone {
 		return i.lang
 	}
 	var chain []*html.Node
 	inherited := m.docLang
-	for e := n; isElement(e); e = e.Parent {
+	for e := n; isElement(e); e = m.shadowIncludingParent(e) {
 		if i := m.infoOf(e); i.langDone {
 			inherited = i.lang
 			break
@@ -719,14 +720,15 @@ func (m *matcher) matchRel(s *complexSel, i int, n, anchor *html.Node) bool {
 
 // rtlOf reports whether the directionality of n is rtl (HTML, 3.2.6.4): its
 // dir attribute's, ltr or rtl, the direction of its first strong
-// character for auto, else its parent's; the root's is ltr.
+// character for auto, else its parent's, the host's for a top-level
+// element of a shadow tree; the root's is ltr.
 func (m *matcher) rtlOf(n *html.Node) bool {
 	if i := m.infoOf(n); i.dirDone {
 		return i.rtl
 	}
 	var chain []*html.Node
 	inherited := false
-	for e := n; isElement(e); e = e.Parent {
+	for e := n; isElement(e); e = m.shadowIncludingParent(e) {
 		if i := m.infoOf(e); i.dirDone {
 			inherited = i.rtl
 			break

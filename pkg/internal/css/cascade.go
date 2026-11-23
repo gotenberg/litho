@@ -819,7 +819,7 @@ func (cs *computeState) unitLang(n *html.Node) string {
 		if v, ok := attr(e, "lang"); ok {
 			return lower(strings.TrimSpace(v))
 		}
-		e = e.Parent
+		e = cs.m.shadowIncludingParent(e)
 	}
 	return cs.m.langOf(n)
 }

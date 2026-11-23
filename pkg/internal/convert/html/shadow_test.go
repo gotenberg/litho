@@ -226,3 +226,30 @@ func TestShadow_FragmentsNameTheDocumentTree(t *testing.T) {
 		t.Errorf("no warning for #s: %+v", doc.Warnings)
 	}
 }
+
+func TestShadow_LanguageAndDirectionFromTheHost(t *testing.T) {
+	t.Parallel()
+	// HTML Standard, 3.2.6.2 and 3.2.6.4: a top-level element of a shadow
+	// tree takes its language and directionality from the host.
+	src := `<!DOCTYPE html><body style="color: red"><div lang="fr" dir="rtl"><template shadowrootmode="open">` +
+		`<style>span:lang(fr) { color: blue } b:dir(rtl) { color: blue }</style><span>X</span><b>Y</b></template></div>`
+	doc := convertDoc(t, src, Options{})
+	for _, s := range []string{"X", "Y"} {
+		if c := textColor(t, doc.Pages[0], s); c != textBlue {
+			t.Errorf("%s: %v, want blue", s, c)
+		}
+	}
+}
+
+func TestShadow_CountersFollowTheFlatTree(t *testing.T) {
+	t.Parallel()
+	// CSS Lists 3, 4.5: counters are instantiated and read in the order
+	// of the box tree, which is the flat tree.
+	src := `<!DOCTYPE html><style>p { counter-increment: n } p::before { content: counter(n) "." }</style>` +
+		`<p>A</p><div><template shadowrootmode="open"><slot name="z"></slot><slot></slot></template><p>C</p><p slot="z">B</p></div>`
+	doc := convertDoc(t, src, Options{})
+	got := strings.ReplaceAll(pageText(doc.Pages[0]), " ", "")
+	if got != "1.A2.B3.C" {
+		t.Errorf("text %q, want 1.A2.B3.C", got)
+	}
+}
