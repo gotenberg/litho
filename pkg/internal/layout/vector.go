@@ -20,6 +20,16 @@ const typesetGroupDepth = maxGroupDepth + 4
 // page in a few hundred tiles.
 const maxVectorNodes = 200_000
 
+// pictureParent returns the structure element the picture of the replaced
+// box b hangs from: none, an artifact, for a picture its node marks
+// decorative (Node.Decorative), else the box's element.
+func pictureParent(b *box) *typeset.StructElem {
+	if b.node != nil && b.node.Decorative {
+		return nil
+	}
+	return b.elem
+}
+
 // pictureFrag returns the fragment that paints pic over r, its leaves
 // hanging from parent: an image for a raster picture, a group of the
 // vector picture's fragments for a vector one, nil when the vector draws

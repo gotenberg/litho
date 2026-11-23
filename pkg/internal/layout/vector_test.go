@@ -119,3 +119,36 @@ func TestVector_DeepGroupsLeftOut(t *testing.T) {
 		}
 	}
 }
+
+// TestPicture_DecorativeIsAnArtifact locks that a picture its node marks
+// decorative paints with no structure parent, an artifact (ISO 32000-1,
+// 14.8.2.2.2), where another hangs from its element.
+func TestPicture_DecorativeIsAnArtifact(t *testing.T) {
+	for _, decorative := range []bool{false, true} {
+		pic := &Node{Kind: Replaced, Style: sty(), Picture: vec(4, 2), Decorative: decorative}
+		res := run(t, doc(role("P", el(sty(), pic))), page(6, 4))
+		var parents []*typeset.StructElem
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch v := f.(type) {
+				case *typeset.Path:
+					if v.Fill != nil && v.Fill.Color.A > 0 {
+						parents = append(parents, v.Parent)
+					}
+				case *typeset.Group:
+					walk(v.Content)
+				}
+			}
+		}
+		walk(res.Pages[0].Content)
+		if len(parents) != 2 {
+			t.Fatalf("decorative %v: %d painted paths, want 2", decorative, len(parents))
+		}
+		for _, p := range parents {
+			if (p == nil) != decorative {
+				t.Errorf("decorative %v: a path hangs from %v", decorative, p)
+			}
+		}
+	}
+}

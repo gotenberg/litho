@@ -1451,7 +1451,7 @@ func (p *painter) replaced(b *box) {
 		img, r = p.e.uprightPicture(b, box)
 	} else {
 		r = objectRect(b.st, objectPicture(b.st, b.picture, b.w, b.h), box)
-		img = p.e.pictureFrag(b.picture, r, b.elem)
+		img = p.e.pictureFrag(b.picture, r, pictureParent(b))
 	}
 	if img == nil {
 		return

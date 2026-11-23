@@ -736,12 +736,52 @@ func TestPrepare_PictureFaults(t *testing.T) {
 	}
 }
 
-// TestPrepare_DerivedAltText holds the descriptions an image without alt
-// takes under Options.DerivedAltText: its aria-label, else the caption of
-// a figure it alone fills (HTML Standard, 4.8.4.4.11); an svg element its
-// aria-label, else its desc. An image beside other content, an image
-// marked decorative and one its markup describes take none, and without
-// the option no image takes one.
+// TestPrepare_ImageNames holds the name an image takes by default, its
+// author's own, as the accessible name computation gives it (Accessible
+// Name and Description Computation 1.2, 4.3.2; HTML-AAM 1.0, 4.1.2; SVG-AAM
+// 1.0, 5.1): the text aria-labelledby names, else aria-label, else alt,
+// else title; and the images its author hides, which are artifacts:
+// alt="" without an aria name, role presentation or none without one,
+// aria-hidden="true" whatever it says.
+//
+// # Corpus evidence
+//
+//   - litho/html figure-captions: an img with aria-label="Graphique des
+//     ventes" and no alt was a Figure without Alt, failing PDF/UA-1 and
+//     PDF/UA-2.
+func TestPrepare_ImageNames(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 4, 4)}}
+	src := `<p id=l1>Quarterly <b>sales</b></p><p id=l2>2026</p>` +
+		`<p><img id=by src=a.png aria-labelledby="l1 missing l2" aria-label="label" alt="alt">` +
+		`<img id=label src=a.png aria-label=" A  label " alt="alt" title="t">` +
+		`<img id=alt src=a.png alt="Alt" title="t"><img id=title src=a.png title="T">` +
+		`<img id=empty src=a.png alt=""><img id=emptylabelled src=a.png alt="" aria-label="Named">` +
+		`<img id=pres src=a.png role="presentation" alt="x"><img id=none src=a.png role="none foo">` +
+		`<img id=hidden src=a.png aria-hidden="true" aria-label="Hidden"><img id=bare src=a.png>` +
+		`<input id=button type=image src=a.png alt="Send"></p>` +
+		`<svg id=svgtitle width=10 height=10><title>Square</title><rect width=10 height=10/></svg>` +
+		`<svg id=svglabel aria-label="Labelled" width=10 height=10><title>t</title></svg>` +
+		`<svg id=svghidden aria-hidden="true" width=10 height=10><title>t</title></svg>`
+	p := prep(t, src, Options{Resources: fsys})
+	for id, want := range map[string]struct{ role, alt string }{
+		"by": {"Figure", "Quarterly sales 2026"}, "label": {"Figure", "A label"}, "alt": {"Figure", "Alt"},
+		"title": {"Figure", "T"}, "empty": {"", ""}, "emptylabelled": {"Figure", "Named"}, "pres": {"", ""},
+		"none": {"", ""}, "hidden": {"", ""}, "bare": {"Figure", ""}, "button": {"Figure", "Send"},
+		"svgtitle": {"Figure", "Square"}, "svglabel": {"Figure", "Labelled"}, "svghidden": {"", ""},
+	} {
+		if n := byID(t, p.root, id); n.Role != want.role || n.Alt != want.alt || n.Decorative != (want.role == "") {
+			t.Errorf("%s: role %q alt %q decorative %v, want %q %q", id, n.Role, n.Alt, n.Decorative, want.role, want.alt)
+		}
+	}
+}
+
+// TestPrepare_DerivedAltText holds the descriptions an image its author
+// names nowhere takes under Options.DerivedAltText: the caption of a
+// figure it alone fills (HTML Standard, 4.8.4.4.11); an svg element its
+// desc. An image beside other content and one marked decorative take
+// none; an image's own name, its aria-label among them, it takes with or
+// without the option.
 func TestPrepare_DerivedAltText(t *testing.T) {
 	t.Parallel()
 	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 4, 4)}}
@@ -764,7 +804,7 @@ func TestPrepare_DerivedAltText(t *testing.T) {
 		if got := byID(t, on.root, id).Alt; got != alt {
 			t.Errorf("%s: alt %q, want %q", id, got, alt)
 		}
-		offWant := map[string]string{"described": "Own", "titled": "Title"}[id]
+		offWant := map[string]string{"described": "Own", "titled": "Title", "labelled": "A label", "svglabel": "Labelled"}[id]
 		if got := byID(t, off.root, id).Alt; got != offWant {
 			t.Errorf("%s without the option: alt %q, want %q", id, got, offWant)
 		}

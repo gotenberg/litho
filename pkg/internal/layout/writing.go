@@ -392,7 +392,7 @@ func (e *engine) uprightPicture(b *box, box typeset.Rect) (typeset.Fragment, typ
 	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
 	page := typeset.Rect{X: cx - float64(box.Height/2), Y: cy - float64(box.Width/2), Width: box.Height, Height: box.Width}
 	r := objectRect(b.st, objectPicture(b.st, pic, page.Width, page.Height), page)
-	f := e.pictureFrag(pic, r, b.elem)
+	f := e.pictureFrag(pic, r, pictureParent(b))
 	if f == nil {
 		return nil, box
 	}

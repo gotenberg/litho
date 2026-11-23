@@ -368,9 +368,14 @@ func WithColorGlyphs(color bool) ConvertOption {
 //     doubt: a Word caption paragraph beside the paragraph that holds the
 //     picture alone, an OpenDocument caption in the frame that holds the
 //     picture alone, the caption of an HTML figure the image alone fills.
-//     An HTML image also takes its aria-label, and an inline SVG image its
-//     aria-label or its desc element. A spreadsheet or a presentation
-//     gives a picture no caption: its pictures take none.
+//     An inline SVG image also takes its desc element. A spreadsheet or a
+//     presentation gives a picture no caption: its pictures take none.
+//
+// An HTML image's own name is its description whatever this option says:
+// the text of the elements its aria-labelledby names, else its
+// aria-label, else its alt, else its title (an svg element's title), as
+// the accessible name computation gives it; alt="", role="presentation"
+// or "none", and aria-hidden="true" make it an artifact.
 //
 // It never invents a description: a picture without a caption, and a file
 // name or a name the application generates, give none, and such a figure

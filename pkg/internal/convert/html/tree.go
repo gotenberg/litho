@@ -107,6 +107,9 @@ type builder struct {
 	// ids are anchors set on elements over their id attributes, nil for
 	// none.
 	ids map[*dom.Node]string
+	// labelIDs maps the IDs of the document to their elements, built the
+	// first time an aria-labelledby is read ([builder.labelledBy]).
+	labelIDs map[string]*dom.Node
 	// gcpm holds the named strings and running elements (CSS GCPM 3, 2).
 	gcpm gcpmState
 	// targets holds the cross-references and the elements they read (CSS
@@ -696,16 +699,21 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 	if lang, ok := attr(n, "lang"); ok {
 		node.Lang = strings.TrimSpace(lang)
 	}
-	// An empty alt marks a decorative image, an artifact (HTML Standard,
-	// 4.8.4.4.12); any other is a Figure (ISO 32000-1, 14.8.4.5).
-	if !hasAlt || alt != "" {
-		node.Role = "Figure"
-		node.Alt = alt
-		if !hasAlt {
-			node.Alt, _ = attr(n, "title")
-			if node.Alt == "" && b.derivedAlt {
-				node.Alt = derivedImageAlt(n)
-			}
+	// An image is a Figure (ISO 32000-1, 14.8.4.5) named as the author
+	// names it; one its author hides, an empty alt among them (HTML
+	// Standard, 4.8.4.4.12), is an artifact.
+	name, decorative := b.imageName(n, func() (string, bool) {
+		if hasAlt {
+			return alt, strings.TrimSpace(alt) == ""
+		}
+		v, _ := attr(n, "title")
+		return v, false
+	})
+	node.Decorative = decorative
+	if !decorative {
+		node.Role, node.Alt = "Figure", name
+		if node.Alt == "" && b.derivedAlt {
+			node.Alt = derivedImageAlt(n)
 		}
 	}
 	return []*layout.Node{node}
@@ -1430,8 +1438,7 @@ func (b *builder) warnOnce(code warn.Code, effect warn.Effect, key, msg string) 
 const maxFigureName = 4096
 
 // derivedImageAlt returns what the document states of the img element n,
-// which has no alt attribute, apart from alt and title: its aria-label
-// (HTML-AAM 1.0, 4.1, the accessible name of img), else the caption of the
+// which its author names nowhere ([builder.imageName]): the caption of the
 // figure it alone fills, a figure whose first figcaption child holds text
 // and which holds, that figcaption aside, nothing but n, white space and
 // comments: the case in which the HTML Standard, 4.8.4.4.11 lets an image
@@ -1439,11 +1446,6 @@ const maxFigureName = 4096
 // neither. An image beside other content in its figure, or inside another
 // element of it, shares the caption with that content, and takes none.
 func derivedImageAlt(n *dom.Node) string {
-	if v, ok := attr(n, "aria-label"); ok {
-		if v = collapse(v); v != "" {
-			return bounded(v)
-		}
-	}
 	f := n.Parent
 	if f == nil || f.Type != dom.ElementNode || f.DataAtom != atom.Figure || f.Namespace != "" {
 		return ""

@@ -129,13 +129,17 @@ type Node struct {
 	Kind Kind
 	// Fieldset says which part of a fieldset element's boxes an Element
 	// is (HTML Standard, 15.3.13), FieldsetNone for none. See
-	// [FieldsetPart]. It and Generated, a byte each, sit in Kind's word,
-	// which keeps a Node in the allocator's size class.
+	// [FieldsetPart]. It, Generated and Decorative, a byte each, sit in
+	// Kind's word, which keeps a Node in the allocator's size class.
 	Fieldset FieldsetPart
 	// Generated reports the box of a ::before or ::after pseudo-element,
 	// whose originating element is the node it is a child of: its implicit
 	// anchor element (CSS Anchor Positioning 1, 2.3.1).
 	Generated bool
+	// Decorative marks a Replaced node whose picture carries no meaning
+	// for a reader, as its source says: it paints as an artifact (ISO
+	// 32000-1, 14.8.2.2.2), outside the structure tree.
+	Decorative bool
 	// Style is the node's computed style. It is set on every node: a Text or
 	// LineBreak node shares its parent's, a Replaced node carries its own
 	// (its width, display and float are its own). The engine reads it and
