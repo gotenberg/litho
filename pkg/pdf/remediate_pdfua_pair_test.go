@@ -94,7 +94,7 @@ func TestRemediatePDFAWithPDFUAConformsToBoth(t *testing.T) {
 			defer r.Close()
 			w := NewWriter(r)
 			defer w.Close()
-			report, err := w.RemediatePDFA(ctx, tc.pdfa, WithPDFUA(tc.pdfua), pairFonts)
+			report, err := w.RemediatePDFA(ctx, tc.pdfa, WithPDFUA(tc.pdfua), WithLanguage("en"), pairFonts)
 			if err != nil {
 				t.Fatalf("RemediatePDFA: %v", err)
 			}
@@ -286,7 +286,7 @@ func TestRemediateFacturXWithPDFUAConformsToBoth(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: compliantInvoiceXML(t), Level: models.FacturXEN16931}, WithPDFUA(models.PDFUA1), pairFonts)
+	report, err := w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: compliantInvoiceXML(t), Level: models.FacturXEN16931}, WithPDFUA(models.PDFUA1), WithLanguage("en"), pairFonts)
 	if err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestRepairFacturXWithPDFUA(t *testing.T) {
 		defer r.Close()
 		w := NewWriter(r)
 		defer w.Close()
-		report, err := w.RepairFacturX(ctx, WithPDFUA(models.PDFUA1))
+		report, err := w.RepairFacturX(ctx, WithPDFUA(models.PDFUA1), WithLanguage("en"))
 		if err != nil {
 			t.Fatalf("RepairFacturX: %v", err)
 		}

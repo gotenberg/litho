@@ -701,8 +701,15 @@ type remediateOpts struct {
 	pdfua models.PDFUAProfile
 }
 
-// WithLanguage sets the BCP 47 language tag for the catalog /Lang entry.
-// Defaults to "en" if not specified.
+// WithLanguage states the natural language of a document whose catalog
+// /Lang is missing or not a well-formed BCP 47 tag, such as "en-US": the
+// remediation writes it there. A document that states its language keeps
+// it. Without this option no language is written, since litho cannot tell
+// what a document that states none is written in: a PDF/UA remediation of
+// such a document lists ISO 14289-1, 7.2 (ISO 14289-2, 8.4.4 for PDF/UA-2)
+// in [models.RemediationReport.Residual] and its output does not conform,
+// and a malformed /Lang is removed, which PDF/A, requiring no language,
+// accepts.
 func WithLanguage(lang string) RemediateOption {
 	return func(o *remediateOpts) {
 		o.lang = lang
@@ -2437,7 +2444,7 @@ func (w *Writer) Sign(signer plugins.Signer, opts ...SignOption) {
 // to the Writer's logger, and the default page size [NewWriter] was given (see
 // [WithDefaultPageSize]) sizes a page the remediation gives a media box.
 func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
-	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: models.DefaultRegressionTolerance}
+	cfg := remediateOpts{preserveContent: true, tolerance: models.DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -2788,7 +2795,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg models.FacturXConfig,
 // document without an invoice [ErrNoInvoiceAttachment], before either runs.
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
-	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: models.DefaultRegressionTolerance}
+	rcfg := remediateOpts{preserveContent: true, tolerance: models.DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&rcfg)
 	}

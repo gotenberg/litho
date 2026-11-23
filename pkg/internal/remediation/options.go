@@ -7,8 +7,10 @@ import (
 
 // Options configures remediation behavior.
 type Options struct {
-	// Lang is the BCP 47 language tag for the catalog /Lang entry.
-	// Defaults to "en" if empty.
+	// Lang is the BCP 47 language tag the caller states for a document
+	// whose catalog /Lang is missing or invalid. Empty, no language is
+	// written: a missing one stays a residual of PDF/UA (ISO 14289-1,
+	// 7.2), and an invalid one is removed.
 	Lang string
 	// PreserveContent controls whether fixers may alter visible page content.
 	// When true (default), only structural/metadata fixes are applied.

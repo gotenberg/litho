@@ -74,13 +74,19 @@ func writesLanguageText(v compliance.Violation) bool {
 	return matchXMP(v) || matchAutoTag(v) || matchFigureAlt(v) || matchFormTooltip(v)
 }
 
-// fixCatalogLang repairs the document language. It adds a missing catalog /Lang,
-// replaces an invalid catalog /Lang with a valid tag, and strips invalid /Lang
-// entries from the StructTreeRoot and from structure elements, indirect and
-// inline. An element that loses its /Lang inherits its nearest valid ancestor's
-// language, ultimately the now-valid catalog /Lang, per ISO 32000-1:2008
-// §14.9.2. Validity is the BCP 47 / RFC 3066 form §14.9.2 requires, checked via
-// [compliance.IsValidLangTag] (reused, not re-derived).
+// fixCatalogLang repairs the document language. With a language the caller
+// stated ([Options.Lang]), it adds a missing catalog /Lang and replaces an
+// invalid one. Without one, it writes none: no processor can tell the
+// language of a document that states none, so a missing /Lang stays for
+// the residual (ISO 14289-1, 7.2; ISO 14289-2, 8.4.4), and an invalid one
+// is removed, which leaves a PDF/A file, which requires no language,
+// conforming (ISO 19005-1, 6.8.4; ISO 19005-2, 6.8.4). It also strips
+// invalid /Lang entries from the StructTreeRoot and from structure
+// elements, indirect and inline. An element that loses its /Lang inherits
+// its nearest valid ancestor's language, ultimately the catalog /Lang, per
+// ISO 32000-1:2008 §14.9.2. Validity is the BCP 47 / RFC 3066 form §14.9.2
+// requires, checked via [compliance.IsValidLangTag] (reused, not
+// re-derived).
 func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	// A document with no catalog reference cannot take a catalog /Lang. Skip,
 	// as fixXMP and fixXMPSchema do: an error here discards the repairs of
@@ -96,25 +102,29 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 
 	lang := opts.Lang
-	if lang == "" {
-		lang = "en"
-	}
-
 	var fixes []string
 
-	// Catalog /Lang: add when missing, replace when present but invalid.
+	// Catalog /Lang: add when missing, replace when present but invalid,
+	// with the caller's language; without one, remove an invalid one.
 	if langObj, present := catalogDict["Lang"]; !present {
-		newCatalog := make(ast.PdfDict, len(catalogDict)+1)
-		maps.Copy(newCatalog, catalogDict)
-		newCatalog["Lang"] = ast.PdfString(lang)
-		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
-		fixes = append(fixes, fmt.Sprintf("set catalog /Lang to %q", lang))
+		if lang != "" {
+			newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+			maps.Copy(newCatalog, catalogDict)
+			newCatalog["Lang"] = ast.PdfString(lang)
+			alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+			fixes = append(fixes, fmt.Sprintf("set catalog /Lang to %q", lang))
+		}
 	} else if !langTagValid(ctx, doc, langObj, requiresDeclaredLang(profile)) || (langUnknown(ctx, doc, langObj) && requiresDeclaredLang(profile)) {
 		newCatalog := make(ast.PdfDict, len(catalogDict))
 		maps.Copy(newCatalog, catalogDict)
-		newCatalog["Lang"] = ast.PdfString(lang)
+		if lang != "" {
+			newCatalog["Lang"] = ast.PdfString(lang)
+			fixes = append(fixes, fmt.Sprintf("replaced invalid catalog /Lang with %q", lang))
+		} else {
+			delete(newCatalog, "Lang")
+			fixes = append(fixes, "removed invalid catalog /Lang")
+		}
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
-		fixes = append(fixes, fmt.Sprintf("replaced invalid catalog /Lang with %q", lang))
 	}
 
 	// Structure tree: strip an invalid /Lang from the StructTreeRoot and any

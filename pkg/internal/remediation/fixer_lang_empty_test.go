@@ -61,15 +61,16 @@ func runLangFix(t *testing.T, profile string) *writer.ObjAllocator {
 	return alloc
 }
 
-// TestFixCatalogLangReplacesAnEmptyTagForPDFUA pins that an empty /Lang is
+// TestFixCatalogLangRemovesAnEmptyTagForPDFUA pins that an empty /Lang is
 // repaired under PDF/UA.
 //
 // ISO 32000-1, 14.9.2 lets the empty text string mean "the language is
 // unknown", so [compliance.IsValidLangTag] accepts it and the fixer did
 // nothing. PDF/UA requires the language to be identified (ISO 14289-1, 7.2 /
 // ISO 14289-2, 8.4.4), and litho and veraPDF both reported the empty catalog
-// /Lang that remediation then left in place.
-func TestFixCatalogLangReplacesAnEmptyTagForPDFUA(t *testing.T) {
+// /Lang that remediation then left in place. With no language stated it
+// is removed, so the residual names the missing one.
+func TestFixCatalogLangRemovesAnEmptyTagForPDFUA(t *testing.T) {
 	t.Parallel()
 
 	alloc := runLangFix(t, "PDF/UA-1")
@@ -78,8 +79,8 @@ func TestFixCatalogLangReplacesAnEmptyTagForPDFUA(t *testing.T) {
 	if !ok {
 		t.Fatalf("the catalog was not rewritten: %T", alloc.Pending()[1])
 	}
-	if lang, _ := catalog["Lang"].(ast.PdfString); string(lang) != "en" {
-		t.Errorf("catalog /Lang = %q, want %q", lang, "en")
+	if lang, has := catalog["Lang"]; has {
+		t.Errorf("catalog /Lang = %v, want none", lang)
 	}
 
 	// The structure element's empty tag is stripped so it inherits the
@@ -114,7 +115,8 @@ func TestFixCatalogLangKeepsAnEmptyTagForPDFA(t *testing.T) {
 }
 
 // TestFixCatalogLangStillReplacesAMalformedTag is the control for the case that
-// already worked: a tag that is not empty but is not a Language-Tag either.
+// already worked: a tag that is not empty but is not a Language-Tag either,
+// replaced with the language the caller states.
 func TestFixCatalogLangStillReplacesAMalformedTag(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +127,7 @@ func TestFixCatalogLangStillReplacesAMalformedTag(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
-	if _, err := fixCatalogLang(ctx, alloc, doc, Options{}, nil, "PDF/A-2a"); err != nil {
+	if _, err := fixCatalogLang(ctx, alloc, doc, Options{Lang: "en"}, nil, "PDF/A-2a"); err != nil {
 		t.Fatalf("fixCatalogLang: %v", err)
 	}
 	catalog, ok := alloc.Pending()[1].(ast.PdfDict)

@@ -9,24 +9,19 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-func TestFixCatalogLang_AddsDefaultEN(t *testing.T) {
+// TestFixCatalogLang_WritesNoLanguageNobodyStated pins that a missing
+// catalog /Lang stays missing when the caller states no language: no
+// processor can tell what a document that states none is written in, and
+// the residual reports it (ISO 14289-1, 7.2).
+func TestFixCatalogLang_WritesNoLanguageNobodyStated(t *testing.T) {
 	doc, alloc := newTestDoc(t, minimalCatalogPDF(""))
 
 	descs, err := fixCatalogLang(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1")
 	if err != nil {
 		t.Fatalf("fixCatalogLang: %v", err)
 	}
-	if len(descs) != 1 {
-		t.Fatalf("expected 1 description, got %v", descs)
-	}
-
-	newCatalog := pendingDict(t, alloc, 1)
-	lang, ok := newCatalog["Lang"].(ast.PdfString)
-	if !ok {
-		t.Fatalf("catalog /Lang: got %T, want PdfString", newCatalog["Lang"])
-	}
-	if string(lang) != "en" {
-		t.Errorf("/Lang: got %q, want %q", lang, "en")
+	if len(descs) != 0 || len(alloc.Pending()) != 0 {
+		t.Errorf("fixCatalogLang = %v with %d pending objects, want nothing written", descs, len(alloc.Pending()))
 	}
 }
 
@@ -64,7 +59,7 @@ func TestFixCatalogLang_SkipsIfPresent(t *testing.T) {
 func TestFixCatalogLang_ReplacesInvalidCatalogLang(t *testing.T) {
 	doc, alloc := newTestDoc(t, minimalCatalogPDF("/Lang (en US)"))
 
-	descs, err := fixCatalogLang(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1")
+	descs, err := fixCatalogLang(context.Background(), alloc, doc, Options{Lang: "en-GB"}, nil, "PDF/UA-1")
 	if err != nil {
 		t.Fatalf("fixCatalogLang: %v", err)
 	}
@@ -72,8 +67,26 @@ func TestFixCatalogLang_ReplacesInvalidCatalogLang(t *testing.T) {
 		t.Fatalf("expected 1 description, got %v", descs)
 	}
 	lang, ok := pendingDict(t, alloc, 1)["Lang"].(ast.PdfString)
-	if !ok || string(lang) != "en" {
-		t.Errorf("catalog /Lang: got %v, want %q", pendingDict(t, alloc, 1)["Lang"], "en")
+	if !ok || string(lang) != "en-GB" {
+		t.Errorf("catalog /Lang: got %v, want %q", pendingDict(t, alloc, 1)["Lang"], "en-GB")
+	}
+}
+
+// TestFixCatalogLang_RemovesInvalidCatalogLangNobodyReplaces pins that an
+// invalid catalog /Lang the caller states no replacement for is removed,
+// not replaced with a language nobody stated.
+func TestFixCatalogLang_RemovesInvalidCatalogLangNobodyReplaces(t *testing.T) {
+	doc, alloc := newTestDoc(t, minimalCatalogPDF("/Lang (en US)"))
+
+	descs, err := fixCatalogLang(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1")
+	if err != nil {
+		t.Fatalf("fixCatalogLang: %v", err)
+	}
+	if len(descs) != 1 {
+		t.Fatalf("expected 1 description, got %v", descs)
+	}
+	if lang, has := pendingDict(t, alloc, 1)["Lang"]; has {
+		t.Errorf("catalog /Lang = %v, want none", lang)
 	}
 }
 

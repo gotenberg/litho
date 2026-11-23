@@ -19,7 +19,7 @@ import (
 // dc:title is a language alternative with an x-default entry, which 7.2 test
 // 33 requires the catalog /Lang to determine. catalog-lang claimed the 7.2
 // findings alone, so it did not run, and only a second remediation round, run
-// on the first round's output, added the /Lang.
+// on the first round's output, added the /Lang the caller states.
 func TestRemediatePDFUA_CatalogLangHoldsAfterOneRound(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +40,7 @@ func TestRemediatePDFUA_CatalogLangHoldsAfterOneRound(t *testing.T) {
 		t.Fatalf("precondition: no violation runs xmp-metadata, so no packet is generated; violations = %v", before)
 	}
 
-	if _, err := RemediatePDFUA(ctx, doc, alloc, models.PDFUA1, Options{}); err != nil {
+	if _, err := RemediatePDFUA(ctx, doc, alloc, models.PDFUA1, Options{Lang: "en"}); err != nil {
 		t.Fatalf("RemediatePDFUA: %v", err)
 	}
 	out := rewriteAndReopen(t, doc, alloc)
