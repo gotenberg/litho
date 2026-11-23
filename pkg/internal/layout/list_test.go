@@ -342,6 +342,46 @@ func TestListItems_HoldLblAndLBody(t *testing.T) {
 	}
 }
 
+// TestListItems_HoldTheListsBlocks locks that an L holds items, nested
+// lists and a caption alone (ISO 14289-1, 7.2; ISO/TS 32005, Table 5): a
+// paragraph after an item, its later paragraph, joins that item's LBody,
+// and one before the first item, a list header, takes an LI of its own
+// with no Lbl.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt odfimport/annotation-formatting.odt: the paragraphs
+//     of a text:list-header hung from the L, which failed PDF/UA-1, 7.2,
+//     and ISO/TS 32005, L-P.
+func TestListItems_HoldTheListsBlocks(t *testing.T) {
+	in := inlineSty()
+	item := role("LI", el(sty(display(css.ListItem), func(s *css.Style) { s.ListStyleType = css.Decimal }), txt(in, "a")))
+	para := func(s string) *Node { return role("P", el(sty(), txt(in, s))) }
+	for name, tc := range map[string]struct {
+		root *Node
+		want string
+	}{
+		"an item's later paragraph": {
+			doc(role("L", el(sty(), item, para("b")))),
+			"Document[L[LI[Lbl# LBody[P# P#]]]]",
+		},
+		"a list header": {
+			doc(role("L", el(sty(), para("h"), item))),
+			"Document[L[LI[LBody[P#]] LI[Lbl# LBody#]]]",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, tc.root, page(200, 200))
+			if got := shape(res, res.Structure); got != tc.want {
+				t.Errorf("structure %s, want %s", got, tc.want)
+			}
+			if err := document(res).Validate(t.Context()); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
 // TestListItems_GroupDefinitions locks the structure of a definition list:
 // its terms (Lbl) and descriptions (LBody) group into one LI per run of
 // terms and the descriptions after them (ISO 32000-1, 14.8.4.3.3, Table

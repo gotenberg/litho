@@ -173,9 +173,14 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		role = ""
 	}
 	parent := ctx.elem
-	if (role == "Lbl" || role == "LBody") && parent != nil && parent.Role == "L" && ctx.structDepth+1 < maxStructDepth {
+	switch {
+	case parent == nil || parent.Role != "L" || role == "":
+	case (role == "Lbl" || role == "LBody") && ctx.structDepth+1 < maxStructDepth:
 		parent = listGroup(parent, role)
 		out.structDepth++
+	case !listKids[role] && ctx.structDepth+2 < maxStructDepth:
+		parent = itemBody(parent)
+		out.structDepth += 2
 	}
 	own := ctx.elem
 	if role != "" {
@@ -284,6 +289,34 @@ func listGroup(l *typeset.StructElem, role string) *typeset.StructElem {
 	li := &typeset.StructElem{Role: "LI"}
 	l.Kids = append(l.Kids, li)
 	return li
+}
+
+// listKids are the roles an L holds as its own kids: ISO 32000-1,
+// 14.8.4.3.3, Table 336 gives a list items, a caption and nested lists,
+// which ISO 14289-1, 7.2 and ISO 32005, Table 5 hold it to; a Lbl or a
+// LBody joins an item of its own ([listGroup]). Immutable lookup table.
+var listKids = map[string]bool{"L": true, "LI": true, "Caption": true, "Lbl": true, "LBody": true}
+
+// itemBody returns the LBody that an element of the list l other than
+// [listKids], a paragraph between items, hangs from: that of the list's
+// last LI, whose later paragraph it is, or the LBody of a new LI with no
+// Lbl when the list has no item yet, a list header (ODF 1.3, Part 3,
+// 5.3.3 text:list-header) or content an HTML list holds before its first
+// item. An LI always holds a LBody (ISO 32000-1, 14.8.4.3.3, Table 336).
+func itemBody(l *typeset.StructElem) *typeset.StructElem {
+	if k := len(l.Kids); k > 0 {
+		if last := l.Kids[k-1]; last.Role == "LI" {
+			if j := len(last.Kids); j > 0 && last.Kids[j-1].Role == "LBody" {
+				return last.Kids[j-1]
+			}
+			body := &typeset.StructElem{Role: "LBody"}
+			last.Kids = append(last.Kids, body)
+			return body
+		}
+	}
+	body := &typeset.StructElem{Role: "LBody"}
+	l.Kids = append(l.Kids, &typeset.StructElem{Role: "LI", Kids: []*typeset.StructElem{body}})
+	return body
 }
 
 // genChildren generates the boxes of children into the block container b,
