@@ -561,6 +561,13 @@ type TextBody struct {
 	// WarpFit scales the lines that follow a path of Warp to span it
 	// (21.1.2.1.1 bodyPr fromWordArt).
 	WarpFit bool
+	// WarpFill, when not nil, paints the glyphs Warp bends to an envelope
+	// with a fill fitted to the shape's box, a gradient, picture or
+	// pattern seen through them, and WarpLine, when not nil, strokes
+	// their outlines: Impress draws a Fontwork text as the shape's
+	// geometry, with the shape's area and line (ODF 1.3 Part 3, 19.224).
+	WarpFill *Fill
+	WarpLine *Line
 }
 
 // Anchor is the vertical placement of a text body (ECMA-376 Part 1,

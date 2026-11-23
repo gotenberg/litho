@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -57,5 +59,40 @@ func TestWarpText_ChargesTheWarpedOutlines(t *testing.T) {
 	}
 	if _, err := peakOf(t, warpDeck(3, &shape.TextWarp{Preset: "textWave1"}), plain+(warped-plain)/2); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("a budget between the plain and the warped peaks: error %v, want the budget's refusal", err)
+	}
+}
+
+// TestWarpText_PaintsTheShapesFillAndLine checks that glyphs warped to an
+// envelope show the body's WarpFill through their outlines, one clip a
+// glyph run, and are stroked by its WarpLine.
+func TestWarpText_PaintsTheShapesFillAndLine(t *testing.T) {
+	doc := warpDeck(1, &shape.TextWarp{Preset: "textWave1"})
+	body := doc.Slides[0].Shapes[0].Text
+	body.WarpFill = &Fill{Kind: FillGradient, Gradient: &Gradient{Stops: []Stop{{0, css.Color{A: 1}}, {1, css.Color{R: 0.55, G: 0.16, B: 0.12, A: 1}}}}}
+	body.WarpLine = &Line{Width: 2, Color: css.Color{R: 1, A: 1}}
+	out, err := Convert(context.Background(), doc, pinnedFonts(t), office.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clips, strokes := 0, 0
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Group:
+				if v.Clip != nil && len(v.Content) > 0 {
+					clips++
+				}
+				walk(v.Content)
+			case *typeset.Path:
+				if v.Stroke != nil && v.Stroke.Color.R == 1 {
+					strokes++
+				}
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if clips == 0 || strokes == 0 {
+		t.Errorf("%d clipped fills, %d red strokes; want both", clips, strokes)
 	}
 }

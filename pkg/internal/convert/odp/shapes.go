@@ -450,15 +450,20 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 // paths when its enhanced geometry eg is a Fontwork shape (ODF 1.3 Part
 // 3, 19.224 draw:text-path true): the text is warped between or along
 // the paths and the geometry itself is not drawn. Its glyphs take the
-// shape's solid fill, as LibreOffice paints Fontwork text with the
-// shape's area; the shape's line and other fills are left out, with a
-// warning. A draw:text-path-mode of normal draws the text as it is.
+// shape's area and line, as LibreOffice paints Fontwork text: a solid
+// fill is their colour, a gradient, bitmap or hatch is fitted to the
+// shape's box and seen through them, and the line strokes their
+// outlines. A draw:text-path-mode of normal draws the text as it is.
 //
 // # Corpus evidence
 //
 //   - libreoffice/odp sd/tdf100348_Fontwork2TextWarp.odp: LibreOffice
 //     stretches "Fontwork" between the two waves of its fontwork-wave
 //     shape and draws no wave.
+//   - libreoffice/odp sd/tdf100348_FontworkBitmapFill.odp: LibreOffice
+//     shows its stretched spectrum bitmap through the letters, outlined
+//     in the shape's 0.1 cm amber line; sd/tdf100348_FontworkGradientGlow
+//     shows its square black to mahogany gradient through them.
 func (r *reader) fontwork(eg *odf.Element, s *slides.Shape) {
 	if eg == nil || eg.A(odf.NSDraw, "text-path") != "true" || s.Geometry == nil || s.Geometry.Custom == nil {
 		return
@@ -476,7 +481,12 @@ func (r *reader) fontwork(eg *odf.Element, s *slides.Shape) {
 			}
 		}
 	} else if s.Fill.Kind != slides.FillNone {
-		r.warn("fontwork", warn.ContentUnsupported, warn.Approximated, "a Fontwork text's fill other than a colour is drawn in its text colour")
+		fill := s.Fill
+		s.Text.WarpFill = &fill
+	}
+	if s.Line.Color.A > 0 {
+		line := s.Line
+		s.Text.WarpLine = &line
 	}
 	s.Fill, s.Line = slides.Fill{}, slides.Line{}
 	s.Geometry = &shape.Geometry{Custom: &shape.Custom{}}

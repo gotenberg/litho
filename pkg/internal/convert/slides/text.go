@@ -391,7 +391,44 @@ func (b *builder) warpText(body *TextBody, box typeset.Rect, m typeset.Matrix, b
 		return nil, true
 	}
 	b.warped += cost
+	if body.WarpFill != nil || body.WarpLine != nil {
+		out = b.paintWarped(body, box, out, 0)
+	}
 	return out, true
+}
+
+// paintWarped returns the warped text frags with each glyph outline
+// filled by body.WarpFill, fitted to the shape's box, and stroked by
+// body.WarpLine; glyphs set on a path as text keep their colour.
+func (b *builder) paintWarped(body *TextBody, box typeset.Rect, frags []typeset.Fragment, depth int) []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(frags))
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *typeset.Path:
+			if v.Fill == nil || depth > maxGroupDepth {
+				out = append(out, v)
+				continue
+			}
+			if body.WarpFill != nil {
+				fill := b.fill(body.WarpFill, box, rectOps(box), shape.FillNorm)
+				out = append(out, &typeset.Group{Transform: typeset.Identity, Opacity: 1, Clip: &typeset.Path{Ops: v.Ops, Fill: &typeset.Fill{Rule: v.Fill.Rule}}, Content: fill})
+			} else {
+				out = append(out, v)
+			}
+			out = append(out, b.stroke(body.WarpLine, v.Ops)...)
+		case *typeset.Group:
+			if v.Transform != typeset.Identity {
+				out = append(out, v)
+				continue
+			}
+			g := *v
+			g.Content = b.paintWarped(body, box, v.Content, depth+1)
+			out = append(out, &g)
+		default:
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // jumpPrefix starts the target a run's jump to a slide carries through
