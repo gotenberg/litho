@@ -35,6 +35,9 @@ type matcher struct {
 	// has holds what each :has() found for each element it was tested
 	// on: the subtree it searches is searched once.
 	has map[hasProbe]bool
+	// quirks matches class and ID selectors ASCII case-insensitively, as
+	// a document in quirks mode asks (Selectors 4, 6.6 and 6.7).
+	quirks bool
 }
 
 // hasProbe names one :has() tested on one element.
@@ -43,8 +46,8 @@ type hasProbe struct {
 	n *html.Node
 }
 
-func newMatcher(docLang string, maxSteps int) *matcher {
-	return &matcher{info: map[*html.Node]*elemInfo{}, docLang: lower(docLang), maxSteps: maxSteps}
+func newMatcher(docLang string, maxSteps int, quirks bool) *matcher {
+	return &matcher{info: map[*html.Node]*elemInfo{}, docLang: lower(docLang), maxSteps: maxSteps, quirks: quirks}
 }
 
 // charge spends n steps, reporting false once the budget is gone.
@@ -223,7 +226,7 @@ func (m *matcher) compound(c *compound, n *html.Node) bool {
 		return false
 	}
 	for _, id := range c.ids {
-		if v, ok := attr(n, "id"); !ok || v != id {
+		if v, ok := attr(n, "id"); !ok || v != id && (!m.quirks || !eqFold(v, id)) {
 			return false
 		}
 	}
@@ -233,7 +236,7 @@ func (m *matcher) compound(c *compound, n *html.Node) bool {
 			return false
 		}
 		for _, want := range c.classes {
-			if !hasWord(v, want) {
+			if !hasWord(v, want, m.quirks) {
 				return false
 			}
 		}
@@ -643,8 +646,8 @@ func asciiFields(s string) iter.Seq[string] {
 }
 
 // hasWord reports whether the whitespace-separated list holds word,
-// without splitting it.
-func hasWord(list, word string) bool {
+// without splitting it, ASCII case-insensitively when fold is set.
+func hasWord(list, word string, fold bool) bool {
 	for len(list) > 0 {
 		i := 0
 		for i < len(list) && isASCIIWS(list[i]) {
@@ -654,7 +657,7 @@ func hasWord(list, word string) bool {
 		for j < len(list) && !isASCIIWS(list[j]) {
 			j++
 		}
-		if list[i:j] == word && j > i {
+		if j > i && (list[i:j] == word || fold && eqFold(list[i:j], word)) {
 			return true
 		}
 		list = list[j:]
@@ -690,7 +693,13 @@ func featureHash(kind byte, s string) uint64 {
 	h := uint64(fnvOffset64)
 	h = (h ^ uint64(kind)) * fnvPrime64
 	for i := 0; i < len(s); i++ {
-		h = (h ^ uint64(s[i])) * fnvPrime64
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			// ASCII lowercase, as an ID or a class of a document in quirks
+			// mode matches: the filter only rules candidates out.
+			c += 'a' - 'A'
+		}
+		h = (h ^ uint64(c)) * fnvPrime64
 	}
 	return h
 }

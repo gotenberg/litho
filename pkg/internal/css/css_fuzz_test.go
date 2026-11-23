@@ -85,7 +85,7 @@ func FuzzSelector(f *testing.F) {
 		if serr != nil {
 			return
 		}
-		m := newMatcher("en", 1<<20)
+		m := newMatcher("en", 1<<20, false)
 		var walk func(n *html.Node)
 		walk = func(n *html.Node) {
 			if n.Type == html.ElementNode {

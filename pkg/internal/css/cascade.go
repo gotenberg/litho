@@ -311,9 +311,12 @@ func (x *selIndex) add(ref selRef) {
 	case last.never || last.ns == nsUnknown:
 		// A selector that never matches needs no bucket.
 	case len(last.ids) > 0:
-		put(&x.byID, last.ids[0])
+		// IDs and classes are bucketed ASCII lowercase, which a document
+		// in quirks mode matches them in; the matcher compares them as the
+		// document's mode asks.
+		put(&x.byID, lower(last.ids[0]))
 	case len(last.classes) > 0:
-		put(&x.byClass, last.classes[0])
+		put(&x.byClass, lower(last.classes[0]))
 	case last.tag != "":
 		put(&x.byTag, last.tag)
 	default:
@@ -861,7 +864,7 @@ var computeOrder = func() []propID {
 // maxComputeSteps steps, and ctx's error when it is done.
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
-		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps)), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
+		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps), opts.Mode == Quirks), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}
@@ -1345,7 +1348,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		}
 	}
 	if id, ok := attr(n, "id"); ok {
-		test(r.byID[id])
+		test(r.byID[lower(id)])
 	}
 	if cl, ok := attr(n, "class"); ok {
 		// The classes seen are scanned while they are few and kept in a
@@ -1370,7 +1373,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 					}
 				}
 			}
-			test(r.byClass[c])
+			test(r.byClass[lower(c)])
 		}
 		cs.classes = seen[:0]
 	}

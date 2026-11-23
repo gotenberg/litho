@@ -31,7 +31,7 @@ func matching(t *testing.T, doc *html.Node, sel string) []string {
 	if err != nil {
 		t.Fatalf("%s: does not parse (%q)", sel, err.unsupported)
 	}
-	m := newMatcher("", maxComputeSteps)
+	m := newMatcher("", maxComputeSteps, false)
 	var out []string
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
@@ -113,7 +113,7 @@ func TestSelector_Matches(t *testing.T) {
 	if got := matching(t, doc, ":root"); got != nil {
 		t.Errorf(":root matched %v; the root has no id", got)
 	}
-	if html := byTag(doc, "html"); !newMatcher("", maxComputeSteps).anyMatches(mustSelectors(t, ":root"), html) {
+	if html := byTag(doc, "html"); !newMatcher("", maxComputeSteps, false).anyMatches(mustSelectors(t, ":root"), html) {
 		t.Errorf(":root does not match <html>")
 	}
 }
@@ -215,7 +215,7 @@ func TestMatcher_BudgetStopsBacktracking(t *testing.T) {
 	deep := strings.Repeat("<div>", 200) + strings.Repeat("</div>", 200)
 	doc := parseHTML(t, deep)
 	sel := mustSelectors(t, strings.Repeat("div ", 30)+"span")
-	m := newMatcher("", 1000)
+	m := newMatcher("", 1000, false)
 	var leaf *html.Node
 	for n := byTag(doc, "div"); n != nil; n = n.FirstChild {
 		if n.Type == html.ElementNode {
