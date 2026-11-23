@@ -315,6 +315,48 @@ func (r *chartReader) read(ch *Element) {
 		return
 	}
 	r.plotArea(ch, pa)
+	c.PlotLayout = r.placedPlot(ch, pa)
+}
+
+// placedPlot returns where the file places the plot area pa of the chart
+// ch, nil when its position is automatic. LibreOffice keeps a plot area
+// at the position and size the file states unless its style sets
+// chart:auto-position and chart:auto-size (ODF 1.3 Part 3, the chart
+// properties of those names; 11.4 svg:x, svg:y, svg:width and svg:height
+// on chart:plot-area): the chart:coordinate-region inside it, when
+// present, as the rectangle within the axes, else the plot area with its
+// axis labels.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: chart2/tdf151091.ods, moving-type.ods,
+//     tdf107097.ods, error_bar_properties.ods and sc/tdf141914.ods state
+//     neither switch and LibreOffice draws their plot areas where the
+//     file places them, tdf151091's under its legend; the 61 other
+//     charts of the ODF corpora set both.
+func (r *chartReader) placedPlot(ch, pa *Element) *chart.ManualLayout {
+	name := pa.A(NSChart, "style-name")
+	if r.boolProp(name, "auto-position", false) || r.boolProp(name, "auto-size", false) {
+		return nil
+	}
+	w, okW := Length(ch.A(NSSVG, "width"))
+	h, okH := Length(ch.A(NSSVG, "height"))
+	if !okW || !okH || !(w > 0) || !(h > 0) {
+		return nil
+	}
+	box, inner := pa, false
+	if cr := pa.Child(NSChart, "coordinate-region"); cr != nil {
+		box, inner = cr, true
+	}
+	x, okX := Length(box.A(NSSVG, "x"))
+	y, okY := Length(box.A(NSSVG, "y"))
+	bw, okBW := Length(box.A(NSSVG, "width"))
+	bh, okBH := Length(box.A(NSSVG, "height"))
+	if !okX || !okY || !okBW || !okBH || !(bw > 0) || !(bh > 0) {
+		return nil
+	}
+	clamp := func(v float64) float64 { return math.Max(0, math.Min(v, 1)) }
+	return &chart.ManualLayout{X: clamp(x / w), Y: clamp(y / h), Width: clamp(bw / w), Height: clamp(bh / h), Inner: inner}
 }
 
 // title reads a chart:title or chart:subtitle.

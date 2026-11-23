@@ -2,6 +2,7 @@ package odf
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -413,5 +414,28 @@ func TestChartFromDocument_NumericCategoriesTakeTheAxisFormat(t *testing.T) {
 	plain := strings.Replace(numeric, ` chart:style-name="xa"`, "", 1)
 	if v := readODFChart(t, plain).Groups[0].Series[0].Categories.Values[0]; v.Kind != chart.Text || v.Text != "41550" {
 		t.Errorf("category under an unformatted axis = %+v, want the cached text 41550", v)
+	}
+}
+
+// TestChartFromDocument_PlacedPlotArea keeps a plot area where the file
+// places it unless its style asks for an automatic position and size: the
+// coordinate region within the axes when the file holds one, else the
+// plot area with its labels.
+func TestChartFromDocument_PlacedPlotArea(t *testing.T) {
+	placed := func(styles, region string) string {
+		return strings.Replace(chartContent(styles, "bar", "", region+series),
+			`<chart:plot-area chart:style-name="pa">`, `<chart:plot-area chart:style-name="pa" svg:x="1.6cm" svg:y="0.9cm" svg:width="8cm" svg:height="4.5cm">`, 1)
+	}
+	l := readODFChart(t, placed("", "")).PlotLayout
+	if l == nil || l.Inner || math.Abs(l.X-0.1) > 1e-9 || math.Abs(l.Y-0.1) > 1e-9 || math.Abs(l.Width-0.5) > 1e-9 || math.Abs(l.Height-0.5) > 1e-9 {
+		t.Errorf("placed plot area = %+v, want 0.1, 0.1, 0.5 by 0.5 with its labels", l)
+	}
+	l = readODFChart(t, placed("", `<chart:coordinate-region svg:x="3.2cm" svg:y="1.8cm" svg:width="4cm" svg:height="2.25cm"/>`)).PlotLayout
+	if l == nil || !l.Inner || math.Abs(l.X-0.2) > 1e-9 || math.Abs(l.Width-0.25) > 1e-9 {
+		t.Errorf("coordinate region = %+v, want 0.2 by 0.25 within the axes", l)
+	}
+	auto := `<style:style style:name="pa" style:family="chart"><style:chart-properties chart:auto-position="true" chart:auto-size="true"/></style:style>`
+	if l := readODFChart(t, placed(auto, "")).PlotLayout; l != nil {
+		t.Errorf("an automatic plot area was placed at %+v", l)
 	}
 }
