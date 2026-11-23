@@ -301,7 +301,9 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 			}
 		}
 		for _, p := range sh.Sheet.properties {
-			if p.cond.matches(media, cache) && sh.Origin != UserAgent {
+			// An @property rule of a shadow tree registers nothing, as
+			// Chromium reads it ([propertyRule]).
+			if p.cond.matches(media, cache) && sh.Origin != UserAgent && sh.Scope == nil {
 				if r.registered == nil {
 					r.registered = map[string]*registration{}
 				}
@@ -1351,6 +1353,9 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
 	st := cs.computeStyle(&winners, &imp, vars, parentStyle, isRoot, authorStyledBits(&styled))
+	if len(customNames) > 0 {
+		vars = cs.absolutize(vars, customNames)
+	}
 	if reuse {
 		cs.remember(key, cands, st)
 	}

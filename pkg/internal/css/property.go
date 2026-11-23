@@ -1,6 +1,8 @@
 package css
 
 import (
+	"maps"
+	"strconv"
 	"strings"
 )
 
@@ -11,7 +13,14 @@ import (
 const maxSyntaxComponents = 32
 
 // propertyRule is an @property rule: the registration of a custom
-// property (CSS Properties and Values API 1, 3).
+// property (CSS Properties and Values API 1, 3). One in a shadow tree
+// registers nothing, in the tree or outside it, as Chromium reads it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints var(--s, fallback) with its
+//     fallback in a shadow tree whose style element registers --s with
+//     an initial value, and outside the tree.
 type propertyRule struct {
 	name string
 	reg  *registration
@@ -266,4 +275,95 @@ func computationallyIndependent(l []token) bool {
 		}
 	}
 	return true
+}
+
+// absolutize returns the custom properties vars of an element whose
+// declared names hold registered lengths with each such length computed
+// to pixels on the element (CSS Properties and Values API 1, 2.4: a
+// registered <length> computes to an absolute length, the length part of
+// a <length-percentage> too), so a child inherits the length the
+// element's own font and line sizes give it. The percentage of a
+// <length-percentage> stays, and so does every other type: a <color> of
+// currentcolor computes to itself.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 computes a registered <length> of 2em on
+//     a 10px element to 20px, which its 20px child takes, a <length>+ of
+//     1em 2em to 10px 20px, a <length-percentage> of calc(1em + 10%) to
+//     calc(10% + 10px), and keeps a <color> of currentcolor, which the
+//     child resolves to its own colour.
+func (cs *computeState) absolutize(vars map[string][]token, names []string) map[string][]token {
+	out, cloned := vars, false
+	for _, name := range names {
+		reg := cs.r.registered[name]
+		if reg == nil || !reg.takesLength() {
+			continue
+		}
+		v, ok := out[name]
+		if !ok {
+			continue
+		}
+		abs, changed := absoluteLengths(v, cs.sty.lc)
+		if !changed {
+			continue
+		}
+		if !cloned {
+			out, cloned = maps.Clone(vars), true
+		}
+		out[name] = abs
+	}
+	return out
+}
+
+// takesLength reports whether a registration's syntax accepts a <length>
+// or a <length-percentage>.
+func (r *registration) takesLength() bool {
+	for _, c := range r.comps {
+		if !c.ident && (c.name == "length" || c.name == "length-percentage") {
+			return true
+		}
+	}
+	return false
+}
+
+// absoluteLengths returns v with each top-level length or calculation of
+// lengths in pixels on the length context lc, a calc() mixing lengths and
+// a percentage as calc() of the percentage and the pixels; it reports
+// whether a token changed. Numbers, idents and calculations that are not
+// linear stay.
+func absoluteLengths(v []token, lc lenCtx) ([]token, bool) {
+	var out []token
+	for i, t := range v {
+		if t.typ != tDimension && t.typ != tFunction {
+			continue
+		}
+		l, ok := parseLength(t, allowPct|allowMixed)
+		if !ok || l.expr != nil && l.hasPct {
+			continue
+		}
+		var abs token
+		switch {
+		case !l.hasPct:
+			abs = pxToken(l.points(lc) / Pt)
+		case l.hasLen:
+			pct := token{typ: tPercentage, num: l.pct, repr: strconv.FormatFloat(l.pct, 'f', -1, 64)}
+			abs = token{typ: tFunction, value: "calc", children: []token{pct, {typ: tWhitespace}, {typ: tDelim, delim: '+'}, {typ: tWhitespace}, pxToken(l.points(lc) / Pt)}}
+		default:
+			continue
+		}
+		if out == nil {
+			out = append([]token(nil), v...)
+		}
+		out[i] = abs
+	}
+	if out == nil {
+		return v, false
+	}
+	return out, true
+}
+
+// pxToken is the dimension token of px pixels.
+func pxToken(px float64) token {
+	return token{typ: tDimension, num: px, repr: strconv.FormatFloat(px, 'f', -1, 64), value: "px"}
 }
