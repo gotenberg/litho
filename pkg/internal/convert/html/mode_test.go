@@ -90,3 +90,30 @@ func TestQuirksMode_UserAgentRules(t *testing.T) {
 		}
 	}
 }
+
+// TestQuirksMode_TablesTakeTheBodyColour gives a table of a document in
+// quirks mode the colour of the body, not its parent's (Quirks Mode
+// Standard, 3.12); color: inherit still inherits, and a document with an
+// HTML5 DOCTYPE inherits as usual.
+func TestQuirksMode_TablesTakeTheBodyColour(t *testing.T) {
+	const body = `<body text=blue><font color=red><table id=t><tr><td>x</td></tr></table>` +
+		`<table id=i style="color: inherit"><tr><td>x</td></tr></table></font></body>`
+	blue, red := css.Color{B: 1, A: 1}, css.Color{R: 1, A: 1}
+	for _, quirks := range []bool{true, false} {
+		src := body
+		if !quirks {
+			src = "<!DOCTYPE html>" + body
+		}
+		p := prep(t, src, Options{})
+		want := red
+		if quirks {
+			want = blue
+		}
+		if got := byID(t, p.root, "t").Style.Color; got != want {
+			t.Errorf("quirks %v: table colour %v, want %v", quirks, got, want)
+		}
+		if got := byID(t, p.root, "i").Style.Color; got != red {
+			t.Errorf("quirks %v: inheriting table colour %v", quirks, got)
+		}
+	}
+}

@@ -335,6 +335,9 @@ type styler struct {
 	lc     lenCtx
 	// root is the root element's style, nil while computing the root.
 	root *Style
+	// body is the style of the document's body element, nil before it is
+	// computed or when there is none.
+	body *Style
 	// prefersDark reports a dark preferred colour scheme, the medium's
 	// prefers-color-scheme (CSS Color Adjustment 1, 2.1).
 	prefersDark bool
@@ -826,15 +829,26 @@ func init() {
 		{pFontSize, propDef{name: "font-size", inherited: true, parse: parseFontSize, compute: computeFontSize, copyFrom: copyFontSize}},
 		{pColor, propDef{
 			name: "color", inherited: true,
-			parse: func(v []token, _ *declCtx) (any, bool) {
+			parse: func(v []token, c *declCtx) (any, bool) {
+				if k, ok := keyword(v); ok && k == "-internal-quirk-inherit" {
+					return quirkInherit{}, c.userAgent
+				}
 				t, ok := single(v)
 				if !ok {
 					return nil, false
 				}
-				c, ok := parseColor(t)
-				return c, ok
+				col, ok := parseColor(t)
+				return col, ok
 			},
 			compute: func(s *styler, st *Style, v any) {
+				if _, ok := v.(quirkInherit); ok {
+					if s.body == nil {
+						v = canvasText
+					} else {
+						st.Color = s.body.Color
+						return
+					}
+				}
 				if c, ok := v.(colorValue); ok {
 					// CSS Color 4, 4.4: currentColor on color itself
 					// is inherit.
@@ -1494,6 +1508,18 @@ func textAlignProp(def propDef) propDef {
 	}
 	return def
 }
+
+// quirkInherit is the color value of the table rule of ua-quirks.css,
+// -internal-quirk-inherit: the colour of the document's body element, the
+// initial colour when there is none (Quirks Mode Standard, 3.12), as
+// Chromium computes it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 computes the
+//     colour of a table inside font color=red, or a green div, as the
+//     body's text=blue in quirks mode, and keeps color: inherit.
+type quirkInherit struct{}
 
 // thCenter is the text-align value of the th rule of ua.css,
 // -internal-th-center: center when the parent's computed text-align is

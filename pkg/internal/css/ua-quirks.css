@@ -1,7 +1,8 @@
 /*
  * litho's user agent stylesheet for a document in quirks mode: the rules
  * the HTML Standard's Rendering section (15.3.3, 15.3.7, 15.3.8, 15.3.10,
- * 15.4.3) expects of such a document, after HTMLUserAgent's.
+ * 15.4.3) expects of such a document, after HTMLUserAgent's, and the
+ * colour a table takes from the body (Quirks Mode Standard, 3.12).
  *
  * Left out, as Chromium leaves it out on screen and in print: li {
  * list-style-position: inside } and its two list rules (15.3.7).
@@ -19,6 +20,7 @@ table {
   line-height: initial;
   white-space: initial;
   text-align: initial;
+  color: -internal-quirk-inherit;
 }
 
 input:not([type="image" i]),

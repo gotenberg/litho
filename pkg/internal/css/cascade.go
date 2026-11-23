@@ -689,7 +689,10 @@ type computeState struct {
 	spec   []uint32
 	elem   int
 	root   *Style
-	nodes  int
+	// body is the style of the document's body element (Quirks Mode
+	// Standard, 2.2), nil before it is computed or when there is none.
+	body  *Style
+	nodes int
 	// node is the element being cascaded, whose attributes attr()
 	// reads; a pseudo-element's is its originating element.
 	node *html.Node
@@ -961,6 +964,9 @@ func (cs *computeState) element(n, parent *html.Node) {
 	}
 	if parent == nil {
 		cs.root = st
+	}
+	if cs.body == nil && isBodyElement(n) {
+		cs.body = st
 	}
 	// A pseudo-element inherits from n, in n's language.
 	cs.parentLang = cs.lang
@@ -1424,7 +1430,7 @@ func (cs *computeState) computeStyle(winners *[numProps]any, imp *[numProps]bool
 func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *Style, isRoot bool) {
 	*st = *parent
 	s := &cs.sty
-	*s = styler{parent: parent, root: cs.root, prefersDark: cs.r.media.prefersDark()}
+	*s = styler{parent: parent, root: cs.root, body: cs.body, prefersDark: cs.r.media.prefersDark()}
 	rootFS := mediumFontSize
 	if cs.root != nil {
 		rootFS = cs.root.FontSize
