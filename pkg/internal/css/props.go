@@ -955,8 +955,11 @@ func init() {
 			"none": TransformNone, "capitalize": Capitalize, "uppercase": Uppercase, "lowercase": Lowercase,
 			"math-auto": MathAuto,
 		})},
-		{pLetterSpacing, dimProp("letter-spacing", true, func(s *Style) *Dimension { return &s.LetterSpacing }, 0, kwNormal, false)},
-		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, 0, kwNormal, false)},
+		// letter-spacing and word-spacing take a <length-percentage>, a
+		// percentage of the element's font size that stays a percentage
+		// in the computed value (CSS Text 4, letter-spacing and word-spacing).
+		{pLetterSpacing, dimProp("letter-spacing", true, func(s *Style) *Dimension { return &s.LetterSpacing }, allowPct|allowMixed, kwNormal, false)},
+		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, allowPct|allowMixed, kwNormal, false)},
 		{pWhiteSpace, whiteSpaceCollapseProp()},
 		{pWordBreak, enumProp("word-break", true, func(s *Style) *WordBreak { return &s.WordBreak }, map[string]WordBreak{
 			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": KeepAll, "manual": WordBreakManual,

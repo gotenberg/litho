@@ -521,3 +521,24 @@ func TestDisplay_FlowAlone(t *testing.T) {
 		t.Errorf("warnings: %v", w)
 	}
 }
+
+// TestSpacing_KeepsPercentages checks letter-spacing and word-spacing of a
+// <length-percentage> (CSS Text 4): a percentage, alone or in calc(),
+// computes to itself, so that an element inheriting it resolves it
+// against its own font size.
+func TestSpacing_KeepsPercentages(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><p id=p><span id=s>x</span></p></body>`, `#p { letter-spacing: 50%; word-spacing: calc(25% + 4px) } #s { font-size: 32px }`)
+	for _, id := range []string{"p", "s"} {
+		st := c.of(id)
+		if st.LetterSpacing.Kind != Percent || st.LetterSpacing.Value != 0.5 {
+			t.Errorf("#%s: letter-spacing %+v", id, st.LetterSpacing)
+		}
+		if st.WordSpacing.Kind != Calc || !near(st.WordSpacing.Resolve(st.FontSize), 0.25*st.FontSize+3) {
+			t.Errorf("#%s: word-spacing %+v", id, st.WordSpacing)
+		}
+	}
+	if w := c.c.Warnings(); len(w) != 0 {
+		t.Errorf("warnings: %v", w)
+	}
+}

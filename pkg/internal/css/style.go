@@ -1408,7 +1408,9 @@ type Style struct {
 	// Zoom is the effective zoom (CSS Viewport 1, 4), 0 standing for 1:
 	// read it with [Style.UsedZoom].
 	Zoom float64
-	// LetterSpacing and WordSpacing take Normal or Points.
+	// LetterSpacing and WordSpacing take Normal, Points, or Percent or
+	// Calc of the element's own font size, which [Dimension.Resolve]
+	// against FontSize gives.
 	LetterSpacing Dimension
 	WordSpacing   Dimension
 	WhiteSpace    WhiteSpace

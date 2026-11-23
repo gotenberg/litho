@@ -518,11 +518,13 @@ func (e *engine) familyLang(lang string) string {
 // it says otherwise (Compatibility Standard, 3.4.6.1).
 func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 	c, _ := colorOf(st.TextFill())
+	// A percentage of letter-spacing and word-spacing is one of the
+	// element's own font size (CSS Text 4, letter-spacing and word-spacing).
 	spacing := func(d css.Dimension) float64 {
-		if d.Kind != css.Points {
+		if d.Kind != css.Points && !d.HasPercent() {
 			return 0
 		}
-		return min(max(clamp(d.Value), -maxSpacing), maxSpacing)
+		return min(max(clamp(d.Resolve(st.FontSize)), -maxSpacing), maxSpacing)
 	}
 	size := e.fontSize(st)
 	if size <= 0 {

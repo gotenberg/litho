@@ -754,3 +754,32 @@ func TestVerticalAlign_TopAlignsTheSubtree(t *testing.T) {
 		}
 	}
 }
+
+// TestLetterSpacing_PercentOfFontSize checks a percentage of
+// letter-spacing and word-spacing, one of the element's own font size
+// (CSS Text 4), resolved on each element that inherits it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 spaces the letters of a 32px span inside
+//     a 16px paragraph of letter-spacing: 50% by 16px, and its words
+//     under word-spacing: 100% by 32px more than a space.
+func TestLetterSpacing_PercentOfFontSize(t *testing.T) {
+	t.Parallel()
+	ls := func(s *css.Style) { s.LetterSpacing = css.Dimension{Kind: css.Percent, Value: 0.2} }
+	big := func(s *css.Style) { s.FontSize *= 2; s.LetterSpacing = css.Dimension{Kind: css.Percent, Value: 0.2} }
+	res := run(t, doc(el(sty(ls), txt(sty(ls), "abc"))), page(100, 50))
+	small := texts(res, 1)[0].run
+	res = run(t, doc(el(sty(big), txt(sty(big), "abc"))), page(200, 50))
+	large := texts(res, 1)[0].run
+	if len(small.Glyphs) != 3 || len(large.Glyphs) != 3 {
+		t.Fatalf("glyphs %d and %d", len(small.Glyphs), len(large.Glyphs))
+	}
+	if a, b := small.Glyphs[2].X, large.Glyphs[2].X; !near(b, 2*a) {
+		t.Errorf("third glyph at %v and %v: the spacing does not follow the font size", a, b)
+	}
+	plain := run(t, doc(el(sty(), txt(sty(), "abc"))), page(100, 50))
+	if p := texts(plain, 1)[0].run.Glyphs[2].X; !(small.Glyphs[2].X > p) {
+		t.Errorf("third glyph at %v, unspaced %v", small.Glyphs[2].X, p)
+	}
+}
