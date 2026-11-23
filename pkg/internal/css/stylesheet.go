@@ -263,7 +263,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				sp.nested(ctx, it.block, base, &mediaCond{list: it.prelude, parent: cond}, depth)
 			}
 		case "supports":
-			if it.hasBlock && evalSupports(it.prelude, sp.ns) {
+			if it.hasBlock && evalSupports(it.prelude, sp.ns, sp.opts.Quirks) {
 				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "layer":
@@ -459,7 +459,7 @@ func (sp *sheetParser) nestedAtRule(ctx context.Context, parent []token, sels []
 	case "media":
 		sp.styleBlock(ctx, parent, sels, n.block, base, &mediaCond{list: n.prelude, parent: cond}, depth, c)
 	case "supports":
-		if evalSupports(n.prelude, sp.ns) {
+		if evalSupports(n.prelude, sp.ns, sp.opts.Quirks) {
 			sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
 		}
 	case "layer":
@@ -554,7 +554,7 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		rest = trimWS(rest[1:])
 	}
 	if len(rest) > 0 && rest[0].typ == tFunction && eqFold(rest[0].value, "supports") {
-		if !evalSupports(rest[0].children, sp.ns) {
+		if !evalSupports(rest[0].children, sp.ns, sp.opts.Quirks) {
 			return
 		}
 		rest = trimWS(rest[1:])

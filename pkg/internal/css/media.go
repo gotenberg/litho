@@ -527,10 +527,20 @@ func evalRange(in []token, m Media) tri {
 
 // evalSupports evaluates an @supports condition (CSS Conditional 3, 6;
 // CSS Conditional 4 and 5, 2): a declaration is supported when litho
-// parses it, and the functions as [supportsFunction] says.
-func evalSupports(l []token, ns *namespaces) bool {
+// parses it as the style sheet's declarations parse, the quirky lengths
+// and colours of a sheet of a document in quirks mode included when
+// quirks is set (CSS Values 4, Appendix C), and the functions as
+// [supportsFunction] says.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 applies the rules
+//     of @supports (width: 10), (color: ff0000) and (margin: 10 20) in a
+//     quirks mode document, and of @supports not (width: 10) in a
+//     no-quirks one; its CSS.supports() is false for all three in both.
+func evalSupports(l []token, ns *namespaces, quirks bool) bool {
 	v, ok := evalCondition(significant(l), func(t token) (tri, bool) {
-		v, ok := supportsLeaf(t, ns)
+		v, ok := supportsLeaf(t, ns, quirks)
 		return triOf(v), ok
 	})
 	return v == triTrue && ok
@@ -538,7 +548,7 @@ func evalSupports(l []token, ns *namespaces) bool {
 
 // supportsLeaf evaluates a <supports-in-parens> that is no nested
 // condition: false with false when it does not parse.
-func supportsLeaf(t token, ns *namespaces) (bool, bool) {
+func supportsLeaf(t token, ns *namespaces, quirks bool) (bool, bool) {
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tLParen:
 		it, ok := declaration(trimWS(t.children))
@@ -555,7 +565,7 @@ func supportsLeaf(t token, ns *namespaces) (bool, bool) {
 		if containsVar(it.value) {
 			return declarationValue(it.value), true
 		}
-		c := &declCtx{quiet: true}
+		c := &declCtx{quiet: true, quirks: quirks}
 		_, ok = c.expand(name, it.value)
 		return ok, true
 	case tFunction:

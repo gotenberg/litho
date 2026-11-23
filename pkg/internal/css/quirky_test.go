@@ -57,3 +57,25 @@ func TestQuirkyValues_ReadInQuirksMode(t *testing.T) {
 		}
 	}
 }
+
+// TestQuirkyValues_InSupports evaluates the declarations of @supports as
+// the sheet's own declarations parse: in a sheet of a document in quirks
+// mode a quirky length or colour is supported (CSS Values 4, Appendix C),
+// in any other it is not.
+func TestQuirkyValues_InSupports(t *testing.T) {
+	const author = `@supports (width: 10) { #a { color: green } }
+@supports (color: ff0000) { #b { color: green } }
+@supports not (margin: 10 20) { #c { color: green } }
+@supports (border: 4 solid) { #d { color: green } }`
+	const doc = `<div id=a></div><div id=b></div><div id=c></div><div id=d></div>`
+	green := rgb(0, 128, 0)
+	for _, mode := range []DocumentMode{Quirks, NoQuirks} {
+		c := computeQuirks(t, doc, author, mode)
+		quirks := mode == Quirks
+		for id, want := range map[string]bool{"a": quirks, "b": quirks, "c": !quirks, "d": false} {
+			if got := colorEq(c.of(id).Color, green); got != want {
+				t.Errorf("mode %d: #%s green %v, want %v", mode, id, got, want)
+			}
+		}
+	}
+}
