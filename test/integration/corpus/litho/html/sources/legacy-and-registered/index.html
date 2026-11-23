@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Members' newsletter, autumn issue</title>
+<style>
+@property --tw-shadow { syntax: "*"; inherits: false; initial-value: 0 0 #0000 }
+@property --tw-ring-shadow { syntax: "*"; inherits: false; initial-value: 0 0 #0000 }
+@property --tw-translate-x { syntax: "*"; inherits: false; initial-value: 0 }
+@property --tw-translate-y { syntax: "*"; inherits: false; initial-value: 0 }
+@property --tw-gradient-angle { syntax: "<angle>"; inherits: false; initial-value: 135deg }
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #1d4ed8 }
+@page { size: A4; margin: 15mm }
+body { margin: 0; font: 14px/1.45 "DejaVu Sans", sans-serif; color: #222 }
+h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: 4%; background: -webkit-linear-gradient(left, #0b3d91, #6a1b9a) text; color: transparent }
+.lede { margin: 0 0 12px; color: #555 }
+.masthead { -webkit-border-after: 3px double #0b3d91; -webkit-padding-after: 8px; -webkit-margin-after: 14px }
+.columns { -webkit-column-count: 2; -webkit-column-gap: 28px; -webkit-column-rule: 1px solid #bbb }
+.columns p { margin: 0 0 8px; -webkit-margin-start: 0 }
+.columns h2 { font-size: 16px; margin: 0 0 6px; -webkit-column-break-after: avoid }
+.note { -webkit-padding-start: 14px; -webkit-border-start: 4px solid #e0a800; -webkit-margin-before: 10px; background: #fff8e1 }
+.kanji { -webkit-text-emphasis: filled sesame #c62828; font-size: 16px }
+a.more { color: -webkit-link }
+.retina { display: none }
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) { .retina { display: block } .screen-only { display: none } }
+.cards { display: flex; gap: 16px; margin-top: 16px }
+.card { flex: 1; padding: 12px 14px; border-radius: 10px; background: #fff; --tw-shadow: 0 4px 10px rgb(0 0 0 / .25); box-shadow: var(--tw-ring-shadow), var(--tw-shadow) }
+.card.ring { --tw-ring-shadow: 0 0 0 3px var(--accent) }
+.card .tag { display: inline-block; --tw-translate-x: 6px; translate: var(--tw-translate-x) var(--tw-translate-y); padding: 2px 8px; border-radius: 4px; color: #fff; background-image: linear-gradient(var(--tw-gradient-angle), var(--accent), #9333ea) }
+.card .tag.green { --accent: #15803d }
+.spaced { word-spacing: 40%; letter-spacing: 2% }
+.legacy-btn { margin-top: 14px; padding: 8px 14px; color: #fff; -webkit-opacity: .9; background-image: -webkit-radial-gradient(30% 30%, circle cover, #42a5f5, #0d47a1); border-radius: 6px; display: flow; width: 180px }
+</style>
+</head>
+<body background="paper.png">
+<div class="masthead">
+<h1>Members' newsletter</h1>
+<p class="lede">Autumn issue, with the programme, the accounts and a word from the board.</p>
+</div>
+<div class="columns">
+<h2>From the board</h2>
+<p>The season opened with a full hall and a long queue at the door. We thank the volunteers who kept the evening running and the speakers who stayed late to answer every question.</p>
+<p>Next month we move to the old library on the square. Members keep their seats, and the reading room stays open on Thursdays.</p>
+<p class="note">Renewals are due by the end of the month. The fee is unchanged.</p>
+<h2>Programme</h2>
+<p>Three talks, a walk through the archive and the annual dinner. The full list is on the back page.</p>
+<p class="kanji">秋の講演会</p>
+<p>Read the <a class="more" href="#accounts">accounts</a> below before the general meeting.</p>
+</div>
+<p class="screen-only">This line prints on screens of one pixel a dot.</p>
+<p class="retina">This line prints at high resolution, on paper among others.</p>
+<table id="accounts" background="tile.png" bordercolor="#0b3d91" border="2" cellpadding="6" cellspacing="0" width="100%">
+<tr background="paper.png"><th align="left">Item</th><th align="right">Income</th><th align="right">Expenses</th></tr>
+<tr bgcolor="#ffffff"><td>Subscriptions</td><td align="right">4,820</td><td align="right"></td></tr>
+<tr bgcolor="#ffffff"><td>Hall hire</td><td align="right"></td><td align="right">1,250</td></tr>
+<tr bgcolor="#ffffff"><td>Printing</td><td align="right"></td><td align="right">380</td></tr>
+<tr><td background="tile.png"><b>Balance</b></td><td align="right" bgcolor="#e8f5e9"><b>3,190</b></td><td bgcolor="#e8f5e9"></td></tr>
+</table>
+<div class="cards">
+<div class="card"><span class="tag">Talks</span><p class="spaced">Three evenings in the old library, each followed by questions.</p></div>
+<div class="card ring"><span class="tag green">Walk</span><p class="spaced">A walk through the archive with the keeper, on the first Saturday.</p></div>
+</div>
+<div class="legacy-btn">Renew your membership</div>
+</body>
+</html>
