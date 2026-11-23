@@ -133,6 +133,8 @@ Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have m
 
 `paper-fit` keeps to A5, Letter and A3: its fitting is a scale the paper's width decides, which the smallest, the default and the largest paper bound. The margin sets, in inches, are those of `litho/docx` (`none`, all 0; `narrow`, sides 0.5, header and footer 0.25; `uneven`, top 1, right 0.25, bottom 0.75, left 0.5, header 0.5, footer 0.25), on A5, Letter, Excel's default, and A3. Excel keeps a zero margin: `libreoffice/xlsx`'s `sc/tdf145054`, with `left="0"`, prints its first column's text 1.29 points from the paper's edge in Excel's reference. The 20 workbooks `paper-grid-default-*` and `paper-grid-margins-*` need a Microsoft reference; the option workbooks borrow theirs.
 
+Every picture of a fixture is described (`descr`), so that a fixture fails no PDF/UA target (`targets`, `ua1`, `ua2` and the pairs) for a lack of its own: `charts_untitled` alone fails them, a Figure without a description being what it holds, and its twin `charts_untitled_derived` passes them.
+
 ## Accepted disagreements
 
 - `paper_sizes`: Excel's export prints a paper it lacks on Letter, turned as the sheet asks: the envelopes #10 and DL (codes 20 and 27), the Japanese postcard (43) and A6 (70). litho prints the paper the code names (ECMA-376 Part 1, 18.3.1.63). The seven other sheets agree, JIS B5 at code 13 among them.
