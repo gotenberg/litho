@@ -38,17 +38,24 @@ const (
 
 // understood lists the namespaces whose mc:Choice the reader takes
 // (ECMA-376 Part 3, 10.2): SpreadsheetML, DrawingML and its spreadsheet
-// drawing and picture vocabularies, the Office 2016 charts; any other
-// Choice takes its Fallback.
-var understood = []string{nsMain, ooxml.NSA, ooxml.NSR, nsXDR, ooxml.NSPic, nsChartEx1, nsChartEx2}
+// drawing and picture vocabularies, the first Office 2016 charts; any
+// other Choice takes its Fallback.
+var understood = []string{nsMain, ooxml.NSA, ooxml.NSR, nsXDR, ooxml.NSPic, nsChartEx1}
 
-// The namespaces an Office 2016 chart's mc:Choice requires (MS-ODRAWXML,
-// 2.24.3): the reader takes the Choice, to name the chart it leaves out,
-// rather than the Fallback's message shape.
-const (
-	nsChartEx1 = "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"
-	nsChartEx2 = "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex"
-)
+// nsChartEx1 is the namespace the mc:Choice of an Office 2016 chart of the
+// first kinds requires (MS-ODRAWXML, 2.24.3): waterfall, treemap,
+// sunburst, histogram, Pareto, box and whisker. The reader takes the
+// Choice. The Choice of a funnel requires the namespace of 2015/10/21, and
+// that of a region map another again: Excel prints their Fallback, the
+// shape that says the chart is not available, and so does the reader.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/funnel1.xlsx and chart2/color_funnel.xlsx,
+//     and the funnel of litho/xlsx charts_chartex, print the Fallback's
+//     framed message where the funnel would be; the six charts of
+//     charts_chartex that require 2015/9/8 print as charts.
+const nsChartEx1 = "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"
 
 // maxSheets caps the sheets of a workbook. Anti-DoS guard, not
 // spec-mandated: LibreOffice Calc holds at most 10,000 sheets.

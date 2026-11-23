@@ -157,13 +157,19 @@ func shapeTextCase(t *testing.T, body string) {
 	}
 }
 
+// TestDrawing_ChartEx checks that an Office 2016 chart of the first kinds
+// is read from its mc:Choice and that a funnel, whose Choice requires the
+// later namespace, prints its Fallback shape, as Excel prints both.
 func TestDrawing_ChartEx(t *testing.T) {
-	drawing := `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="254000" cy="127000"/>` +
-		`<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" Requires="cx2">` +
-		`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Funnel"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
-		`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" r:id="rIdX"/></a:graphicData></a:graphic></xdr:graphicFrame>` +
-		`</mc:Choice><mc:Fallback><xdr:sp macro=""><xdr:nvSpPr><xdr:cNvPr id="0" name=""/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr></xdr:sp></mc:Fallback></mc:AlternateContent>` +
-		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
+	drawingOf := func(prefix, ns string) string {
+		return `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="254000" cy="127000"/>` +
+			`<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:` + prefix + `="` + ns + `" Requires="` + prefix + `">` +
+			`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Funnel"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
+			`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" r:id="rIdX"/></a:graphicData></a:graphic></xdr:graphicFrame>` +
+			`</mc:Choice><mc:Fallback><xdr:sp macro=""><xdr:nvSpPr><xdr:cNvPr id="0" name=""/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr></xdr:sp></mc:Fallback></mc:AlternateContent>` +
+			`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
+	}
+	drawing := drawingOf("cx1", "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex")
 	chartEx := `<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:plotArea><cx:plotAreaRegion>` +
 		`<cx:series layoutId="funnel"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion></cx:plotArea></cx:chart></cx:chartSpace>`
 	parts := map[string]string{
@@ -178,8 +184,14 @@ func TestDrawing_ChartEx(t *testing.T) {
 	}}
 	doc, warnings := readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
 	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Chart == nil || ds[0].Picture != nil {
-		t.Errorf("drawings %+v, warnings %+v: want the Office 2016 chart read, as Calc draws it over the fallback shape", ds, warnings)
+		t.Errorf("drawings %+v, warnings %+v: want the Office 2016 chart read", ds, warnings)
 	}
+	parts["xl/drawings/drawing1.xml"] = drawingOf("cx2", "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex")
+	doc, _ = readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
+	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Chart != nil || ds[0].Picture == nil {
+		t.Errorf("drawings %+v: want the funnel's fallback shape", ds)
+	}
+	parts["xl/drawings/drawing1.xml"] = drawing
 	delete(parts, "xl/drawings/_rels/drawing1.xml.rels")
 	doc, _ = readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
 	if n := len(doc.Sheets[0].Drawings); n != 0 {
