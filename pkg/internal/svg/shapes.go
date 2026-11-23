@@ -23,7 +23,7 @@ const kappa = 0.5522847498307936
 func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 	lc := r.lc(st)
 	num := func(key string, a axis) float64 {
-		l, ok := parseLength(attrOf(n, key))
+		l, ok := parseLength(r.d.geometryOf(n, key))
 		if !ok {
 			return 0
 		}
@@ -38,8 +38,8 @@ func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 		}
 		// SVG 1.1, 9.2: an auto radius takes the other's value, and each
 		// is at most half its side.
-		rxl, rxok := parseLength(attrOf(n, "rx"))
-		ryl, ryok := parseLength(attrOf(n, "ry"))
+		rxl, rxok := parseLength(r.d.geometryOf(n, "rx"))
+		ryl, ryok := parseLength(r.d.geometryOf(n, "ry"))
 		rx, ry := 0.0, 0.0
 		if rxok && rxl.v >= 0 {
 			rx = rxl.resolve(lc, axisX)
@@ -72,8 +72,8 @@ func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 		rx, ry := num("rx", axisX), num("ry", axisY)
 		// SVG 2, 10.4: an auto radius takes the other's value, and a
 		// negative one is invalid, which leaves it auto.
-		rxl, rxok := parseLength(attrOf(n, "rx"))
-		ryl, ryok := parseLength(attrOf(n, "ry"))
+		rxl, rxok := parseLength(r.d.geometryOf(n, "rx"))
+		ryl, ryok := parseLength(r.d.geometryOf(n, "ry"))
 		rxok = rxok && rxl.v >= 0
 		ryok = ryok && ryl.v >= 0
 		switch {
@@ -109,7 +109,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 		}
 		return ops
 	case "path":
-		ops, ok := parsePath(attrOf(n, "d"))
+		ops, ok := parsePath(r.d.geometryOf(n, "d"))
 		if !ok {
 			if len(ops) >= maxPathSegments {
 				r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a path of more than %d segments was cut short", maxPathSegments))

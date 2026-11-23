@@ -29,8 +29,8 @@ func (r *renderer) image(n *html.Node, st *style, s sink) {
 		return
 	}
 	x, y := r.length(n, "x", st, axisX, 0), r.length(n, "y", st, axisY, 0)
-	wl, wok := parseLength(attrOf(n, "width"))
-	hl, hok := parseLength(attrOf(n, "height"))
+	wl, wok := parseLength(r.d.geometryOf(n, "width"))
+	hl, hok := parseLength(r.d.geometryOf(n, "height"))
 	w, h := pic.Width, pic.Height
 	switch {
 	case wok && hok:

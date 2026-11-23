@@ -58,7 +58,10 @@
 //   - Styling: presentation attributes (6.4), the style attribute and
 //     style elements, matched by the css package's selector engine, with
 //     specificity, !important and inheritance (6); units px, pt, pc, mm,
-//     cm, in, Q, em, ex, rem and percentages (7.10).
+//     cm, in, Q, em, ex, rem and percentages (7.10). The geometry
+//     properties cx, cy, r, rx, ry, x, y, width, height and d are read
+//     from the style sheets over their attributes (SVG 2, 6.7), calc()
+//     aside.
 //
 // # Not supported
 //

@@ -266,6 +266,10 @@ var svgProperties = map[string]bool{
 	"stop-opacity": true, "marker": true, "marker-start": true, "marker-mid": true, "marker-end": true,
 	"text-anchor": true, "flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
 	"vector-effect": true, "shape-rendering": true,
+	// The geometry properties (SVG 2, 6.7), and lighting-color, which only
+	// the lighting filter primitives read: package svg warns of those.
+	"cx": true, "cy": true, "r": true, "rx": true, "ry": true, "x": true, "y": true, "d": true,
+	"lighting-color": true,
 }
 
 // SVGProperty reports whether package svg, not the cascade of HTML

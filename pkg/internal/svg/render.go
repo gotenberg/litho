@@ -99,10 +99,10 @@ func (r *renderer) lc(st *style) lengthCtx {
 	return lengthCtx{fontSize: st.fontSize, vw: r.vw, vh: r.vh}
 }
 
-// length reads the length attribute key of n in user units, def when it
-// is absent or invalid.
+// length reads the length key of n in user units, its geometry property
+// or its attribute, def when it is absent or invalid.
 func (r *renderer) length(n *html.Node, key string, st *style, a axis, def float64) float64 {
-	l, ok := parseLength(attrOf(n, key))
+	l, ok := parseLength(r.d.geometryOf(n, key))
 	if !ok {
 		return def
 	}
