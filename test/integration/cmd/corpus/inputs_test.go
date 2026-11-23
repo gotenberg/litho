@@ -516,3 +516,100 @@ func TestFetchListsAgree(t *testing.T) {
 		t.Errorf("checked %d fetched lists, want the Office and PDF corpora", checked)
 	}
 }
+
+// TestImportedOptions_NamesListedFixturesAlone pins where a list corpus
+// keeps the options of its fetched documents: a directory a fixture under
+// options/, named by its ID with "/" written "__", read by the diff feature
+// as the document's expected text; a directory that names no listed
+// fixture fails the load of the corpus.
+func TestImportedOptions_NamesListedFixturesAlone(t *testing.T) {
+	t.Parallel()
+
+	src, root := t.TempDir(), t.TempDir()
+	writeFiles(t, src, map[string]string{
+		"documents.json":                          `[{"id": "sd/tdf1.pptx"}, {"id": "sd/tdf2.pptx"}]`,
+		"options/sd__tdf1.pptx/options.json":      `{"expectedText": "expected-text.txt"}`,
+		"options/sd__tdf1.pptx/expected-text.txt": "Vertical it should be!\n",
+	})
+	writeFiles(t, root, map[string]string{"sources/sd/tdf1.pptx": "PK", "sources/sd/tdf2.pptx": "PK"})
+	m := &Manifest{Name: "office/pptx", Source: src, Inputs: &InputSpec{List: "documents.json", ListRoot: "sources"}}
+	listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), "make corpus-fetch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkImportedOptions(m, listed); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.ImportedOptions("sd/tdf1.pptx"); got != filepath.Join(src, "options", "sd__tdf1.pptx") {
+		t.Errorf("options of sd/tdf1.pptx at %q", got)
+	}
+	if got := m.ImportedOptions("sd/tdf2.pptx"); got != "" {
+		t.Errorf("options of sd/tdf2.pptx at %q, want none", got)
+	}
+	f := newDiffFeature()
+	f.m = m
+	var s htmlSettings
+	if err := f.readImportedOptions(listed[0].PDFPath, listed[0].ID, &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.ExpectedText != "Vertical it should be!\n" || s.Office == nil || s.Office.Document != listed[0].PDFPath {
+		t.Errorf("settings %+v", s)
+	}
+	s = htmlSettings{}
+	if err := f.readImportedOptions(listed[1].PDFPath, listed[1].ID, &s); err != nil || s.ExpectedText != "" || s.Office != nil {
+		t.Errorf("a fixture without options: %+v, %v", s, err)
+	}
+	writeFiles(t, src, map[string]string{"options/sd__tdf3.pptx/options.json": `{"expectedText": "t.txt"}`})
+	if err := checkImportedOptions(m, listed); err == nil || !strings.Contains(err.Error(), "sd__tdf3.pptx") {
+		t.Errorf("options of a fixture the list drops: %v", err)
+	}
+}
+
+// TestCommittedImportedOptionsLoad pins that each options directory of a
+// committed list corpus names a listed fixture and loads as the options of
+// an imported document: an options file naming the expected text alone and
+// that text.
+func TestCommittedImportedOptionsLoad(t *testing.T) {
+	t.Parallel()
+
+	for _, m := range readManifests(t) {
+		if m.Inputs == nil || m.Inputs.List == "" {
+			continue
+		}
+		src := filepath.Join(corpusSourceDir, filepath.FromSlash(m.Source))
+		entries, err := os.ReadDir(filepath.Join(src, importedOptionsDir))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		docs, err := readDocumentList(filepath.Join(src, m.Inputs.List))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string]string{}
+		for _, d := range docs {
+			ids[reportName(d.ID)] = d.ID
+		}
+		for _, e := range entries {
+			id, ok := ids[e.Name()]
+			if !ok {
+				t.Errorf("%s: %s/%s names no listed fixture", m.Name, importedOptionsDir, e.Name())
+				continue
+			}
+			doc := filepath.Join(t.TempDir(), path.Base(id))
+			if err := os.WriteFile(doc, []byte("PK"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			o, err := fixture.LoadImportedOffice(doc, filepath.Join(src, importedOptionsDir, e.Name()))
+			if err != nil {
+				t.Errorf("%s %s: %v", m.Name, id, err)
+				continue
+			}
+			if o.ExpectedText == "" {
+				t.Errorf("%s %s: no expected text", m.Name, id)
+			}
+		}
+	}
+}

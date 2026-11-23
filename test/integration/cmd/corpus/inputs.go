@@ -35,6 +35,9 @@ func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := checkImportedOptions(m, listed); err != nil {
+			return nil, err
+		}
 		fixtures = append(fixtures, listed...)
 	}
 	if in.Build != "" {
@@ -94,6 +97,51 @@ func listInputFixtures(listPath, root, remedy string) ([]Fixture, error) {
 		fixtures = append(fixtures, Fixture{ID: e.ID, PDFPath: p})
 	}
 	return fixtures, nil
+}
+
+// importedOptionsDir is the directory of a list corpus's source directory
+// that holds the options the corpus keeps for some of its imported
+// documents: one directory a fixture, named by its ID with "/" written "__"
+// ([reportName]), holding an options.json and the expected text file it
+// names ([fixture.LoadImportedOffice]). The documents are fetched and never
+// committed, and corpus update rewrites the lists alone, so the options
+// live beside the lists.
+const importedOptionsDir = "options"
+
+// ImportedOptions returns the directory of the options the corpus keeps for
+// its listed fixture id, "" when it keeps none.
+func (m *Manifest) ImportedOptions(id string) string {
+	if m.Inputs == nil || m.Inputs.List == "" {
+		return ""
+	}
+	dir := filepath.Join(m.SourceDir(), importedOptionsDir, reportName(id))
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return ""
+	}
+	return dir
+}
+
+// checkImportedOptions fails when the options directory of a list corpus
+// names a fixture its list does not, as when corpus update drops a
+// document: the options would judge nothing and say nothing.
+func checkImportedOptions(m *Manifest, listed []Fixture) error {
+	entries, err := os.ReadDir(filepath.Join(m.SourceDir(), importedOptionsDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	names := make(map[string]bool, len(listed))
+	for _, f := range listed {
+		names[reportName(f.ID)] = true
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !names[e.Name()] {
+			return fmt.Errorf("%s/%s/%s: no fixture of %s is named so", m.Name, importedOptionsDir, e.Name(), m.Inputs.List)
+		}
+	}
+	return nil
 }
 
 // validInputID reports whether id is a clean relative slash path that stays

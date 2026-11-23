@@ -569,6 +569,9 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	lctx, cancel := context.WithTimeout(ctx, perFileTimeout)
 	defer cancel()
 	src, settings, err := sourceSettings(srcPath, office, fonts)
+	if err == nil && office {
+		err = f.readImportedOptions(srcPath, fixtureID, &settings)
+	}
 	var ref *pdf.Reader
 	defer func() {
 		if ref != nil {
@@ -628,6 +631,28 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	out.PDFSHA256 = hex.EncodeToString(sum[:])
 	f.scoreForm(ctx, g, data, &out)
 	return json.Marshal(out)
+}
+
+// readImportedOptions reads into s the options the corpus keeps for the
+// imported document srcPath of the fixture id ([Manifest.ImportedOptions]):
+// its expected text. A fixture without them keeps s as it is.
+func (f *diffFeature) readImportedOptions(srcPath, id string, s *htmlSettings) error {
+	f.mu.RLock()
+	m := f.m
+	f.mu.RUnlock()
+	if m == nil {
+		return nil
+	}
+	dir := m.ImportedOptions(id)
+	if dir == "" {
+		return nil
+	}
+	source, err := fixture.LoadImportedOffice(srcPath, dir)
+	if err != nil {
+		return fmt.Errorf("read: %w", err)
+	}
+	s.Office, s.ExpectedText = source, source.ExpectedText
+	return nil
 }
 
 // FixtureTimeout gives a fixture [perFileTimeout] for litho's side,
