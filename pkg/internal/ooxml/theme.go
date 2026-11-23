@@ -22,7 +22,16 @@ type Theme struct {
 	// list (20.1.4.1.21 lnStyleLst), in order: a shape's lnRef of idx n
 	// names the nth.
 	LineStyles []*Element
+	// FillStyles are the fills of the format scheme's fill style list
+	// (20.1.4.1.13 fillStyleLst), in order: a shape's fillRef of idx n
+	// names the nth.
+	FillStyles []*Element
 }
+
+// maxThemeStyles bounds the fills a theme's fill style list holds for
+// the converters. Anti-DoS guard, not spec-mandated: Office writes three,
+// and a reference past the bound draws the reference's colour.
+const maxThemeStyles = 64
 
 // FontScheme is one font collection of a theme (ECMA-376 Part 1,
 // 20.1.4.1.24 majorFont, 20.1.4.1.25 minorFont).
@@ -50,6 +59,11 @@ func ParseTheme(root *Element) *Theme {
 	for _, st := range elems.Child(NSA, "fmtScheme").Child(NSA, "effectStyleLst").Kids() {
 		if st.Is(NSA, "effectStyle") {
 			t.EffectStyles = append(t.EffectStyles, st)
+		}
+	}
+	for _, f := range elems.Child(NSA, "fmtScheme").Child(NSA, "fillStyleLst").Kids() {
+		if f.Space == NSA && len(t.FillStyles) < maxThemeStyles {
+			t.FillStyles = append(t.FillStyles, f)
 		}
 	}
 	for _, ln := range elems.Child(NSA, "fmtScheme").Child(NSA, "lnStyleLst").Kids() {

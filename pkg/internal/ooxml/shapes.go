@@ -159,11 +159,53 @@ func ParseShapeStyle(spPr, style *Element, theme *Theme) ShapeStyle {
 	}
 	parseLineStyle(&s, lns)
 	if style != nil && !fillSet {
-		if c, ok := SchemeColor(style.Child(NSA, "fillRef"), theme); ok {
-			s.Fill = &c
-		}
+		s.themeFill(style.Child(NSA, "fillRef"), theme)
 	}
 	return s
+}
+
+// themeFill sets the fill a shape's style reference ref names when its
+// properties set none (ECMA-376 Part 1, 20.1.4.2.10 fillRef, idx 1 or
+// more into 20.1.4.1.13 fillStyleLst): the theme's solid or gradient
+// fill, phClr standing for the reference's colour; the reference's
+// colour for any other fill of the theme or any other idx.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/dml-gradientfill-theme.docx: Word
+//     paints a rectangle of fillRef idx 2 of accent1 with the theme's
+//     second fill, a gradient of phClr tinted from 50 to 15 per cent,
+//     pale blue at its top, where the reference's colour alone is
+//     accent1's dark blue.
+func (s *ShapeStyle) themeFill(ref *Element, theme *Theme) {
+	ph, ok := SchemeColor(ref, theme)
+	idx, _ := Int(attrOr(ref, "idx"))
+	var fill *Element
+	if theme != nil && idx >= 1 && idx <= len(theme.FillStyles) {
+		fill = theme.FillStyles[idx-1]
+	}
+	switch {
+	case fill != nil && fill.Local == "solidFill":
+		if c, ok := DrawingColor(fill, themeResolver(theme, phOf(ph, ok))); ok {
+			s.Fill = &c
+		}
+	case fill != nil && fill.Local == "gradFill":
+		if g := parseGradientIn(fill, themeResolver(theme, phOf(ph, ok))); g != nil {
+			s.Gradient = g
+			first := g.Stops[0].Color
+			s.Fill = &css.Color{R: first.R, G: first.G, B: first.B, A: first.A}
+		}
+	case ok:
+		s.Fill = &ph
+	}
+}
+
+// phOf returns c when ok, nil otherwise.
+func phOf(c css.Color, ok bool) *css.Color {
+	if !ok {
+		return nil
+	}
+	return &c
 }
 
 // themeLine returns the theme line style a shape's style reference names
@@ -321,15 +363,31 @@ func parseGradient(g *Element, theme *Theme) *Gradient {
 	return out
 }
 
+// parseGradientIn is [parseGradient] for a gradient whose scheme colours
+// scheme resolves, a theme's fill style where phClr stands for a colour.
+func parseGradientIn(g *Element, scheme SchemeResolver) *Gradient {
+	out := gradientStops(g, func(gs *Element) (css.Color, bool) { return DrawingColor(gs, scheme) })
+	if out != nil {
+		out.Stops = rampStops(out.Stops)
+	}
+	return out
+}
+
 // parseGradientStops reads a gradient fill as [parseGradient] does, its
 // stops as the document gives them.
 func parseGradientStops(g *Element, theme *Theme) *Gradient {
+	return gradientStops(g, func(gs *Element) (css.Color, bool) { return SchemeColor(gs, theme) })
+}
+
+// gradientStops reads a gradient fill's stops, each colour by color, and
+// its direction.
+func gradientStops(g *Element, color func(*Element) (css.Color, bool)) *Gradient {
 	out := &Gradient{}
 	for _, gs := range g.Child(NSA, "gsLst").Kids() {
 		if !gs.Is(NSA, "gs") || len(out.Stops) >= maxGradientStops {
 			continue
 		}
-		c, ok := SchemeColor(gs, theme)
+		c, ok := color(gs)
 		if !ok {
 			continue
 		}

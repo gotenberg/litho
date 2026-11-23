@@ -60,6 +60,37 @@ func TestParseShapeStyle_ThemeLine(t *testing.T) {
 	}
 }
 
+// TestParseShapeStyle_ThemeFill locks ECMA-376 Part 1, 20.1.4.2.10
+// fillRef: a shape whose spPr sets no fill takes the theme fill style the
+// reference's idx names, solid or gradient, phClr standing for the
+// reference's colour, and the reference's colour for any other.
+func TestParseShapeStyle_ThemeFill(t *testing.T) {
+	theme := ParseTheme(mustParse(t, `<a:theme `+effectNS+`><a:themeElements><a:clrScheme name="c"><a:accent1><a:srgbClr val="4F81BD"/></a:accent1></a:clrScheme>`+
+		`<a:fmtScheme name="f"><a:fillStyleLst>`+
+		`<a:solidFill><a:schemeClr val="phClr"><a:shade val="50000"/></a:schemeClr></a:solidFill>`+
+		`<a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`+
+		`<a:pattFill prst="pct5"/>`+
+		`</a:fillStyleLst></a:fmtScheme></a:themeElements></a:theme>`))
+	style := func(idx string) *Element {
+		return mustParse(t, `<wps:style `+effectNS+` xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><a:fillRef idx="`+idx+`"><a:srgbClr val="FF0000"/></a:fillRef></wps:style>`)
+	}
+	if s := ParseShapeStyle(spPrOf(t, ``), style("1"), theme); s.Fill == nil || s.Fill.G != 0 || s.Fill.R <= 0 || s.Fill.R >= 1 || s.Gradient != nil {
+		t.Errorf("idx 1: %+v, want the reference's red shaded by the theme fill", s.Fill)
+	}
+	s := ParseShapeStyle(spPrOf(t, ``), style("2"), theme)
+	if g := s.Gradient; g == nil || len(g.Stops) < 2 || g.Stops[0].Color != (typeset.Color{R: 1, A: 1}) || g.Angle != 90 {
+		t.Errorf("idx 2: %+v, want the theme's gradient from the reference's red", s.Gradient)
+	}
+	for _, idx := range []string{"3", "4"} {
+		if s := ParseShapeStyle(spPrOf(t, ``), style(idx), theme); s.Fill == nil || *s.Fill != (css.Color{R: 1, A: 1}) || s.Gradient != nil {
+			t.Errorf("idx %s: %+v, want the reference's red", idx, s.Fill)
+		}
+	}
+	if s := ParseShapeStyle(spPrOf(t, `<a:solidFill><a:srgbClr val="00FF00"/></a:solidFill>`), style("2"), theme); s.Gradient != nil || s.Fill == nil || s.Fill.G != 1 {
+		t.Errorf("own fill: %+v, want its green", s.Fill)
+	}
+}
+
 func TestParseShapeStyle_CustomDash(t *testing.T) {
 	tests := []struct {
 		name, ds string
