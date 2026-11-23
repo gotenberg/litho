@@ -228,11 +228,14 @@ func TestRead_ListStart(t *testing.T) {
 	}
 }
 
+// TestRead_FieldFormat locks the format a date or time field takes:
+// the Impress format its data style chooses ([reader.fieldCode]), the
+// numeric date of fixed order in the locale's order.
 func TestRead_FieldFormat(t *testing.T) {
 	ds := `<number:date-style style:name="D1"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year number:style="long"/></number:date-style>` +
 		`<number:time-style style:name="T1"><number:hours number:style="long"/><number:text>:</number:text><number:minutes number:style="long"/></number:time-style>`
 	tests := []struct{ name, p, want string }{
-		{"date", `<text:date style:data-style-name="D1">1.1.2026</text:date>`, `dd\.mm\.yyyy`},
+		{"date", `<text:date style:data-style-name="D1">1.1.2026</text:date>`, "mm/dd/yyyy"},
 		{"time", `<text:time style:data-style-name="T1">10:00</text:time>`, "hh:mm"},
 		{"default", `<text:date>1/1/26</text:date>`, ""},
 	}

@@ -838,7 +838,7 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 			if f != slides.FieldNone {
 				// The field's data style (19.500 style:data-style-name)
 				// as a format code; none takes the kind's default.
-				run.Format = r.data.Code(tc.ss.scope, k.A(odf.NSStyle, "data-style-name"))
+				run.Format = r.fieldCode(tc.ss.scope, k.A(odf.NSStyle, "data-style-name"))
 			}
 			w.raw(run)
 		case "file-name":
@@ -886,7 +886,7 @@ func (r *reader) presentationField(k *odf.Element, tc *textCtx, st slides.RunSty
 		}
 		if src := d.A(odf.NSPresentation, "source"); src == "current" || src == "current-date" {
 			// The declaration's data style, of content.xml's styles.
-			code := r.data.Code(odf.ScopeContent, d.A(odf.NSStyle, "data-style-name"))
+			code := r.fieldCode(odf.ScopeContent, d.A(odf.NSStyle, "data-style-name"))
 			w.raw(slides.Run{Text: d.TextContent(), Style: st, Href: href, Field: slides.FieldDate, Format: code})
 			return
 		}
