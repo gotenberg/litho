@@ -226,8 +226,8 @@ func (d *document) drawingLink(s *story, pr *ooxml.Element) string {
 // thousandths of a percent, of the area its relativeFrom names: the page,
 // the area inside the margins, or a margin (MS-ODRAWXML, 2.3.1.2 and
 // 2.3.1.3; ST_SizeRelFromH and ST_SizeRelFromV). A share of 0 keeps the
-// extent, as does a drawing outside the body, whose page is not known
-// when it is built.
+// extent, as does a drawing whose page is not known when it is built,
+// outside the body and its headers and footers.
 //
 // # Corpus evidence
 //

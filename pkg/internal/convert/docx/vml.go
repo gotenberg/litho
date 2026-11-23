@@ -33,6 +33,7 @@ func (d *document) vml(s *story, c *ooxml.Element, st *css.Style, sink *inlineSi
 			continue
 		}
 		w, h := vmlSize(k, vs, pxPt)
+		w, h = d.vmlRelativeSize(vs, w, h)
 		n := d.vmlShape(s, k, vs, st, w, h, vs["position"] != "absolute", depth)
 		if n == nil {
 			continue
@@ -80,6 +81,50 @@ func vmlSize(k *ooxml.Element, vs ooxml.VMLStyle, unit float64) (float64, float6
 		w, h = math.Abs(x1-x0), math.Abs(y1-y0)
 	}
 	return max(0, w), max(0, h)
+}
+
+// vmlRelativeSize returns the size of a VML shape of style vs whose style
+// gives it w by h points: an mso-width-percent or mso-height-percent
+// above 0 sizes that side as that share, in tenths of a percent, of the
+// area its mso-width-relative or mso-height-relative names, the page when
+// it names none (MS-OI29500, 2.1.1394), as wp14:sizeRelH and sizeRelV
+// size a DrawingML one ([document.relativeSize]). A shape whose page is
+// not known keeps its size.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/n779627b.docx: Word draws a header's
+//     v:roundrect of width 545.6pt, height 751.35pt, mso-width-percent
+//     920 and mso-height-percent 940 and no relative area, centred on a
+//     612 by 792 point page, about 563 by 744 points, 92 and 94 per cent
+//     of the page.
+func (d *document) vmlRelativeSize(vs ooxml.VMLStyle, w, h float64) (float64, float64) {
+	if d.page == nil {
+		return w, h
+	}
+	if pct, ok := ooxml.Int(vs["mso-width-percent"]); ok && pct > 0 {
+		_, aw := hArea(d.page, vmlSizeRel(vs["mso-width-relative"], false))
+		w = float64(float64(min(pct, maxVMLPercent)) / 1000 * aw)
+	}
+	if pct, ok := ooxml.Int(vs["mso-height-percent"]); ok && pct > 0 {
+		_, ah := vArea(d.page, vmlSizeRel(vs["mso-height-relative"], true))
+		h = float64(float64(min(pct, maxVMLPercent)) / 1000 * ah)
+	}
+	return w, h
+}
+
+// maxVMLPercent bounds a VML size percentage, in tenths of a percent.
+// Anti-DoS guard, not spec-mandated: Word writes at most 1000, the whole
+// area; ten times it keeps a shape within ten pages' size.
+const maxVMLPercent = 10000
+
+// vmlSizeRel maps a VML mso-width-relative or mso-height-relative value
+// (MS-OI29500, 2.1.1394) to the area it names, the page when empty.
+func vmlSizeRel(v string, vertical bool) string {
+	if v == "" {
+		return "page"
+	}
+	return vmlRel(v, vertical)
 }
 
 // vmlPoint parses a VML point ("10pt,20pt", Part 4, 14.1.2.12 from) in

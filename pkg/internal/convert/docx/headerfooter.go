@@ -83,7 +83,7 @@ func (p *pages) root(part string) *ooxml.Element {
 //     a header from the page at its page offsets, mid-page, not beside
 //     the header's paragraph.
 //   - libreoffice/docx ooxmlimport/n779627b: layout rises from 0 to 0.37.
-func (p *pages) content(part string, v *fieldValues) (*layout.Node, []pendingAnchor) {
+func (p *pages) content(sec *section, part string, v *fieldValues) (*layout.Node, []pendingAnchor) {
 	r := p.root(part)
 	st := p.d.blockStyle()
 	// A flow root keeps its paragraphs' margins inside it, as the header
@@ -94,17 +94,20 @@ func (p *pages) content(part string, v *fieldValues) (*layout.Node, []pendingAnc
 		return n, nil
 	}
 	s := &story{part: part, fields: v}
-	p.d.inMargin, p.d.marginAnchors = true, nil
+	// A drawing sized from the page takes the page of the section the
+	// part is laid out for.
+	page := p.d.page
+	p.d.inMargin, p.d.marginAnchors, p.d.page = true, nil, sec
 	n.Children = p.d.finish(p.d.blocks(s, nil, r, 1), false)
 	anchors := p.d.marginAnchors
-	p.d.inMargin, p.d.marginAnchors = false, nil
+	p.d.inMargin, p.d.marginAnchors, p.d.page = false, nil, page
 	return n, anchors
 }
 
 // measure returns the height of a header or footer part laid out at the
 // width of section s's text.
 func (p *pages) measure(s *section, part string, v *fieldValues) float64 {
-	n, _ := p.content(part, v)
+	n, _ := p.content(s, part, v)
 	n.ID = "\x00measure"
 	areaW := max(s.width-s.margin[css.Left]-s.margin[css.Right]-s.gutter, minPageArea)
 	n.Style.Width = css.Pts(areaW)
@@ -310,7 +313,7 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 			return
 		}
 		v := &fieldValues{page: number, pages: total, format: pageFormat(s.pageFormat)}
-		n, anchors := p.content(part, v)
+		n, anchors := p.content(s, part, v)
 		n.Style.Position = css.Absolute
 		n.Style.Left = css.Pts(pb.Margin[css.Left])
 		n.Style.Width = css.Pts(areaW)

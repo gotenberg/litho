@@ -223,3 +223,26 @@ func TestVML_ArcSize(t *testing.T) {
 		}
 	}
 }
+
+// TestVML_RelativeSize sizes a VML shape whose style gives a percentage of
+// an area, in tenths of a percent, as that share of the area: the page
+// when it names none (MS-OI29500, 2.1.1394), in a header as in the body.
+func TestVML_RelativeSize(t *testing.T) {
+	t.Parallel()
+	rect := `<w:p><w:r><w:pict><v:rect style="position:absolute;width:100pt;height:50pt;mso-width-percent:500;mso-height-percent:250;mso-height-relative:margin"/></w:pict></w:r></w:p>`
+	// The default page is Letter, 612 by 792 points, with 72-point margins.
+	b := build(t, rect, nil)
+	shapes := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 1 || !near(shapes[0].Style.Width, 306) || !near(shapes[0].Style.Height, 162) {
+		t.Fatalf("body shape %d, want 306 by 162 points", len(shapes))
+	}
+	b = build(t, `<w:p/><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/></w:sectPr>`, map[string]string{
+		"word/header1.xml": `<w:hdr ` + nsDecl + `>` + rect + `</w:hdr>`,
+	})
+	p := b.d.newPages(b.secs)
+	n, _ := p.content(b.secs[0], b.secs[0].headers["default"], &fieldValues{})
+	shapes = find(n, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 1 || !near(shapes[0].Style.Width, 306) || !near(shapes[0].Style.Height, 162) {
+		t.Errorf("header shape %d, want 306 by 162 points", len(shapes))
+	}
+}
