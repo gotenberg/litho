@@ -686,7 +686,8 @@ const (
 	WrapStyleBalance
 	// WrapStyleStable breaks as auto does.
 	WrapStyleStable
-	// WrapStylePretty breaks as auto does.
+	// WrapStylePretty breaks as auto does, but for the last lines of a
+	// paragraph whose last line would hold one word.
 	WrapStylePretty
 )
 

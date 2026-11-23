@@ -70,6 +70,9 @@ type engine struct {
 	// balance is the block whose lines text-wrap: balance narrows, while
 	// it is laid out.
 	balance balanceState
+	// pretty is the block whose last lines text-wrap: pretty breaks
+	// again, while it is laid out.
+	pretty  prettyState
 	missing map[rune]bool
 	// firstLines holds the first formatted line of each inline formatting
 	// context a ::first-line styles, by its block container, and cloneOf

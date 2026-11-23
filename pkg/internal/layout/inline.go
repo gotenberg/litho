@@ -680,18 +680,28 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 	saved := mc.clone()
 	clampSaved := e.clampSnapshot()
 	var end float64
-	if b.st.TextWrapStyle == css.WrapStyleBalance && e.foot == nil && e.clamp == nil && e.balance.root == nil {
-		// A line clamp container's lines are not balanced: what it keeps
-		// depends on the lines it counts.
+	// A line clamp container's lines are neither balanced nor broken
+	// again: what it keeps depends on the lines it counts.
+	free := e.foot == nil && e.clamp == nil && e.balance.root == nil
+	pretty := b.st.TextWrapStyle == css.WrapStylePretty && free && e.pretty.root == nil
+	if b.st.TextWrapStyle == css.WrapStyleBalance && free || pretty {
 		restore := func() {
 			e.clampRestore(clampSaved)
 			bc.floats = bc.floats[:floats]
 			e.rollbackWarnings(warnings)
 			*mc = saved.clone()
 		}
-		e.balanceLines(b, d, cb, bc, cursor, mc, restore)
+		if pretty {
+			e.pretty = prettyState{root: b, rec: true}
+			restore()
+			e.flowLines(b, d, cb, bc, cursor, mc, map[int]bool{})
+			e.pretty = prettyState{root: b, ends: e.prettyEnds()}
+			defer func() { e.pretty = prettyState{} }()
+		} else {
+			e.balanceLines(b, d, cb, bc, cursor, mc, restore)
+			defer func() { e.balance = balanceState{} }()
+		}
 		restore()
-		defer func() { e.balance = balanceState{} }()
 	}
 	for pass := range maxFragmentationPasses {
 		e.clampRestore(clampSaved)
@@ -1314,6 +1324,11 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 				avail -= e.balance.inset
 			}
 			end, fits = e.breakLine(p, w, pos, indent, avail, s.root, org)
+			if e.pretty.root != nil && s.root == e.pretty.root && fits {
+				if ov, ok := e.pretty.ends[prettyKey{p, pos}]; ok && ov < end {
+					end = ov
+				}
+			}
 			if fits && end < p.p.Len() && !p.allowed(end) && s.nextPiece(top, h, right) {
 				// Word breaks no word in a piece of a line cut by a float
 				// of css.FrameWrapBoth: the word goes to the next piece.
@@ -1364,6 +1379,9 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	}
 	if !fits {
 		s.unfit++
+	}
+	if e.pretty.root != nil && s.root == e.pretty.root && e.pretty.rec {
+		e.pretty.note(p, w, pos, end, right-left, indent)
 	}
 	return top, end, left, right, l
 }

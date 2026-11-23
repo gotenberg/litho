@@ -95,3 +95,31 @@ func TestTextWrap_Balance(t *testing.T) {
 		t.Errorf("balanced lines %v, want the %d auto lines %v", got, len(auto), auto)
 	}
 }
+
+// TestTextWrap_Pretty breaks again the last four lines of a paragraph
+// whose greedy last line holds one word, as Chromium prints text-wrap:
+// pretty: the last line takes two words, the other lines broken again
+// leave the least sum of squared room, the lines before them keep their
+// breaks; a paragraph whose last line holds two words breaks as auto.
+func TestTextWrap_Pretty(t *testing.T) {
+	t.Parallel()
+	pretty := sty(func(s *css.Style) { s.TextWrapStyle = css.WrapStylePretty })
+	for _, tc := range []struct {
+		name, text   string
+		auto, wanted []float64
+	}{
+		{"last four lines", "aaaaa aaaa aaaa aa aa aa aaaaa aaaa a a aa aaaaa a aaa", []float64{100, 100, 80, 80, 100, 30}, []float64{100, 100, 80, 80, 80, 50}},
+		{"two lines", "aaaa aaaa aaaa", []float64{90, 40}, []float64{40, 90}},
+		{"two words last", "aaaa aaaa aa aa", []float64{90, 50}, []float64{90, 50}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := lineWidths(t, doc(el(sty(), txt(sty(), tc.text))), 105); !slices.Equal(got, tc.auto) {
+				t.Fatalf("auto lines %v, want %v", got, tc.auto)
+			}
+			if got := lineWidths(t, doc(el(pretty, txt(pretty, tc.text))), 105); !slices.Equal(got, tc.wanted) {
+				t.Errorf("pretty lines %v, want %v", got, tc.wanted)
+			}
+		})
+	}
+}
