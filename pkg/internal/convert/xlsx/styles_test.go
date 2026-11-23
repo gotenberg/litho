@@ -87,9 +87,10 @@ func TestRead_Fonts(t *testing.T) {
 		"", "", "", `<xf fontId="1"/><xf fontId="2"/><xf fontId="3"/><xf fontId="4"/><xf fontId="5"/><xf fontId="6"/>`, 6)
 	for i, want := range []sheet.Font{
 		{Families: []string{"Calibri"}, Size: 11, Bold: true},
-		{Families: []string{"Arial"}, Size: 9, Italic: true, Strike: true, Underline: sheet.Double, Script: sheet.Superscript, Color: css.Color{R: 1, A: 1}},
+		// Excel prints the accounting underlines without a line.
+		{Families: []string{"Arial"}, Size: 9, Italic: true, Strike: true, Underline: sheet.NoUnderline, Script: sheet.Superscript, Color: css.Color{R: 1, A: 1}},
 		{Families: []string{"Arial"}, Size: 11, Underline: sheet.Single, Color: tint(rgb(0x4472C4), -0.5)},
-		{Families: []string{"Calibri"}, Size: 11, Underline: sheet.Single, Color: rgb(0x008000)},
+		{Families: []string{"Calibri"}, Size: 11, Underline: sheet.NoUnderline, Color: rgb(0x008000)},
 		{Families: []string{"Calibri"}, Size: 11},
 		// Excel has no DejaVu Sans and prints it in Arial.
 		{Families: []string{"Arial"}, Size: 11},

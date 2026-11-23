@@ -489,17 +489,23 @@ func (r *reader) schemeFace(scheme string) string {
 // spec-mandated: Excel stops at 409 points.
 const maxFontSize = 1000
 
-// underline maps an ST_UnderlineValues (ECMA-376 Part 1, 18.18.85): the
-// accounting kinds read as their plain kinds, as LibreOffice imports
-// them, and a u element without val is single.
+// underline maps an ST_UnderlineValues (ECMA-376 Part 1, 18.18.85): a u
+// element without val is single, and the accounting kinds print no
+// underline, as Excel prints them.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: fonts prints its cells of single and double accounting
+//     underline without a line, beside its single and double ones;
+//     rich_text prints its runs of both accounting kinds the same.
 func underline(val string, has bool) sheet.Underline {
 	if !has {
 		return sheet.Single
 	}
 	switch val {
-	case "single", "singleAccounting":
+	case "single":
 		return sheet.Single
-	case "double", "doubleAccounting":
+	case "double":
 		return sheet.Double
 	}
 	return sheet.NoUnderline
