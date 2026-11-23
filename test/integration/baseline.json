@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T06:10:54Z",
+  "captured_at": "2026-11-23T06:20:02Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -119740,8 +119740,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5922,
-          "mismatched": 572,
+          "matched": 5926,
+          "mismatched": 568,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -123196,11 +123196,11 @@
             "css/css-images/tiled-conic-gradients.html": "pass",
             "css/css-inline/baseline-source/baseline-source-inline-box.html": "pass",
             "css/css-inline/br-font-size.html": "pass",
-            "css/css-inline/br-line-height-inherited-quirks.html": "fail",
-            "css/css-inline/br-line-height-shrink-quirks.html": "fail",
+            "css/css-inline/br-line-height-inherited-quirks.html": "pass",
+            "css/css-inline/br-line-height-shrink-quirks.html": "pass",
             "css/css-inline/br-line-height-shrink.html": "pass",
-            "css/css-inline/br-line-height-stretch-quirks.html": "fail",
-            "css/css-inline/br-line-height-zero-quirks.html": "fail",
+            "css/css-inline/br-line-height-stretch-quirks.html": "pass",
+            "css/css-inline/br-line-height-zero-quirks.html": "pass",
             "css/css-inline/br-line-height-zero.html": "pass",
             "css/css-inline/br-line-height.html": "pass",
             "css/css-inline/empty-span-size-002.html": "fail",
