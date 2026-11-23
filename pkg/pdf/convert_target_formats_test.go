@@ -217,9 +217,9 @@ var convertTargets = []convertTargetCase{
 
 // convertToTarget converts src as format at tc's version with opts and, when
 // tc names a profile, remediates the result to it in a later pipeline
-// stage, with lang as the language of the remediation when not empty. The
-// report is nil without a profile.
-func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTargetCase, lang string, opts ...ConvertOption) ([]byte, *models.RemediationReport) {
+// stage, with lang as the language and title as the title the caller
+// states when not empty. The report is nil without a profile.
+func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTargetCase, lang, title string, opts ...ConvertOption) ([]byte, *models.RemediationReport) {
 	t.Helper()
 	ctx := context.Background()
 	c := fromFormat(format, bytes.NewReader(src), append(opts, WithConvertVersion(tc.version))...)
@@ -230,7 +230,7 @@ func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTarg
 		}
 		return out.Bytes(), nil
 	}
-	data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, lang)
+	data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, lang, title)
 	if err != nil {
 		t.Fatalf("converting and remediating: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestConvert_EveryFormatToEveryTarget(t *testing.T) {
 	for _, src := range sources {
 		for _, tc := range convertTargets {
 			t.Run(string(src.format)+"/"+tc.name, func(t *testing.T) {
-				data, rep := convertToTarget(t, src.format, src.data, tc, "en-GB", WithConvertFontDirs(dir), WithDefaultLanguage("en-GB"))
+				data, rep := convertToTarget(t, src.format, src.data, tc, "en-GB", "Every format", WithConvertFontDirs(dir), WithDefaultLanguage("en-GB"))
 				checkTarget(t, data, rep, tc, "en-GB")
 				if rep != nil && len(rep.Residual) > 0 {
 					t.Errorf("Residual = %v, want none", rep.Residual)
@@ -324,7 +324,7 @@ func TestConvert_ReportsTheMissingAltText(t *testing.T) {
 	src := `<!doctype html><html lang="en"><title>Notes</title><p>Text.</p><img src="` + testPNGDataURL(t) + `"></html>`
 	for _, tc := range convertTargets[3:] {
 		t.Run(tc.name, func(t *testing.T) {
-			data, rep := convertToTarget(t, formatHTML, []byte(src), tc, "", WithConvertFontDirs(dir))
+			data, rep := convertToTarget(t, formatHTML, []byte(src), tc, "", "", WithConvertFontDirs(dir))
 			checkTarget(t, data, rep, tc, "en")
 			alt := false
 			for _, v := range rep.ResidualViolations() {

@@ -324,7 +324,7 @@ func TestFromImage_TagsAFigureWithTheFormatsDescription(t *testing.T) {
 		t.Error("the SVG title is not the figure's description")
 	}
 	plain := encodePNG(t, testPicture(8, 8))
-	_, report, err := convertAndRemediate(ctx, FromImage(bytes.NewReader(plain), WithConvertFontDirs(convertFontDir(t))), "1.7", "", models.PDFUA1, "en")
+	_, report, err := convertAndRemediate(ctx, FromImage(bytes.NewReader(plain), WithConvertFontDirs(convertFontDir(t))), "1.7", "", models.PDFUA1, "en", "Picture")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,6 +333,7 @@ func TestFromImage_TagsAFigureWithTheFormatsDescription(t *testing.T) {
 	}
 	var out bytes.Buffer
 	_, err = NewPipeline().Convert(FromImage(bytes.NewReader(plain), WithConvertFontDirs(convertFontDir(t)))).Apply(func(ctx context.Context, w *Writer) error {
+		w.SetMetadata(models.Metadata{Title: "Picture"})
 		rep, err := w.RemediatePDFUA(ctx, models.PDFUA1, WithLanguage("en"), WithFigureAltText("A test picture"))
 		if err == nil && len(rep.Residual) > 0 {
 			t.Errorf("described at remediation: residual %v", rep.Residual)

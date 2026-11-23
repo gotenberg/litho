@@ -143,9 +143,11 @@ func TestRemediatePDFA_EmptyInfoEntriesHoldAfterOneRound(t *testing.T) {
 }
 
 // TestGenerateXMP_PlaceholdersStandInForAbsentEntriesOnly pins which /Info
-// entries get a placeholder analogue in a generated packet: an absent one,
-// which ISO 19005-1, 6.7.3 does not compare, and under PDF/UA an empty
-// /Title, since an empty dc:title identifies no document (ISO 14289-1, 7.1).
+// entries get a placeholder analogue in a generated packet: an absent
+// /Creator or /Producer, which ISO 19005-1, 6.7.3 does not compare. A
+// title is never one: an absent /Title gets no dc:title and an empty one
+// an empty dc:title, under PDF/UA too, which then reports it (ISO 14289-1,
+// 7.1), since no processor can name a document.
 func TestGenerateXMP_PlaceholdersStandInForAbsentEntriesOnly(t *testing.T) {
 	t.Parallel()
 
@@ -159,7 +161,7 @@ func TestGenerateXMP_PlaceholdersStandInForAbsentEntriesOnly(t *testing.T) {
 		{
 			name: "absent entries",
 			info: infoMetadata{Present: map[string]bool{}},
-			want: map[string]string{"dc:title": "Untitled", "xmp:CreatorTool": "litho", "pdf:Producer": "litho"},
+			want: map[string]string{"xmp:CreatorTool": "litho", "pdf:Producer": "litho"},
 		},
 		{
 			name: "empty entries",
@@ -170,7 +172,13 @@ func TestGenerateXMP_PlaceholdersStandInForAbsentEntriesOnly(t *testing.T) {
 			name:   "empty entries under PDF/UA",
 			uaPart: 1,
 			info:   present,
-			want:   map[string]string{"dc:title": "Untitled", "dc:creator": "", "dc:description": "", "xmp:CreatorTool": "", "pdf:Producer": ""},
+			want:   map[string]string{"dc:title": "", "dc:creator": "", "dc:description": "", "xmp:CreatorTool": "", "pdf:Producer": ""},
+		},
+		{
+			name:   "absent entries under PDF/UA",
+			uaPart: 1,
+			info:   infoMetadata{Present: map[string]bool{}},
+			want:   map[string]string{"xmp:CreatorTool": "litho", "pdf:Producer": "litho"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -191,7 +199,7 @@ func TestGenerateXMP_PlaceholdersStandInForAbsentEntriesOnly(t *testing.T) {
 					t.Errorf("%s = %q, want %q", key, got, want)
 				}
 			}
-			for _, key := range []string{"dc:creator", "dc:description"} {
+			for _, key := range []string{"dc:title", "dc:creator", "dc:description"} {
 				if _, want := tc.want[key]; !want {
 					if _, ok := analogueText(packet, key); ok {
 						t.Errorf("%s written for an absent /Info entry:\n%s", key, packet)

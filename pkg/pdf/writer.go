@@ -798,6 +798,11 @@ func WithRegressionTolerance(tol models.RegressionTolerance) RemediateOption {
 // of the PDF/A side. An empty Residual means the output conforms to both. The
 // cost is one more validation per round, and one more round at most.
 //
+// The PDF/UA side needs the document's title and language as
+// [Writer.RemediatePDFUA] does: what the document states, else what the
+// caller states through [Writer.SetMetadata] and [WithLanguage]. PDF/A
+// requires neither.
+//
 // An empty profile, the default, remediates to the PDF/A profile alone.
 // [Writer.RemediatePDFUA] and [Writer.RemediateWTPDF] ignore the option.
 func WithPDFUA(profile models.PDFUAProfile) RemediateOption {
@@ -2591,6 +2596,14 @@ func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarg
 // describes what was fixed and what could not be fixed automatically; see
 // [models.RemediationReport.Residual], which the output's own pdfuaid claim
 // does not account for.
+//
+// It writes no title and no language that neither the document nor the
+// caller states, since only they can name a document and tell what it is
+// written in. A document that states neither conforms only when the caller
+// queues [Writer.SetMetadata] with a Title before the remediation and
+// passes [WithLanguage]; without them the remediation lists ISO 14289-1,
+// 7.1 and 7.2 (ISO 14289-2, 8.11.1 and 8.4.4) in Residual, and the output
+// does not conform. Its first heading and its outline name no document.
 //
 // Its output is a full rewrite or an incremental update as
 // [Writer.RemediatePDFA] describes.

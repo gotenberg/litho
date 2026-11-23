@@ -17,6 +17,11 @@ type RemediationReport struct {
 	// the violations of both its profiles here, each [Violation] naming its
 	// standard in Specification.
 	//
+	// A PDF/UA remediation of a document that states no title or no
+	// language, given none by its caller, lists ISO 14289-1, 7.1 or 7.2
+	// (ISO 14289-2, 8.11.1 or 8.4.4) here: litho writes neither on its
+	// own.
+	//
 	// A Factur-X remediation or repair lists the failures a validation of its
 	// output reports, [FacturXReport.Fatals]: a warning does not fail
 	// conformance and is not listed, so an empty Residual means the output

@@ -441,27 +441,30 @@ const minimalUAXMP = `<x:xmpmeta xmlns:x="adobe:ns:meta/">
 </rdf:RDF>
 </x:xmpmeta>`
 
-// TestPatchExistingXMP_SynthesizesDCTitleForUA pins the PDF/UA dc:title
-// fallback chain (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): outline title
-// first, placeholder second. Without it, documents lacking a DocInfo
-// /Title kept the dc:title violation as a permanent residual.
-func TestPatchExistingXMP_SynthesizesDCTitleForUA(t *testing.T) {
+// TestPatchExistingXMP_WritesNoTitleNobodyStated pins that the PDF/UA
+// dc:title (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1) is the /Title the
+// document states, and that a document that states none gets none, for
+// the residual to report, rather than a title taken from its outline or a
+// placeholder.
+func TestPatchExistingXMP_WritesNoTitleNobodyStated(t *testing.T) {
 	t.Parallel()
 
-	patched, fixes := patchExistingXMP(minimalUAXMP, 0, "", 1, infoMetadata{FallbackTitle: "Chapter One"})
-	if !strings.Contains(patched, ">Chapter One</rdf:li>") {
-		t.Errorf("outline fallback title not injected:\n%s", patched)
+	patched, fixes := patchExistingXMP(minimalUAXMP, 0, "", 1, infoMetadata{Title: "Annual report"})
+	if !strings.Contains(patched, ">Annual report</rdf:li>") {
+		t.Errorf("the stated title was not written:\n%s", patched)
 	}
-	if !slices.Contains(fixes, "injected dc:title from outline title") {
+	if !slices.Contains(fixes, "injected dc:title from Info /Title") {
 		t.Errorf("fix description missing, got %v", fixes)
 	}
 
 	patched, fixes = patchExistingXMP(minimalUAXMP, 0, "", 1, infoMetadata{})
-	if !strings.Contains(patched, ">Untitled document</rdf:li>") {
-		t.Errorf("placeholder title not injected:\n%s", patched)
+	if strings.Contains(patched, "dc:title") {
+		t.Errorf("a dc:title was written for a document that states none:\n%s", patched)
 	}
-	if !slices.Contains(fixes, "injected dc:title from placeholder") {
-		t.Errorf("fix description missing, got %v", fixes)
+	for _, fix := range fixes {
+		if strings.Contains(fix, "dc:title") {
+			t.Errorf("fixes = %v, want no dc:title", fixes)
+		}
 	}
 }
 

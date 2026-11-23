@@ -338,6 +338,7 @@ func TestRepairFacturXWithPDFUA(t *testing.T) {
 		defer r.Close()
 		w := NewWriter(r)
 		defer w.Close()
+		w.SetMetadata(models.Metadata{Title: "Invoice"})
 		report, err := w.RepairFacturX(ctx, WithPDFUA(models.PDFUA1), WithLanguage("en"))
 		if err != nil {
 			t.Fatalf("RepairFacturX: %v", err)

@@ -212,9 +212,6 @@ type infoMetadata struct {
 	Keywords     string
 	CreationDate string
 	ModDate      string
-	// FallbackTitle holds a best-effort title (first outline entry) for
-	// PDF/UA dc:title synthesis when the document has no /Title at all.
-	FallbackTitle string
 	// Present records which Info dict keys hold a string, empty or not. ISO
 	// 19005 §6.7.3 keys its sync rules on key presence, so an absent
 	// /Keywords must not be confused with an empty one: only present keys
@@ -258,9 +255,6 @@ func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		info.Keywords = readField("Keywords")
 		info.CreationDate = readField("CreationDate")
 		info.ModDate = readField("ModDate")
-	}
-	if info.Title == "" {
-		info.FallbackTitle = fallbackDocTitle(ctx, alloc, doc)
 	}
 	return info
 }
@@ -449,47 +443,6 @@ func stripInfoControlChars(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	return fixes
 }
 
-// maxFallbackTitleRunes caps a synthesized dc:title sourced from an outline
-// entry. Anti-bloat guard, not spec-mandated: outline titles are
-// file-supplied strings, and a multi-kilobyte document title helps no
-// reader while inflating every rewrite.
-const maxFallbackTitleRunes = 256
-
-// fallbackDocTitle returns a best-effort document title for PDF/UA
-// dc:title synthesis when DocInfo carries none: the first outline item's
-// /Title, or "" when the document has no usable outline.
-func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) string {
-	catalogRef, ok := catalogRefForFixer(ctx, doc)
-	if !ok {
-		return ""
-	}
-	catalog := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
-	if catalog == nil {
-		return ""
-	}
-	outlines, err := document.ResolveDict(ctx, doc, catalog["Outlines"])
-	if err != nil || outlines == nil {
-		return ""
-	}
-	first, err := document.ResolveDict(ctx, doc, outlines["First"])
-	if err != nil || first == nil {
-		return ""
-	}
-	titleObj, err := document.ResolveObject(ctx, doc, first["Title"])
-	if err != nil {
-		return ""
-	}
-	s, ok := titleObj.(ast.PdfString)
-	if !ok {
-		return ""
-	}
-	title := strings.TrimSpace(document.DecodePdfString(s))
-	if runes := []rune(title); len(runes) > maxFallbackTitleRunes {
-		title = string(runes[:maxFallbackTitleRunes])
-	}
-	return title
-}
-
 // generateXMP writes the catalog XMP packet of a document that carries none:
 // the identification schemas the profile claims and the analogues of the /Info
 // entries, which ISO 19005-1, 6.7.3 requires equivalent to them.
@@ -519,17 +472,15 @@ func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //     them outright, and reports the same rules as before on the PDF/A-2b
 //     outputs of the 21 files, whose placeholders gave way to empty values.
 func generateXMP(part int, conformance string, uaPart int, info infoMetadata) string {
-	// A placeholder stands in only for an entry /Info leaves out. ISO 19005-1,
-	// 6.7.3 requires the analogue of a present entry to be equivalent to it, an
-	// empty entry included, and veraPDF compares the two verbatim: an empty
-	// /Title against a dc:title of "Untitled" fails test 2 as surely as an
-	// absent dc:title does, and only an empty one passes. Under PDF/UA an empty
-	// /Title still gets the placeholder, since an empty dc:title identifies no
-	// document (ISO 14289-1, 7.1) and PDF/UA states no such equivalence.
+	// The dc:title is the /Title the document states, an empty one
+	// included: ISO 19005-1, 6.7.3 requires the analogue of a present entry
+	// to be equivalent to it, and veraPDF compares the two verbatim, so an
+	// empty /Title passes only against an empty dc:title. A document that
+	// states no title gets none: no processor can name a document, PDF/A
+	// requires no title, and PDF/UA, which does (ISO 14289-1, 7.1; ISO
+	// 14289-2, 8.11.1), then lists it in the residual.
 	title := xmlEscape(info.Title)
-	if title == "" && (uaPart > 0 || !info.Present["Title"]) {
-		title = "Untitled"
-	}
+	writeTitle := title != "" || info.Present["Title"]
 	creator := xmlEscape(info.Creator)
 	if creator == "" && !info.Present["Creator"] {
 		creator = "litho"
@@ -577,7 +528,9 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 		}
 	}
 
-	fmt.Fprintf(&sb, "  <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:title>\n", title)
+	if writeTitle {
+		fmt.Fprintf(&sb, "  <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:title>\n", title)
+	}
 	// An empty /Author or /Subject needs its analogue too, holding one empty
 	// entry: veraPDF reads a container with no entry at all as no value, which
 	// an empty entry is not equal to.
@@ -1840,8 +1793,8 @@ func pdfDateToXMP(pdfDate string) string {
 // there: [SyncXMPWithDocInfo] needs exactly this part when a caller edits
 // /Info directly.
 //
-// uaPart drives only the dc:title fallback, which PDF/UA requires and PDF/A
-// does not; pass 0 to sync what /Info holds and synthesize nothing.
+// uaPart keeps an empty /Title from blanking a packet's dc:title under
+// PDF/UA; pass 0 to sync what /Info holds, empty entries included.
 //
 // # Corpus evidence
 //
@@ -1857,10 +1810,11 @@ func pdfDateToXMP(pdfDate string) string {
 func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []string) {
 	var fixes []string
 	// Sync dc:title with Info /Title. PDF/UA additionally requires a
-	// dc:title outright (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): when
-	// neither DocInfo nor the packet carries one, synthesize it from the
-	// first outline title, then from a placeholder, so the requirement is
-	// met and /DisplayDocTitle has something to show.
+	// dc:title outright (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1), but only
+	// the document or the caller can name it: when neither DocInfo nor the
+	// packet carries one, none is written and the residual lists it. An
+	// outline's first entry names a part of the document, not the
+	// document.
 	//
 	// A present /Title drives the sync even when it is empty, as /Keywords
 	// does below: ISO 19005-1, 6.7.3 asks for an equivalent analogue of every
@@ -1869,19 +1823,7 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	// gives: an empty /Title neither blanks nor replaces the dc:title that
 	// identifies the document.
 	title := info.Title
-	titleSource := "Info /Title"
-	syncTitle := title != "" || (info.Present["Title"] && uaPart == 0)
-	if uaPart > 0 && title == "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
-		if info.FallbackTitle != "" {
-			title = info.FallbackTitle
-			titleSource = "outline title"
-		} else {
-			title = "Untitled document"
-			titleSource = "placeholder"
-		}
-		syncTitle = true
-	}
-	if syncTitle {
+	if title != "" || (info.Present["Title"] && uaPart == 0) {
 		escaped := xmlEscape(title)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
 		element := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
@@ -1891,7 +1833,7 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 			if existed {
 				fixes = append(fixes, "synced dc:title with Info /Title")
 			} else {
-				fixes = append(fixes, fmt.Sprintf("injected dc:title from %s", titleSource))
+				fixes = append(fixes, "injected dc:title from Info /Title")
 			}
 		}
 	}

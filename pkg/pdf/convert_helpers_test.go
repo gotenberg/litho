@@ -73,10 +73,11 @@ func withSpool(held int64) ConvertOption {
 
 // convertAndRemediate runs c in a pipeline and remediates its output in an
 // Apply stage: to pdfa, paired with pdfua when both are given, or to pdfua
-// alone, with lang as the document language when not empty. The output is
-// written in full at version, the version c converts at. opts reach the
-// pipeline's write after those two.
-func convertAndRemediate(ctx context.Context, c *Conversion, version string, pdfa models.PDFAProfile, pdfua models.PDFUAProfile, lang string, opts ...WriteOption) ([]byte, *models.RemediationReport, error) {
+// alone, with lang as the document language and title as its title when
+// not empty: what a caller states of a source that states neither. The
+// output is written in full at version, the version c converts at. opts
+// reach the pipeline's write after those two.
+func convertAndRemediate(ctx context.Context, c *Conversion, version string, pdfa models.PDFAProfile, pdfua models.PDFUAProfile, lang, title string, opts ...WriteOption) ([]byte, *models.RemediationReport, error) {
 	var remOpts []RemediateOption
 	if lang != "" {
 		remOpts = append(remOpts, WithLanguage(lang))
@@ -84,6 +85,9 @@ func convertAndRemediate(ctx context.Context, c *Conversion, version string, pdf
 	var report *models.RemediationReport
 	var out bytes.Buffer
 	_, err := NewPipeline().Convert(c).Apply(func(ctx context.Context, w *Writer) error {
+		if title != "" {
+			w.SetMetadata(models.Metadata{Title: title})
+		}
 		var err error
 		if pdfa != "" {
 			if pdfua != "" {

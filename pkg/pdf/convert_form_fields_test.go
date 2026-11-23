@@ -71,7 +71,7 @@ func TestConvert_FormFields(t *testing.T) {
 func TestConvert_FormFieldsRemediate(t *testing.T) {
 	t.Parallel()
 	c := FromODT(strings.NewReader(formODT()), WithConvertFontDirs(convertFontDir(t)), WithFormFields(true), WithDefaultLanguage("en"))
-	out, report, err := convertAndRemediate(context.Background(), c, "1.7", models.PDFA2b, models.PDFUA1, "en")
+	out, report, err := convertAndRemediate(context.Background(), c, "1.7", models.PDFA2b, models.PDFUA1, "en", "Form")
 	if err != nil {
 		t.Fatalf("remediating: %v", err)
 	}

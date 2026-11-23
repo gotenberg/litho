@@ -70,7 +70,7 @@ func TestConvert_CommentsRemediate(t *testing.T) {
 	t.Parallel()
 	src := strings.Replace(commentsODT(), `office:version="1.3"`, `xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0" office:version="1.3"`, 1)
 	c := FromODT(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)), WithComments(models.CommentsAnnotations), WithDefaultLanguage("en"))
-	out, report, err := convertAndRemediate(context.Background(), c, "1.7", models.PDFA2b, models.PDFUA1, "en")
+	out, report, err := convertAndRemediate(context.Background(), c, "1.7", models.PDFA2b, models.PDFUA1, "en", "Comments")
 	if err != nil {
 		t.Fatalf("remediating: %v", err)
 	}

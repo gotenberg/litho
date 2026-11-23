@@ -15,8 +15,8 @@ import (
 // needs, on a document whose source gives catalog-lang nothing to answer.
 //
 // The page holds no text and the document no XMP packet, so the source fails
-// no ISO 14289-1, 7.2 test. xmp-metadata then generates a packet whose
-// dc:title is a language alternative with an x-default entry, which 7.2 test
+// no ISO 14289-1, 7.2 test. xmp-metadata then generates a packet, whose
+// language alternatives (a dc:title, when the document states one) 7.2 test
 // 33 requires the catalog /Lang to determine. catalog-lang claimed the 7.2
 // findings alone, so it did not run, and only a second remediation round, run
 // on the first round's output, added the /Lang the caller states.

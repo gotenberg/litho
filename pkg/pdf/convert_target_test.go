@@ -57,7 +57,7 @@ func TestConvert_ConformsToTheProfilesAsked(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			c := FromText(strings.NewReader("A line of text.\nAnother line."), WithConvertFontDirs(dir), WithDefaultLanguage("en"), WithConvertVersion(tc.version))
-			data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, "en")
+			data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, "en", "Lines")
 			if err != nil {
 				t.Fatalf("converting and remediating: %v", err)
 			}
@@ -113,7 +113,7 @@ func TestConvert_LeavesNoTempFile(t *testing.T) {
 	conversion := func(tempDir string) *Conversion {
 		return FromText(strings.NewReader("A line of text."), WithConvertFontDirs(dir), WithConvertTempDir(tempDir))
 	}
-	data, rep, err := convertAndRemediate(ctx, conversion(tmp), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(tmp))
+	data, rep, err := convertAndRemediate(ctx, conversion(tmp), "1.7", models.PDFA2b, "", "", "", WithPipelineTempDir(tmp))
 	if err != nil || rep == nil || len(data) == 0 {
 		t.Fatalf("converting to PDF/A-2b: %v, report %v, %d bytes", err, rep, len(data))
 	}
@@ -122,7 +122,7 @@ func TestConvert_LeavesNoTempFile(t *testing.T) {
 	}
 
 	missing := filepath.Join(tmp, "missing")
-	data, _, err = convertAndRemediate(ctx, conversion(missing), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(missing))
+	data, _, err = convertAndRemediate(ctx, conversion(missing), "1.7", models.PDFA2b, "", "", "", WithPipelineTempDir(missing))
 	if err == nil {
 		t.Fatal("converting into a missing temp dir succeeded")
 	}
@@ -132,7 +132,7 @@ func TestConvert_LeavesNoTempFile(t *testing.T) {
 
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, _, err := convertAndRemediate(cancelled, conversion(tmp), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(tmp)); err == nil {
+	if _, _, err := convertAndRemediate(cancelled, conversion(tmp), "1.7", models.PDFA2b, "", "", "", WithPipelineTempDir(tmp)); err == nil {
 		t.Error("converting with a cancelled context succeeded")
 	}
 	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {

@@ -111,7 +111,7 @@ func TestConvert_LongDocumentsReachPDFA1(t *testing.T) {
 				t.Fatalf("WriteTo: %v", err)
 			}
 			plain := out.Bytes()
-			a1b, rep, err := convertAndRemediate(ctx, conversion(WithConvertVersion("1.4")), "1.4", models.PDFA1b, "", "en")
+			a1b, rep, err := convertAndRemediate(ctx, conversion(WithConvertVersion("1.4")), "1.4", models.PDFA1b, "", "en", "")
 			if err != nil {
 				t.Fatalf("converting to PDF/A-1b: %v", err)
 			}
