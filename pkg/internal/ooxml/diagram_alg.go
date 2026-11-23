@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The algorithms of a layout node (ECMA-376 Part 1, 21.4.2.1 alg and
@@ -763,6 +764,7 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 		shrink = map[string]bool{}
 	}
 	var fitted map[*DiagramShape]int64
+	var spacerRoom int64
 	if len(shrink) > 0 {
 		deps := map[string]bool{}
 		depFactor := map[string]float64{}
@@ -830,14 +832,40 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			fitted = shrinkToFit(s, props, ruled, depFactor)
 		}
 	} else {
-		s.Kids = dropEmptyGroupsBut(s.Kids, fl.spacers)
-		count = float64(len(s.Kids))
+		// A spacer keeps its room when a font size or a constraint states
+		// its length along the layout, a negative one included: Office
+		// overlaps the kids it parts.
+		// Such a spacer takes its length, not a share of the layout; sp,
+		// space and sibTrans space the kids as spaceW and spaceH say.
+		spacing := map[string]bool{"sp": true, "space": true, "sibTrans": true}
+		keep := maps.Clone(fl.spacers)
+		stated := map[string]bool{}
+		for _, k := range s.Kids {
+			if !k.Group || len(k.Kids) > 0 || fl.spacers[k.Name] || spacing[k.Name] {
+				continue
+			}
+			if v, ok := spacerLength(cons, props, k.Name, along); ok {
+				props.set(k.Name, along, v)
+				keep[k.Name], stated[k.Name] = true, true
+			}
+		}
+		s.Kids = dropEmptyGroupsBut(s.Kids, keep)
+		count = 0
+		for _, k := range s.Kids {
+			if stated[k.Name] {
+				v, _ := props.get(k.Name, along)
+				spacerRoom += v
+				continue
+			}
+			count++
+		}
+		count = max(count, 1)
 	}
 	cw, ch := s.W, s.H
 	if horizontal {
-		cw = trunc(float64(cw) / count)
+		cw = trunc(float64(cw-spacerRoom) / count)
 	} else if vertical {
-		ch = trunc(float64(ch) / count)
+		ch = trunc(float64(ch-spacerRoom) / count)
 	}
 	var x, y int64
 	if incX == -1 {
@@ -916,6 +944,33 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			s.Kids[i], s.Kids[j] = s.Kids[j], s.Kids[i]
 		}
 	}
+}
+
+// spacerLength returns the length along a linear layout that the
+// layout's constraint for its children gives a spacer: its factor of the layout's side, or of the
+// length of the kid its refForName names when this layout has resolved
+// it (21.4.2.6 constr refFor ch, refForName); false for any other.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-chevron's chevron1 parts its chevrons by
+//     parTxOnlySpace, -0.1 of a chevron's width: Office prints three
+//     chevrons 171.4 points wide and 154.1 apart, 2.8 widths filling the
+//     480-point frame; smartart-maxdepth's two 252.7 wide, 227.3 apart.
+func spacerLength(cons []DiagramConstraint, props layoutProps, name, along string) (int64, bool) {
+	for _, c := range cons {
+		if c.For != "ch" || c.ForName != name || c.Type != along || !setsLength(c) || c.RefType != along || !numeric.Finite(c.Factor) {
+			continue
+		}
+		if c.RefForName == "" {
+			return props.get(name, along)
+		}
+		if v, ok := props.get(c.RefForName, along); ok {
+			return trunc(float64(float64(v) * c.Factor)), true
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 // holdToBound holds the length an lte or gte constraint names to the bound it
