@@ -415,18 +415,23 @@ func (p *painter) sync(chain []*box) *ditem {
 
 // clipPath returns the padding box of b, its inner radii rounding it, the
 // clip overflow: hidden applies (CSS 2.1, 11.1.1; CSS Backgrounds 3, 5.3).
-// A box that is not a scroll container clips at the edge and past it by
-// the margin its overflow-clip-margin names, the corners rounded by the
-// edge's radii grown by that margin (CSS Overflow 4, 3.2). A box that
-// clips one axis alone clips it at its padding box, square (CSS Overflow
-// 3, 3.1.2), and leaves the other open.
+// A box that clips both axes without being a scroll container clips at
+// the edge and past it by the margin its overflow-clip-margin names, the
+// corners rounded by the edge's radii grown by that margin (CSS Overflow
+// 4, 3.2); a scroll container clips at its padding box whatever the
+// margin names (CSS Overflow 3, 3.2: the property has no effect on
+// overflow hidden or scroll). A box that clips one axis alone clips it at
+// its padding box, square (CSS Overflow 3, 3.1.2), and leaves the other
+// open.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 clips a box of
 //     overflow-x: clip or overflow-y: clip at its padding box in that
 //     axis alone, square under a border radius, and ignores its
-//     overflow-clip-margin, on screen and in print.
+//     overflow-clip-margin, on screen and in print; it ignores the
+//     margin, content-box included, under overflow: hidden, and applies
+//     it under overflow: clip, rounded.
 func (p *painter) clipPath(b *box) *typeset.Path {
 	// The clip stays where b's own relative offsets put it, whichever
 	// relatively positioned descendant asks for it.
@@ -456,7 +461,7 @@ func (p *painter) clipPath(b *box) *typeset.Path {
 	}
 	radii := radiiOf(b, r.Width, r.Height)
 	cm := b.st.OverflowClipMargin
-	if b.st.ScrollContainer() {
+	if !b.st.ClipOnly() {
 		cm = css.ClipMargin{}
 	}
 	pr, pradii := r, radii
