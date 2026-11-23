@@ -71,8 +71,10 @@ type section struct {
 	// on its page, after a continuous break.
 	balance bool
 	// align is the fraction of a page's free room its text moves down by
-	// (17.6.23 vAlign), 0 for top.
-	align float64
+	// (17.6.23 vAlign), 0 for top; spread spreads the room between the
+	// paragraphs instead (vAlign both).
+	align  float64
+	spread bool
 }
 
 // readPage reads the page size and margins of the sectPr e (17.6.13
@@ -215,7 +217,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		s.placeGutter(d.settings.gutterAtTop, e.Child(w, "rtlGutter") != nil && ooxml.Toggle(e.Child(w, "rtlGutter")))
 	}
 	if v := e.Child(w, "vAlign"); v != nil {
-		s.align = d.sectionAlign(attrOr(v, "val"))
+		s.align, s.spread = sectionAlign(attrOr(v, "val"))
 	}
 	if b := e.Child(w, "pgBorders"); b != nil {
 		s.frame = d.pageFrame(b, s)
@@ -590,23 +592,29 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 // sectionAlign returns how far a section's text moves down its pages, as
 // a fraction of the room it leaves, by its vAlign (ECMA-376 Part 1,
 // 17.6.23, 17.18.101 ST_VerticalJc): center sets it in the middle of the
-// text area, bottom against its bottom. Word spreads the room of both
-// between the paragraphs, which the layout does not: such a section's
-// text stays at the top, with a warning.
+// text area, bottom against its bottom; both spreads the room between
+// the paragraphs, reported as true.
 //
 // # Corpus evidence
 //
 //   - litho/docx sections-valign and sink-report: Word prints a page of a
 //     section of vAlign center with its text centred between the margins,
-//     and one of bottom with its last line against the bottom margin.
-func (d *document) sectionAlign(v string) float64 {
+//     and one of bottom with its last line against the bottom margin. On
+//     the page of both, its first paragraph starts where it would at
+//     the top and each of the three gaps between its four paragraphs
+//     grows by 180.4 pt, a third of the room, its last paragraph's space
+//     after reaching the bottom margin.
+//   - probe, docx: three paragraphs of a section of vAlign both print 305.3
+//     pt further apart each, the first at the top margin, the last
+//     paragraph's space after ending at the bottom margin.
+func sectionAlign(v string) (float64, bool) {
 	switch v {
 	case "center":
-		return 0.5
+		return 0.5, false
 	case "bottom":
-		return 1
+		return 1, false
 	case "both":
-		d.warn(warn.PageSetupUnsupported, warn.Approximated, "a section justified vertically is laid out from the top")
+		return 0, true
 	}
-	return 0
+	return 0, false
 }

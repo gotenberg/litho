@@ -30,3 +30,28 @@ func TestPageAlign(t *testing.T) {
 		t.Errorf("full page: lines %s, want %s", got, want)
 	}
 }
+
+// TestPageSpread spreads the room a page's content leaves between its
+// blocks: the first stays at the top, the last ends at the bottom, each
+// gap grows by an equal share; a page its content runs past, and a page
+// of one block, stay as they are.
+func TestPageSpread(t *testing.T) {
+	pb := page(100, 100)
+	pb.SpreadContent = true
+	pb.AlignContent = 1
+	if got, want := linePlaces(run(t, doc(wpara("a"), wpara("b"), wpara("c")), pb), 1), "a@0,8 b@0,53 c@0,98 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+	if got, want := linePlaces(run(t, doc(wpara("a")), pb), 1), "a@0,8 "; got != want {
+		t.Errorf("one block: lines %s, want %s", got, want)
+	}
+	pb = page(100, 30)
+	pb.SpreadContent = true
+	res := run(t, doc(wpara("a"), wpara("b"), wpara("c"), wpara("d"), wpara("e")), pb)
+	if got, want := linePlaces(res, 1), "a@0,8 b@0,18 c@0,28 "; got != want {
+		t.Errorf("full page: lines %s, want %s", got, want)
+	}
+	if got, want := linePlaces(res, 2), "d@0,8 e@0,28 "; got != want {
+		t.Errorf("last page: lines %s, want %s", got, want)
+	}
+}

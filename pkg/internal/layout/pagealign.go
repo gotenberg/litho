@@ -14,8 +14,9 @@ func (e *engine) pageAlignShift(k int) float64 {
 	if e.aligned == nil || k < 0 {
 		return 0
 	}
-	f := e.box(k).AlignContent
-	if !(f > 0) {
+	pb := e.box(k)
+	f := pb.AlignContent
+	if !(f > 0) || pb.SpreadContent {
 		return 0
 	}
 	if v, ok := e.shifts[k]; ok {
@@ -70,4 +71,121 @@ func (e *engine) contentBottom(rb *box, top, end float64) float64 {
 		stack = append(stack, b.kids...)
 	}
 	return bottom
+}
+
+// maxSpreadBlocks bounds the blocks [engine.spreadPages] collects.
+// Anti-DoS guard, not spec-mandated: a page holds a few dozen blocks, and
+// a document past the bound keeps its pages' content at the top.
+const maxSpreadBlocks = 1 << 16
+
+// spreadPages moves the blocks of the flow rooted at rb down on each page
+// whose box asks [PageBox.SpreadContent]: block i of the page's n by i
+// times the room its content leaves over n-1. A block is a box of lines,
+// a table, a replaced box or an empty box; a box holding blocks is read
+// through them.
+func (e *engine) spreadPages(rb *box) {
+	if !e.paginating() || e.cols != nil || !e.spreads() {
+		return
+	}
+	type unit struct {
+		b    *box
+		page int
+	}
+	var units []unit
+	// cut marks the pages a block runs past the edge of.
+	cut := map[int]bool{}
+	spread := map[int]bool{}
+	stack := []*box{rb}
+	for len(stack) > 0 {
+		b := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if !b.laidOut || b.fixed || b.abs || b.float != css.FloatNone || b.inline || b.kind == kindInline || b.kind == kindText || b.kind == kindBreak || math.IsNaN(b.y) {
+			continue
+		}
+		block := len(b.lines) > 0 || b.kind == kindReplaced || b.tpart == partWrapper || len(b.kids) == 0
+		if !block {
+			for i := len(b.kids) - 1; i >= 0; i-- {
+				stack = append(stack, b.kids[i])
+			}
+			continue
+		}
+		y0, y1 := b.y, b.y+b.borderH()
+		if n := len(b.lines); n > 0 {
+			// A paragraph pushed to the next page whole keeps its box's
+			// top where it was: its lines say where it lies.
+			y0, y1 = b.lines[0].y, b.lines[n-1].y+b.lines[n-1].h
+		}
+		// pageOf counts a position eps above a page's top on that page.
+		p, q := e.pageOf(y0), e.pageOf(y1-2*eps)
+		if y1-y0 <= eps {
+			q = p
+		}
+		if p != q {
+			for k := p; k <= q && k-p < maxSpreadBlocks; k++ {
+				cut[k] = true
+			}
+			continue
+		}
+		pb, ok := spread[p]
+		if !ok {
+			pb = e.box(p).SpreadContent
+			spread[p] = pb
+		}
+		if !pb {
+			continue
+		}
+		if len(units) >= maxSpreadBlocks {
+			return
+		}
+		units = append(units, unit{b: b, page: p})
+	}
+	for i := 0; i < len(units); {
+		j := i + 1
+		for j < len(units) && units[j].page == units[i].page {
+			j++
+		}
+		if k := units[i].page; !cut[k] {
+			bs := make([]*box, 0, j-i)
+			for _, u := range units[i:j] {
+				bs = append(bs, u.b)
+			}
+			e.spreadPage(k, bs, rb)
+		}
+		i = j
+	}
+}
+
+// spreads reports whether a page box laid out asks
+// [PageBox.SpreadContent].
+func (e *engine) spreads() bool {
+	if !e.geom.varies() {
+		return e.opts.Page.SpreadContent
+	}
+	for _, pb := range e.geom.boxes {
+		if pb.SpreadContent {
+			return true
+		}
+	}
+	return false
+}
+
+// spreadPage spreads the blocks bs of page k, in flow order, down the
+// room the flow rooted at rb leaves on it. Blocks that sit side by side
+// leave the page as it is.
+func (e *engine) spreadPage(k int, bs []*box, rb *box) {
+	if len(bs) < 2 {
+		return
+	}
+	top := e.pageTop(k)
+	for i := 1; i < len(bs); i++ {
+		if max(bs[i].y, top) < bs[i-1].y+bs[i-1].borderH()-eps {
+			return
+		}
+	}
+	end := top + e.sliceH(k)
+	room := max(end-e.contentBottom(rb, top, end), 0)
+	gap := room / float64(len(bs)-1)
+	for i, b := range bs {
+		b.shift(0, float64(gap*float64(i)))
+	}
 }

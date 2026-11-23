@@ -415,8 +415,9 @@ func TestHeaders_PageAnchoredDrawing(t *testing.T) {
 }
 
 // TestSections_VerticalAlign maps a section's vAlign onto the fraction of
-// its pages' room their text moves down by: none for top and for both,
-// which warns, a half for center, all of it for bottom.
+// its pages' room their text moves down by: none for top, a half for
+// center, all of it for bottom; both spreads the room between the
+// paragraphs.
 func TestSections_VerticalAlign(t *testing.T) {
 	t.Parallel()
 	for v, want := range map[string]float64{"top": 0, "center": 0.5, "bottom": 1, "both": 0} {
@@ -424,7 +425,10 @@ func TestSections_VerticalAlign(t *testing.T) {
 		if got := b.secs[0].align; got != want {
 			t.Errorf("vAlign %s: %v, want %v", v, got, want)
 		}
-		if warned := len(b.d.warnings) > 0; warned != (v == "both") {
+		if got := b.secs[0].spread; got != (v == "both") {
+			t.Errorf("vAlign %s: spread %v", v, got)
+		}
+		if len(b.d.warnings) > 0 {
 			t.Errorf("vAlign %s: warnings %v", v, b.d.warnings)
 		}
 	}

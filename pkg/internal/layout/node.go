@@ -583,6 +583,14 @@ type PageBox struct {
 	// processor's vertical page alignment), everything the slice holds
 	// with it. Values outside [0, 1] are clamped.
 	AlignContent float64
+	// SpreadContent spreads the room the content leaves in the page area
+	// between the blocks of the page's slice of the flow, its first block
+	// at the top and its last at the bottom, each gap between two blocks
+	// grown by an equal share (a word processor's justified vertical
+	// alignment). A page whose content runs on from or to another page,
+	// or that sets blocks side by side, keeps its content at the top. It
+	// takes precedence over AlignContent.
+	SpreadContent bool
 }
 
 // PageFrame is a border box drawn on every page it applies to.

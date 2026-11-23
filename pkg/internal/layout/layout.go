@@ -74,6 +74,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		seeds = found
 	}
 	e.placeSticky(rb, viewportBox(rb))
+	e.spreadPages(rb)
 	e.aligned = rb
 	disp, links, canvas := e.paint(rb)
 	if e.fitFixed(rb, disp) {
