@@ -1129,6 +1129,12 @@ type Style struct {
 	// its widget is then drawn as its CSS box, as Chromium draws it. Not
 	// inherited.
 	AuthorBorder, AuthorBackground bool
+	// AuthorMarginTop and AuthorMarginBottom report that an author's or a
+	// user's declaration set the element's top or bottom margin: a margin
+	// the user agent sheet sets is a quirky one in quirks mode for some
+	// elements (Quirks Mode Standard and HTML Standard, 15.3.3). Not
+	// inherited.
+	AuthorMarginTop, AuthorMarginBottom bool
 	// Resize says whether the box can be resized, which a textarea's
 	// resize grip shows (CSS Basic User Interface 4, 5.1).
 	Resize Resize

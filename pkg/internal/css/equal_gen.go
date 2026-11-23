@@ -164,6 +164,12 @@ func equalStyle(a, b *Style) bool {
 	if a.AuthorBackground != b.AuthorBackground {
 		return false
 	}
+	if a.AuthorMarginTop != b.AuthorMarginTop {
+		return false
+	}
+	if a.AuthorMarginBottom != b.AuthorMarginBottom {
+		return false
+	}
 	if a.Resize != b.Resize {
 		return false
 	}
@@ -915,6 +921,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.Appearance))
 	h = mixBool(h, x.AuthorBorder)
 	h = mixBool(h, x.AuthorBackground)
+	h = mixBool(h, x.AuthorMarginTop)
+	h = mixBool(h, x.AuthorMarginBottom)
 	h = mix(h, uint64(x.Resize))
 	h = mixBool(h, x.AccentColor != nil)
 	h = mixBool(h, x.OuterInline)

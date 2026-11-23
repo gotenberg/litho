@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 // TestDocumentMode_FollowsTheDoctype holds the document mode to the
@@ -114,6 +115,34 @@ func TestQuirksMode_TablesTakeTheBodyColour(t *testing.T) {
 		}
 		if got := byID(t, p.root, "i").Style.Color; got != red {
 			t.Errorf("quirks %v: inheriting table colour %v", quirks, got)
+		}
+	}
+}
+
+// TestQuirksMode_MarksQuirkyMargins marks the body, td and th elements of a
+// document in quirks mode as quirky containers and the margins the user
+// agent sheet gives the elements of HTML Standard, 15.3.3 as quirky: both
+// of a p, the top one of an h1, none an author sets; a document with an
+// HTML5 DOCTYPE has none.
+func TestQuirksMode_MarksQuirkyMargins(t *testing.T) {
+	const body = `<body id=b><table><tr><td id=c><p id=p>a</p><h1 id=h>b</h1><p id=a style="margin-top: 1em">c</p><figure id=f>d</figure></td></tr></table></body>`
+	for _, quirks := range []bool{true, false} {
+		src := body
+		if !quirks {
+			src = "<!DOCTYPE html>" + body
+		}
+		p := prep(t, src, Options{})
+		want := map[string]layout.MarginQuirks{
+			"b": layout.QuirkyContainer, "c": layout.QuirkyContainer, "p": layout.QuirkyTop | layout.QuirkyBottom,
+			"h": layout.QuirkyTop, "a": layout.QuirkyBottom, "f": 0,
+		}
+		for id, w := range want {
+			if !quirks {
+				w = 0
+			}
+			if got := byID(t, p.root, id).MarginQuirks; got != w {
+				t.Errorf("quirks %v: #%s margin quirks %v, want %v", quirks, id, got, w)
+			}
 		}
 	}
 }

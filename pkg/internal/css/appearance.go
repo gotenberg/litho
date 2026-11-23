@@ -84,7 +84,9 @@ func accentColorProp() propDef {
 // authorStyledProps holds, for each longhand, whether an author's
 // declaration of it makes a form control drawn as its widget give way to
 // its CSS box ([Style.AuthorBorder], [Style.AuthorBackground]): 1 for the
-// border's longhands, its radii and its image, 2 for the background's.
+// border's longhands, its radii and its image, 2 for the background's; and
+// whether an author's declaration sets the top or bottom margin, 4 and 8,
+// which a quirky margin does not have ([Style.AuthorMarginTop]).
 // Immutable lookup table.
 //
 // # Corpus evidence
@@ -111,11 +113,15 @@ var authorStyledProps = func() [numProps]uint8 {
 	} {
 		on[id] = authorBackground
 	}
+	on[pMarginTop] = authorMarginTop
+	on[pMarginBottom] = authorMarginBottom
 	return on
 }()
 
 // The bits of [authorStyledProps].
 const (
-	authorBorder     = 1
-	authorBackground = 2
+	authorBorder       = 1
+	authorBackground   = 2
+	authorMarginTop    = 4
+	authorMarginBottom = 8
 )

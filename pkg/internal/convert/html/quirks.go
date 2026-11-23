@@ -1,0 +1,51 @@
+package html
+
+import (
+	dom "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+)
+
+// marginQuirks returns the margin quirks of the HTML element n of style st
+// in a document in quirks mode (HTML Standard, 15.3.3, "Margin collapsing
+// quirks", as Chromium lays them out): the document's body element, a td
+// and a th are quirky containers, which drop the quirky margins that adjoin
+// the start or the end of their content; the top margin the user agent
+// sheet gives a p, pre, xmp, listing, plaintext, h1 to h6, ul, ol, dl,
+// menu, dir or blockquote is quirky, and the bottom one it gives a p, pre,
+// xmp, listing or plaintext. A margin an author sets is never quirky.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 drops in quirks
+//     mode both margins of a p, pre, xmp and listing alone in a td, the
+//     top margin alone of h1 to h6, ul, ol, dl, menu, dir and blockquote,
+//     neither of a figure; through a div, at the start of the body, after
+//     an empty span or an empty p, under a cell's padding, and at the end
+//     of a floated body; an author's margin: 1em 0 stays.
+func marginQuirks(n *dom.Node, st *css.Style) layout.MarginQuirks {
+	if st == nil || st.WritingMode != css.HorizontalTB {
+		return 0
+	}
+	var q layout.MarginQuirks
+	switch n.DataAtom { //nolint:exhaustive // the other elements have no margin quirk
+	case atom.Td, atom.Th:
+		q = layout.QuirkyContainer
+	case atom.Body:
+		if p := n.Parent; p != nil && p.DataAtom == atom.Html && p.Namespace == "" && p.Parent != nil && p.Parent.Type == dom.DocumentNode {
+			q = layout.QuirkyContainer
+		}
+	case atom.P, atom.Pre, atom.Xmp, atom.Listing, atom.Plaintext:
+		if !st.AuthorMarginBottom {
+			q |= layout.QuirkyBottom
+		}
+		fallthrough
+	case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6, atom.Ul, atom.Ol, atom.Dl, atom.Menu, atom.Dir, atom.Blockquote:
+		if !st.AuthorMarginTop {
+			q |= layout.QuirkyTop
+		}
+	}
+	return q
+}

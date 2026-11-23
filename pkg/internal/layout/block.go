@@ -25,6 +25,12 @@ type cblock struct {
 // the largest positive one and the most negative one.
 type strut struct {
 	pos, neg float64
+	// quirky is the largest positive quirky margin of the set, which
+	// quirkStart leaves out: the set adjoins the start of a quirky
+	// container's content (HTML Standard, 15.3.3, as Blink's margin strut
+	// keeps it apart).
+	quirky     float64
+	quirkStart bool
 	// cleared reports that the set holds the top margin of a box with
 	// clearance, which collapses through it: the set then does not
 	// collapse with its parent's bottom margin (CSS 2.1, 8.3.1).
@@ -41,8 +47,33 @@ func (s strut) add(m float64) strut {
 	return s
 }
 
+// addFor returns the strut with margin m adjoined, a quirky margin when
+// quirky.
+func (s strut) addFor(m float64, quirky bool) strut {
+	if quirky && m > 0 {
+		s.quirky = max(s.quirky, m)
+		return s
+	}
+	return s.add(m)
+}
+
 // sum returns the collapsed margin.
-func (s strut) sum() float64 { return s.pos + s.neg }
+func (s strut) sum() float64 {
+	if s.quirkStart {
+		return s.pos + s.neg
+	}
+	return max(s.pos, s.quirky) + s.neg
+}
+
+// marginQuirks returns whether the top and bottom margins of b are quirky,
+// and whether b is a quirky container (see [Node.MarginQuirks]).
+func marginQuirks(b *box) (top, bottom, container bool) {
+	if b.node == nil || b.anon {
+		return false, false, false
+	}
+	q := b.node.MarginQuirks
+	return q&QuirkyTop != 0, q&QuirkyBottom != 0, q&QuirkyContainer != 0
+}
 
 // pastMargin returns where content lands under the margins s collapsed at
 // cursor. Margins adjoining an unforced break truncate (CSS Fragmentation
@@ -718,6 +749,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		b.m[css.Top] = 0
 	}
 	mt, mb := b.m[css.Top], b.m[css.Bottom]
+	qt, qb, quirkyBox := marginQuirks(b)
 	if mode != breakNone && e.paginating() {
 		// Margins before a break are truncated; after a forced break the
 		// top margin stays, after an unforced one it is truncated too (CSS
@@ -760,7 +792,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	clearY := math.Inf(-1)
 	if b.st.Clear != css.ClearNone {
 		clearY = bc.clearTo(b.st.Clear)
-		hyp := mc.strut.add(mt)
+		hyp := mc.strut.addFor(mt, qt)
 		if b.kind != kindReplaced && !b.establishesBFC() {
 			lead := leadingMargins(b, cb.w)
 			hyp = hyp.add(lead.pos).add(lead.neg)
@@ -777,7 +809,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 	}
 	if b.kind == kindReplaced || b.establishesBFC() {
-		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
+		top := e.pastMargin(cursor, mc.strut.addFor(mt, qt), mc.kept)
 		want := e.pageTopOf(b, top)
 		if want > top+eps {
 			// The box starts no higher than its distance from its page's
@@ -812,7 +844,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		// 9.5).
 		mc.commit(top)
 		e.layoutBFCRoot(b, cb, bc, top)
-		mc.strut = strut{}.add(mb)
+		mc.strut = strut{}.addFor(mb, qb)
 		return b.y + b.borderH()
 	}
 	blockWidths(b, cb.w, cb.rtl(b), 0, false)
@@ -831,17 +863,22 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0, kept: true, trimStart: trim&css.TrimBlockStart != 0}
 		start = b.contentY()
 	case collapseTop:
-		mc.strut = mc.strut.add(mt)
+		mc.strut = mc.strut.addFor(mt, qt)
 		mc.waiting = append(mc.waiting, b)
 		b.y = e.pastMargin(cursor, mc.strut, mc.kept)
 		outerStrut = mc.strut
 		mc.trimStart = mc.trimStart || trim&css.TrimBlockStart != 0
 	default:
-		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
+		top := e.pastMargin(cursor, mc.strut.addFor(mt, qt), mc.kept)
 		mc.commit(top)
 		b.y = top
 		inner = &marginState{kept: true, trimStart: trim&css.TrimBlockStart != 0}
 		start = b.contentY()
+	}
+	if quirkyBox {
+		// The quirky margins adjoining the start of a quirky container's
+		// content are dropped (HTML Standard, 15.3.3).
+		inner.strut.quirkStart = true
 	}
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	ratioH := false
@@ -888,7 +925,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 			if !mc.absorb {
 				// Under absorb, the margins of an empty box collapse into
 				// the clearance above it, the bottom one as the top.
-				mc.strut = mc.strut.add(mb)
+				mc.strut = mc.strut.addFor(mb, qb)
 			}
 			return cursor
 		}
@@ -899,6 +936,10 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		end = max(end, b.contentY()+marker)
 	}
 	trailing := inner.strut
+	if quirkyBox {
+		// So are those adjoining the end of its content.
+		trailing.quirky = 0
+	}
 	if trailing.cleared {
 		// Margins that collapse with the top margin of a box with
 		// clearance do not collapse with b's bottom margin (8.3.1).
@@ -929,7 +970,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	e.placeMarker(b)
 	bottom := b.y + b.borderH()
 	if collapseBottom && math.Abs(b.h-h) < eps {
-		mc.strut = trailing.add(mb)
+		mc.strut = trailing.addFor(mb, qb)
 		if cleared && b.h <= eps && b.bd[css.Top] == 0 && b.pd[css.Top] == 0 {
 			// The margins of an empty box with clearance collapse with
 			// the margins after it, which then stay inside its parent
@@ -943,7 +984,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 		return bottom
 	}
-	mc.strut = strut{}.add(mb)
+	mc.strut = strut{}.addFor(mb, qb)
 	e.reach(bottom)
 	return bottom
 }
@@ -1141,6 +1182,8 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	}
 	trim := marginTrim(b)
 	mc := &marginState{kept: true, trimStart: trim&css.TrimBlockStart != 0}
+	_, _, quirkyBox := marginQuirks(b)
+	mc.strut.quirkStart = quirkyBox
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
 	saved := e.enterClamp(b, cb, b.contentY())
 	cloned := e.enterClone(b, b.y, hSet)
@@ -1153,6 +1196,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	}
 	if trim&css.TrimBlockEnd != 0 {
 		mc.strut = strut{}
+	}
+	if quirkyBox {
+		mc.strut.quirky = 0
 	}
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commitEnd(end)

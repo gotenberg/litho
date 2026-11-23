@@ -243,6 +243,12 @@ type Node struct {
 	// with an initial letter, or that establishes a formatting context,
 	// goes below the initial letters before it.
 	InitialLetter bool
+	// MarginQuirks are the margin quirks of an Element of a document in
+	// quirks mode (HTML Standard, 15.3.3): [QuirkyContainer] for a body,
+	// td or th element, [QuirkyTop] and [QuirkyBottom] for a top or bottom
+	// margin of the user agent sheet that such a container drops at its
+	// content's start or end. Zero for every other node.
+	MarginQuirks MarginQuirks
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
 	// is laid out in the footnote area of the page the call lands on, or
@@ -289,6 +295,21 @@ const (
 	// own and its negation as its margins, so its padding box covers the
 	// fieldset's below the legend.
 	FieldsetContent
+)
+
+// MarginQuirks is the set of margin quirks of a node (see
+// [Node.MarginQuirks]).
+type MarginQuirks uint8
+
+// The margin quirks.
+const (
+	// QuirkyContainer drops the quirky margins that adjoin the start or
+	// the end of its content.
+	QuirkyContainer MarginQuirks = 1 << iota
+	// QuirkyTop marks a quirky top margin.
+	QuirkyTop
+	// QuirkyBottom marks a quirky bottom margin.
+	QuirkyBottom
 )
 
 // Options parametrises one [Layout] call.

@@ -48,3 +48,68 @@ func TestLineQuirks_NoStrut(t *testing.T) {
 		}
 	}
 }
+
+// TestMarginQuirks_DroppedAtContainerEdges drops the quirky margins that
+// adjoin the start or the end of a quirky container's content (HTML
+// Standard, 15.3.3): through a block, after an empty quirky box, and
+// collapsed with a margin that is not quirky, which stays; elsewhere a
+// quirky margin collapses as any other.
+func TestMarginQuirks_DroppedAtContainerEdges(t *testing.T) {
+	quirky := func(q MarginQuirks, n *Node) *Node {
+		n.MarginQuirks = q
+		return n
+	}
+	para := func(text string) *Node {
+		st := sty(margin(16, 0, 16, 0), height(10))
+		if text == "" {
+			st = sty(margin(16, 0, 16, 0))
+		}
+		n := el(st)
+		if text != "" {
+			n.Children = []*Node{txt(inlineSty(), text)}
+		}
+		return quirky(QuirkyTop|QuirkyBottom, n)
+	}
+	for _, tc := range []struct {
+		name     string
+		kids     func() []*Node
+		quirks   [2]float64
+		standard [2]float64
+	}{
+		// The container's height, then its first child's top.
+		{"alone", func() []*Node { return []*Node{para("a")} }, [2]float64{10, 0}, [2]float64{42, 16}},
+		{"through a block", func() []*Node { return []*Node{el(sty(margin(4, 0, 0, 0)), para("a"))} }, [2]float64{14, 4}, [2]float64{42, 16}},
+		{"after an empty one", func() []*Node { return []*Node{para(""), para("a")} }, [2]float64{10, 0}, [2]float64{42, 16}},
+		{"between two", func() []*Node { return []*Node{para("a"), para("b")} }, [2]float64{36, 0}, [2]float64{68, 16}},
+	} {
+		for _, quirks := range []bool{true, false} {
+			q := MarginQuirks(0)
+			kids := tc.kids()
+			if quirks {
+				q = QuirkyContainer
+			} else {
+				var clear func(*Node)
+				clear = func(n *Node) {
+					n.MarginQuirks = 0
+					for _, k := range n.Children {
+						clear(k)
+					}
+				}
+				for _, k := range kids {
+					clear(k)
+				}
+			}
+			cell := quirky(q, el(sty(float(css.FloatLeft), width(50)), kids...))
+			b := kid(t, boxesWith(t, doc(cell), Options{Page: page(200, 200), Mode: css.Quirks}), 0, 0)
+			first := kid(t, b, 0)
+			got := [2]float64{rect(b)[3], rect(first)[1] - rect(b)[1]}
+			want := tc.standard
+			if quirks {
+				want = tc.quirks
+			}
+			if got != want {
+				t.Errorf("%s, quirky %v: height and first top %v, want %v", tc.name, quirks, got, want)
+			}
+		}
+	}
+}

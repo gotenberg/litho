@@ -951,6 +951,8 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	c.w = td.spanW(cd.col, cd.colSpan) - hEdges(c)
 	own := &bfc{}
 	mc := &marginState{}
+	_, _, quirkyCell := marginQuirks(c)
+	mc.strut.quirkStart = quirkyCell
 	kcb := cblock{x: c.contentX(), w: max(c.w, 0)}
 	if fixedH >= 0 {
 		kcb.h, kcb.hDefinite = fixedH, true
@@ -960,6 +962,11 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	saved := e.enterClamp(c, kcb, c.contentY())
 	end := formatterFor(c).layout(e, c, kcb, own, c.contentY(), mc)
 	e.leaveClamp(saved)
+	if quirkyCell {
+		// A quirky container drops the quirky margins that adjoin the
+		// start or the end of its content (HTML Standard, 15.3.3).
+		mc.strut.quirky = 0
+	}
 	end += mc.strut.sum()
 	mc.commitEnd(end)
 	end = max(end, own.bottom(), c.contentY())

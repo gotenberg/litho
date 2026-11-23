@@ -1410,6 +1410,7 @@ func (cs *computeState) computeStyle(winners *[numProps]any, imp *[numProps]bool
 	st := &cs.scratch
 	cs.computeInto(st, winners, parent, isRoot)
 	st.AuthorBorder, st.AuthorBackground = styled&authorBorder != 0, styled&authorBackground != 0
+	st.AuthorMarginTop, st.AuthorMarginBottom = styled&authorMarginTop != 0, styled&authorMarginBottom != 0
 	cs.attachTries(st, winners, imp, vars, parent, isRoot)
 	shared, adopted := cs.styles.shareCopy(st)
 	if adopted {

@@ -440,6 +440,9 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		return
 	}
 	node.Role = roles[n.DataAtom]
+	if b.frameOpts.mode == css.Quirks {
+		node.MarginQuirks = marginQuirks(n, node.Style)
+	}
 	if lang, ok := attr(n, "lang"); ok {
 		node.Lang = strings.TrimSpace(lang)
 	}
