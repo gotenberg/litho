@@ -133,6 +133,11 @@ func (e *formulaEval) cellValue(s, r, c, depth int) fval {
 			res, ok := e.eval(cell.Formula, s, r, c, 0, 0, depth+1)
 			e.state[k] = evaluated
 			if ok && res.rng == nil {
+				if f := g.baseStyle(r, c, cell).Format; !generalCode(f) {
+					// A reference to the cell reads the format the cell
+					// shows its result in.
+					res.format = f
+				}
 				e.done[k] = res
 				e.ok[k] = true
 				return res

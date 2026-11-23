@@ -168,6 +168,15 @@ func TestApplyFormulas_Volatile(t *testing.T) {
 			t.Errorf("cell %d = %+v format %q, want %v %q", i, c.Value, format, w.n, w.format)
 		}
 	}
+	// A reference to NOW() in a date-formatted cell takes the cell's
+	// format (sc/dependencyTree.ods prints =[.A5] of a dated =NOW() as
+	// 11/12/26).
+	dated := formulaDoc("NOW()", "A6")
+	dated.Sheets[0].Rows[3].Cells[0].Style = &Style{Format: "MM/DD/YY"}
+	out = newBuilder(context.Background(), dated, nil, office.Options{PrintDate: at}).formulasOf(t, dated)
+	if c := out.Sheets[0].Rows[3].Cells[1]; c.Style == nil || c.Style.Format != "MM/DD/YY" {
+		t.Errorf("a reference to a dated NOW() = %+v, want MM/DD/YY", c.Style)
+	}
 	for _, o := range []office.Options{{}, {PrintDate: at}} {
 		doc := formulaDoc("NOW()")
 		doc.ExcelRules = !o.PrintDate.IsZero()
