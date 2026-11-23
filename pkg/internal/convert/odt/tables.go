@@ -225,6 +225,14 @@ var cellAligns = map[string]css.AlignKind{"top": css.AlignTop, "middle": css.Mid
 
 // cell builds a table:table-cell (9.1.4): its spans, borders, padding,
 // background and vertical alignment, and its content.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/table-extrusion2.odt nests a 9.61 cm table
+//     in a 5 cm cell; LibreOffice draws its borders cut at the cell's.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, the text of a
+//     9.6 cm table in a 5 cm cell, left-aligned or centred, breaks at
+//     the table's width and is cut at the cell's right edge.
 func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node {
 	sv := baseValue()
 	st := &sv
@@ -248,6 +256,15 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	st.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
 	if k, ok := cellAligns[props.Get("style:vertical-align")]; ok {
 		st.VerticalAlign = css.VerticalAlign{Kind: k}
+	}
+	if c.Child(odf.NSTable, "table") != nil {
+		// Writer lays a table in a cell out at its own width and clips
+		// what passes the cell's edges.
+		// TODO: Writer clips the content of every cell; a clipped cell
+		// keeps the layout from breaking its row across pages
+		// (libreoffice/odt layout/C4_must_start_on_p1.fodt), so the cells
+		// that hold a table alone clip.
+		st.SetClipOnly()
 	}
 	role := "TD"
 	if header {

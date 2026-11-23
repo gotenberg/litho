@@ -67,6 +67,12 @@ type clipOverflow struct{}
 // context (CSS Overflow 3, 3.1), so it fragments as a block in flow does.
 func (s *Style) ClipOnly() bool { return s.Columns.clipOnly }
 
+// SetClipOnly sets the box's overflow to clip in both axes (CSS Overflow
+// 3, 3.1), as the overflow property does.
+func (s *Style) SetClipOnly() {
+	s.Overflow, s.Columns.scroller, s.Columns.clipOnly = OverflowHidden, false, true
+}
+
 // Wrap reports column-wrap: wrap, which starts a new row of columns below
 // a full one instead of an overflow column; auto behaves as wrap when the
 // column-height is a length, as nowrap otherwise (CSS Multicol 2, 3.4).
