@@ -349,3 +349,23 @@ func TestRead_Highlight(t *testing.T) {
 		t.Errorf("cleared highlight = %v, want none", got)
 	}
 }
+
+// TestRead_LinkColour draws a link's text in Impress's link colour, navy,
+// unless a span or paragraph style of the text's own sets a colour.
+func TestRead_LinkColour(t *testing.T) {
+	navy := css.Color{B: 128.0 / 255, A: 1}
+	red := css.Color{R: 1, A: 1}
+	f := flat{body: page(`<draw:frame svg:width="10cm" svg:height="4cm"><draw:text-box>` +
+		`<text:p><text:a xlink:href="https://x.test/">a</text:a></text:p>` +
+		`<text:p><text:span text:style-name="red"><text:a xlink:href="https://x.test/">b</text:a></text:span></text:p>` +
+		`<text:p text:style-name="P"><text:a xlink:href="#page1">c</text:a></text:p>` +
+		`</draw:text-box></draw:frame>`)}
+	f.auto = `<style:style style:name="red" style:family="text"><style:text-properties fo:color="#ff0000"/></style:style>` +
+		`<style:style style:name="P" style:family="paragraph"><style:text-properties fo:color="#ff0000"/></style:style>`
+	paras := firstShape(t, f).Text.Paragraphs
+	for i, want := range []css.Color{navy, red, red} {
+		if got := paras[i].Runs[0].Style.Color; got != want {
+			t.Errorf("paragraph %d: colour %v, want %v", i+1, got, want)
+		}
+	}
+}

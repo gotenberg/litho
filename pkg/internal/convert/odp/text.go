@@ -239,6 +239,9 @@ const maxTabStops = 64
 type runState struct {
 	style slides.RunStyle
 	auto  bool
+	// colored marks a colour a paragraph or span style of the run's own
+	// sets, which a link's text keeps ([linkColor]).
+	colored bool
 	// scale is the size the text position gives the text, a fraction of
 	// its font size, 0 for none.
 	scale                 float64
@@ -419,6 +422,19 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 	}
 }
 
+// linkColor is the colour Impress draws the text of a link in when no
+// paragraph or span style of the text's own sets one: LibreOffice's link
+// colour, navy.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf149311.odp prints a link to a slide, of no
+//     colour of its own, in #000080.
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, links to a web page
+//     and to a slide print in #000080, a link inside a red span in red,
+//     a link in a paragraph whose automatic style sets blue in blue.
+var linkColor = css.Color{R: 0, G: 0, B: 128.0 / 255, A: 1}
+
 // textPosition reads style:text-position (ODF 1.3, Part 3, 20.374): the
 // keywords super and sub, the automatic shifts the builder places, or a
 // percentage of the size raising (positive) or lowering the text, which
@@ -541,13 +557,17 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	if lc.inList {
 		lv = lc.level
 	}
-	layers := append(slices.Clip(tc.ss.levelLayers(lv)), r.textLayers(tc.ss.scope, odf.FamilyParagraph, p.A(odf.NSText, "style-name"))...)
+	own := r.textLayers(tc.ss.scope, odf.FamilyParagraph, p.A(odf.NSText, "style-name"))
+	layers := append(slices.Clip(tc.ss.levelLayers(lv)), own...)
 	var ps paraState
 	ps.spacing = 1
 	var rs runState
-	for _, l := range layers {
+	for i, l := range layers {
 		r.applyPara(&ps, l.para, !l.shapeAuto)
 		r.applyText(&rs, l.text)
+		if i >= len(layers)-len(own) && l.text.Has("fo:color") {
+			rs.colored = true
+		}
 	}
 	out := slides.Paragraph{
 		Align: ps.align, Level: lv,
@@ -783,10 +803,15 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 			sub := rs
 			for _, l := range r.textLayers(tc.ss.scope, odf.FamilyText, k.A(odf.NSText, "style-name")) {
 				r.applyText(&sub, l.text)
+				sub.colored = sub.colored || l.text.Has("fo:color")
 			}
 			r.inline(k, tc, sub, href, w, depth+1)
 		case "a":
-			r.inline(k, tc, rs, k.A(odf.NSXLink, "href"), w, depth+1)
+			sub := rs
+			if !sub.colored {
+				sub.style.Color, sub.auto = linkColor, false
+			}
+			r.inline(k, tc, sub, k.A(odf.NSXLink, "href"), w, depth+1)
 		case "s":
 			n, err := intconv.Atoi(k.A(odf.NSText, "c"))
 			if err != nil || n < 1 {
