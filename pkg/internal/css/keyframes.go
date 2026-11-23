@@ -304,7 +304,7 @@ type keyframesAt map[string]*keyframesRule
 var discreteAnimation = func() [numProps]bool {
 	var on [numProps]bool
 	for _, id := range []propID{
-		pPosition, pClear, pVisibility, pOverflow, pBoxSizing, pBorderTopStyle, pBorderRightStyle,
+		pPosition, pClear, pVisibility, pOverflowX, pOverflowY, pBoxSizing, pBorderTopStyle, pBorderRightStyle,
 		pBorderBottomStyle, pBorderLeftStyle, pBgImage, pBgRepeat, pFontFamily, pFontVariant, pTextAlign,
 		pTextDecoration, pTextAlignLast, pTextDecorationStyle, pTextTransform, pWhiteSpace, pWordBreak,
 		pOverflowWrap, pLineBreak, pWordSpaceTransform, pListStyleType, pListStylePosition,

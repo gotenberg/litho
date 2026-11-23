@@ -146,6 +146,7 @@ func initShorthands() {
 		"padding-block":  pairShorthand(pPaddingTop, pPaddingBottom),
 		"padding-inline": pairShorthand(pPaddingLeft, pPaddingRight),
 		"inset-block":    pairShorthand(pTop, pBottom),
+		"overflow":       pairShorthand(pOverflowX, pOverflowY),
 		"inset-inline":   pairShorthand(pLeft, pRight),
 
 		"contain-intrinsic-size": containIntrinsicShorthand(),

@@ -24,6 +24,12 @@ func equalStyle(a, b *Style) bool {
 	if a.Overflow != b.Overflow {
 		return false
 	}
+	if a.overflowX != b.overflowX {
+		return false
+	}
+	if a.overflowY != b.overflowY {
+		return false
+	}
 	if a.BoxSizing != b.BoxSizing {
 		return false
 	}
@@ -863,6 +869,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.Clear))
 	h = mix(h, uint64(x.Visibility))
 	h = mix(h, uint64(x.Overflow))
+	h = mix(h, uint64(x.overflowX))
+	h = mix(h, uint64(x.overflowY))
 	h = mix(h, uint64(x.BoxSizing))
 	h = hashClipMargin(h, &x.OverflowClipMargin)
 	h = mix(h, math.Float64bits(x.Opacity))
@@ -2020,12 +2028,6 @@ func equalColumns(a, b *Columns) bool {
 	if a.wrap != b.wrap {
 		return false
 	}
-	if a.scroller != b.scroller {
-		return false
-	}
-	if a.clipOnly != b.clipOnly {
-		return false
-	}
 	if (a.Tracks == nil) != (b.Tracks == nil) || len(a.Tracks) != len(b.Tracks) {
 		return false
 	}
@@ -2051,8 +2053,6 @@ func hashColumns(h uint64, x *Columns) uint64 {
 	h = mix(h, uint64(x.Fill))
 	h = hashDimension(h, &x.Height)
 	h = mix(h, uint64(x.wrap))
-	h = mixBool(h, x.scroller)
-	h = mixBool(h, x.clipOnly)
 	h = mixBool(h, x.Tracks == nil)
 	h = mix(h, uint64(len(x.Tracks)))
 	for i1 := range x.Tracks {

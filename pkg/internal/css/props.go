@@ -20,7 +20,7 @@ const (
 	pFloat
 	pClear
 	pVisibility
-	pOverflow
+	pOverflowX
 	pBoxSizing
 	pOpacity
 	pWidth
@@ -304,6 +304,7 @@ const (
 	pTransformStyle
 	pBackfaceVisibility
 	pZoom
+	pOverflowY
 	numProps
 )
 
@@ -672,44 +673,6 @@ func displayName(d Display) string {
 	return "block"
 }
 
-// parseOverflow parses overflow, overflow-x and overflow-y (CSS Overflow
-// 3, 3): scroll, auto and clip compute to hidden, the scroll containers
-// printed at their initial scroll position and clipped to their padding
-// box, as Chromium prints them, and a scroll container is marked as one
-// (see [scrollOverflow]). Two values compute to hidden when either clips.
-// clip with no hidden, scroll or auto beside it is marked as such (see
-// [clipOverflow]).
-func parseOverflow(v []token, _ *declCtx) (any, bool) {
-	if len(v) < 1 || len(v) > 2 {
-		return nil, false
-	}
-	out := OverflowVisible
-	scroll, hidden := false, false
-	for _, t := range v {
-		if t.typ != tIdent {
-			return nil, false
-		}
-		switch lower(t.value) {
-		case "visible":
-		case "scroll", "auto", "overlay":
-			scroll, out = true, OverflowHidden
-		case "hidden":
-			hidden, out = true, OverflowHidden
-		case "clip":
-			out = OverflowHidden
-		default:
-			return nil, false
-		}
-	}
-	switch {
-	case scroll:
-		return scrollOverflow{}, true
-	case out == OverflowHidden && !hidden:
-		return clipOverflow{}, true
-	}
-	return out, true
-}
-
 func parseOpacity(v []token, _ *declCtx) (any, bool) {
 	t, ok := single(v)
 	if !ok {
@@ -893,18 +856,7 @@ func init() {
 		{pVisibility, enumProp("visibility", true, func(s *Style) *Visibility { return &s.Visibility }, map[string]Visibility{
 			"visible": Visible, "hidden": Hidden, "collapse": VisibilityCollapse,
 		})},
-		{pOverflow, propDef{name: "overflow", parse: parseOverflow, compute: func(_ *styler, st *Style, v any) {
-			switch o := v.(type) {
-			case Overflow:
-				st.Overflow, st.Columns.scroller, st.Columns.clipOnly = o, false, false
-			case scrollOverflow:
-				st.Overflow, st.Columns.scroller = OverflowHidden, true
-			case clipOverflow:
-				st.Overflow, st.Columns.scroller, st.Columns.clipOnly = OverflowHidden, false, true
-			}
-		}, copyFrom: func(dst, src *Style) {
-			dst.Overflow, dst.Columns.scroller, dst.Columns.clipOnly = src.Overflow, src.Columns.scroller, src.Columns.clipOnly
-		}}},
+		{pOverflowX, overflowAxisProp("overflow-x", func(s *Style) *overflowAxis { return &s.overflowX })},
 		{pBoxSizing, enumProp("box-sizing", false, func(s *Style) *BoxSizing { return &s.BoxSizing }, map[string]BoxSizing{
 			"content-box": ContentBox, "border-box": BorderBox,
 		})},
@@ -1230,14 +1182,14 @@ func init() {
 		"none": ResizeNone, "both": ResizeBoth, "horizontal": ResizeHorizontal, "vertical": ResizeVertical,
 		"block": ResizeBlock, "inline": ResizeInline, "auto": ResizeAuto,
 	})
+	props[pOverflowY] = overflowAxisProp("overflow-y", func(s *Style) *overflowAxis { return &s.overflowY })
 	anchorLengths()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)
 	}
 	maps.Copy(longhandByName, map[string]propID{
-		"overflow-x": pOverflow, "overflow-y": pOverflow,
-		"overflow-block": pOverflow, "overflow-inline": pOverflow,
+		"overflow-inline": pOverflowX, "overflow-block": pOverflowY,
 		"margin-block-start": pMarginTop, "margin-block-end": pMarginBottom,
 		"margin-inline-start": pMarginLeft, "margin-inline-end": pMarginRight,
 		"padding-block-start": pPaddingTop, "padding-block-end": pPaddingBottom,

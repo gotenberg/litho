@@ -226,8 +226,9 @@ func (e *engine) overflowRight(rb *box) float64 {
 				countAt(m, x1, y1)
 			}
 		}
-		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
-			// The box clips its content: its border box alone counts.
+		if b.kind == kindBlock && b.parent != nil && b.st.ClipsX() && b != vp {
+			// The box clips its content's sides: its border box alone
+			// counts.
 			continue
 		}
 		for _, l := range b.lines {
@@ -410,9 +411,9 @@ func continues(b *box, end float64) bool {
 	return false
 }
 
-// clipsContent reports whether the block b clips what overflows it: an
-// overflow other than visible that does not pass to the viewport (CSS
-// Overflow 3, 3.1).
+// clipsContent reports whether the block b clips what overflows its
+// bottom: an overflow-y other than visible that does not pass to the
+// viewport (CSS Overflow 3, 3.1).
 func clipsContent(b *box) bool {
-	return b.kind == kindBlock && b.st.Overflow != css.OverflowVisible && !b.toViewport()
+	return b.kind == kindBlock && b.st.ClipsY() && !b.toViewport()
 }

@@ -229,7 +229,7 @@ func (e *engine) positionedPages(rb *box, clipped bool) int {
 				}
 				n = max(n, e.pageOf(max(end, k.y, 0))+1)
 			}
-			if k.kind == kindBlock && k.st.Overflow != css.OverflowVisible && !k.toViewport() || k.mc != nil {
+			if clipsContent(k) || k.mc != nil {
 				// The display list knows where a multi-column container's
 				// positioned boxes paint, moved to their columns.
 				continue

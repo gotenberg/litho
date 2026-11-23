@@ -1552,6 +1552,7 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 			}
 		}
 	}
+	fixupOverflow(st)
 	fixupDisplay(st, isRoot)
 	if st.Display == Contents && cs.noContents {
 		st.Display = DisplayNone

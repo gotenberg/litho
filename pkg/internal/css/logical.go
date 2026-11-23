@@ -80,8 +80,10 @@ func opposite(s Side) Side { return (s + 2) % 4 }
 // [Side].
 var sideGroups = []propID{pMarginTop, pPaddingTop, pTop, pBorderTopStyle, pBorderTopWidth, pBorderTopColor}
 
-// sizePairs are the width-like longhands and their height-like partners.
-var sizePairs = [][2]propID{{pWidth, pHeight}, {pMinWidth, pMinHeight}, {pMaxWidth, pMaxHeight}, {pContainIntrinsicWidth, pContainIntrinsicHeight}}
+// sizePairs are the width-like longhands and their height-like partners,
+// and overflow-x and overflow-y, which overflow-inline and overflow-block
+// map onto (CSS Overflow 3, 3.1).
+var sizePairs = [][2]propID{{pWidth, pHeight}, {pMinWidth, pMinHeight}, {pMaxWidth, pMaxHeight}, {pContainIntrinsicWidth, pContainIntrinsicHeight}, {pOverflowX, pOverflowY}}
 
 // mapID returns the longhand id maps onto under m.
 func (m flowMap) mapID(id propID) propID {

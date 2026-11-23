@@ -113,7 +113,7 @@ func (cs *computeState) fieldsetStyles(n *html.Node, st *Style, vars map[string]
 	c.RowGap, c.ColumnGap = st.RowGap, st.ColumnGap
 	c.GridAutoColumns, c.GridAutoRows, c.GridAutoFlow = st.GridAutoColumns, st.GridAutoRows, st.GridAutoFlow
 	c.GridTemplateAreas, c.GridTemplateRows, c.GridTemplateColumns = st.GridTemplateAreas, st.GridTemplateRows, st.GridTemplateColumns
-	c.Overflow, c.OverflowClipMargin = st.Overflow, st.OverflowClipMargin
+	c.Overflow, c.overflowX, c.overflowY, c.OverflowClipMargin = st.Overflow, st.overflowX, st.overflowY, st.OverflowClipMargin
 	c.TextOverflow = st.TextOverflow
 	c.UnicodeBidi = st.UnicodeBidi
 	c.Height = Dimension{Kind: Percent, Value: 1}
@@ -127,7 +127,7 @@ func (cs *computeState) fieldsetStyles(n *html.Node, st *Style, vars map[string]
 	}
 	f.flexOrGrid = false
 	init := InitialValue()
-	f.Overflow, f.OverflowClipMargin = init.Overflow, init.OverflowClipMargin
+	f.Overflow, f.overflowX, f.overflowY, f.OverflowClipMargin = init.Overflow, init.overflowX, init.overflowY, init.OverflowClipMargin
 	f.Columns = init.Columns
 	f.Columns.SpanAll = st.Columns.SpanAll
 	f.TextOverflow = init.TextOverflow

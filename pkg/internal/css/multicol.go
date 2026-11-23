@@ -35,42 +35,11 @@ type Columns struct {
 	// wrap is the column-wrap (CSS Multicol 2, 3.4), read through
 	// [Columns.Wrap].
 	wrap columnWrap
-	// scroller records an overflow of scroll or auto, read through
-	// [Style.ScrollContainer].
-	scroller bool
-	// clipOnly records an overflow of clip, read through
-	// [Style.ClipOnly].
-	clipOnly bool
 	// Tracks, when not empty, gives each column of a row its own width and
 	// the gap after it, as the Office formats lay columns of different
 	// widths out (see [ColumnTrack]); no CSS property sets it. The column
 	// count is then len(Tracks), Count and Width aside.
 	Tracks []ColumnTrack
-}
-
-// scrollOverflow is a specified overflow of scroll or auto, which
-// computes to hidden on paged media, the box printed at its initial
-// scroll position, and marks the box a scroll container.
-type scrollOverflow struct{}
-
-// ScrollContainer reports an overflow of scroll or auto. Paged media
-// prints such a box clipped, as Chromium does, and it stays a scroll
-// container, which is monolithic in a fragmentation context (CSS
-// Fragmentation 3, 4.1), as Chromium lays it out in columns.
-func (s *Style) ScrollContainer() bool { return s.Columns.scroller }
-
-// clipOverflow is a specified overflow of clip, alone or beside visible.
-type clipOverflow struct{}
-
-// ClipOnly reports an overflow of clip: the box clips its content as
-// hidden does but is no scroll container and establishes no formatting
-// context (CSS Overflow 3, 3.1), so it fragments as a block in flow does.
-func (s *Style) ClipOnly() bool { return s.Columns.clipOnly }
-
-// SetClipOnly sets the box's overflow to clip in both axes (CSS Overflow
-// 3, 3.1), as the overflow property does.
-func (s *Style) SetClipOnly() {
-	s.Overflow, s.Columns.scroller, s.Columns.clipOnly = OverflowHidden, false, true
 }
 
 // Wrap reports column-wrap: wrap, which starts a new row of columns below

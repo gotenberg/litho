@@ -417,7 +417,16 @@ func (p *painter) sync(chain []*box) *ditem {
 // clip overflow: hidden applies (CSS 2.1, 11.1.1; CSS Backgrounds 3, 5.3).
 // A box that is not a scroll container clips at the edge and past it by
 // the margin its overflow-clip-margin names, the corners rounded by the
-// edge's radii grown by that margin (CSS Overflow 4, 3.2).
+// edge's radii grown by that margin (CSS Overflow 4, 3.2). A box that
+// clips one axis alone clips it at its padding box, square (CSS Overflow
+// 3, 3.1.2), and leaves the other open.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 clips a box of
+//     overflow-x: clip or overflow-y: clip at its padding box in that
+//     axis alone, square under a border radius, and ignores its
+//     overflow-clip-margin, on screen and in print.
 func (p *painter) clipPath(b *box) *typeset.Path {
 	// The clip stays where b's own relative offsets put it, whichever
 	// relatively positioned descendant asks for it.
@@ -432,6 +441,18 @@ func (p *painter) clipPath(b *box) *typeset.Path {
 			c, _ = intersect(c, r) // an empty intersection clips everything, which the empty rectangle does
 		}
 		return &typeset.Path{Ops: rectOps(c), Fill: &typeset.Fill{}}
+	}
+	if cx, cy := b.st.ClipsX(), b.st.ClipsY(); cx != cy {
+		pr, _ := insetRect(r, [4][2]float64{}, b.bd)
+		// The open axis reaches past everything the layout placed: a
+		// PDF clip is a bounded path.
+		reach := float64(float64(p.e.seenPage+2) * (p.e.pageW + p.e.pageH))
+		if cx {
+			pr.Y, pr.Height = pr.Y-reach, pr.Height+float64(2*reach)
+		} else {
+			pr.X, pr.Width = pr.X-reach, pr.Width+float64(2*reach)
+		}
+		return &typeset.Path{Ops: rectOps(pr), Fill: &typeset.Fill{}}
 	}
 	radii := radiiOf(b, r.Width, r.Height)
 	cm := b.st.OverflowClipMargin

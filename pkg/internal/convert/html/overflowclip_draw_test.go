@@ -44,3 +44,40 @@ func TestDraw_OverflowClipMakesNoFormattingContext(t *testing.T) {
 		})
 	}
 }
+
+func TestDraw_OverflowClipsOneAxis(t *testing.T) {
+	t.Parallel()
+	// CSS Overflow 3, 3.1 and 3.1.2: overflow-x: clip clips the sides at
+	// the padding box, square under a border radius, and leaves the
+	// bottom open; overflow-clip-margin applies to neither (Chromium
+	// applies it only where both axes clip). A 20px box holds a 40px
+	// square shifted 10px up and left.
+	o := Options{PageWidth: 60 * 0.75, PageHeight: 60 * 0.75}
+	doc := conv(t, `<!DOCTYPE html><body style="margin:0"><div style="margin:10px;width:20px;height:20px;border-radius:10px;overflow-x:clip;overflow-clip-margin:5px"><div style="position:relative;left:-10px;top:-10px;width:40px;height:40px;background:#00ff00"></div></div>`, o)
+	var b bytes.Buffer
+	if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if RenderPDF == nil {
+		t.Fatal("no PDF renderer installed")
+	}
+	img, err := RenderPDF(b.Bytes(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		x, y  int
+		green bool
+	}{
+		{11, 11, true},  // the padding box's corner, under the radius
+		{20, 2, true},   // above the box: y is open
+		{20, 37, true},  // below the box
+		{8, 20, false},  // left of it: x is clipped, the margin ignored
+		{32, 20, false}, // right of it
+	} {
+		c := color.NRGBAModel.Convert(img.At(tt.x, tt.y)).(color.NRGBA)
+		if got := c.R < 0x40 && c.G > 0xc0; got != tt.green {
+			t.Errorf("(%d, %d) = %v, want green %v", tt.x, tt.y, c, tt.green)
+		}
+	}
+}

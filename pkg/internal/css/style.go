@@ -252,9 +252,13 @@ const (
 	VisibilityCollapse
 )
 
-// Overflow is the overflow property (CSS 2.1, 11.1.1). On paged output a
-// scroll container prints at its initial scroll position, clipped, so
-// scroll and auto compute to OverflowHidden.
+// Overflow is whether a box clips its overflow in either axis (CSS
+// Overflow 3, 3.1): OverflowHidden when overflow-x or overflow-y is other
+// than visible. On paged output a scroll container prints at its initial
+// scroll position, clipped, so scroll and auto clip as hidden does. A
+// style the cascade computes keeps each axis apart: read them through
+// [Style.ClipsX], [Style.ClipsY], [Style.ClipOnly] and
+// [Style.ScrollContainer].
 type Overflow uint8
 
 // The overflow values.
@@ -1046,7 +1050,12 @@ type Style struct {
 	Clear      Clear
 	Visibility Visibility
 	Overflow   Overflow
-	BoxSizing  BoxSizing
+	// overflowX and overflowY are the computed overflow-x and overflow-y
+	// (see [overflowAxis]); both visible beside an Overflow of
+	// OverflowHidden, as a style built without the cascade holds them,
+	// mean hidden in both axes.
+	overflowX, overflowY overflowAxis
+	BoxSizing            BoxSizing
 	// OverflowClipMargin is how far past which edge a box that clips its
 	// overflow, and is not a scroll container, clips it (CSS Overflow 4,
 	// 3.2); the zero value clips at the padding box.

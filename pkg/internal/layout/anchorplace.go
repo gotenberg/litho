@@ -999,7 +999,7 @@ func (e *engine) clippedAnchor(a, p *box) bool {
 		}
 		cx0, cy0 := x.x+x.bd[css.Left], x.y+x.bd[css.Top]
 		cx1, cy1 := cx0+x.w+x.pd[css.Left]+x.pd[css.Right], cy0+x.h+x.pd[css.Top]+x.pd[css.Bottom]
-		if r.x1 <= cx0 || r.x0 >= cx1 || r.y1 <= cy0 || r.y0 >= cy1 {
+		if x.st.ClipsX() && (r.x1 <= cx0 || r.x0 >= cx1) || x.st.ClipsY() && (r.y1 <= cy0 || r.y0 >= cy1) {
 			return true
 		}
 	}
