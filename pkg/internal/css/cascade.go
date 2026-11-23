@@ -172,6 +172,10 @@ const (
 	// element that holds its content but its summary (HTML Standard,
 	// 15.5.5; CSS Pseudo 4, 3.4).
 	PseudoDetailsContent
+	// PseudoPlaceholder is ::placeholder, the placeholder text of an input
+	// or a textarea (CSS Pseudo 4, 4.2), which Chromium also names
+	// ::-webkit-input-placeholder.
+	PseudoPlaceholder
 	numPseudos
 )
 
@@ -182,7 +186,7 @@ var pseudoNames = map[string]PseudoElement{
 	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
 	"note-call": PseudoNoteCall, "note-marker": PseudoNoteMarker, "note-callback": PseudoNoteCallback,
 	"first-letter": PseudoFirstLetter, "first-line": PseudoFirstLine,
-	"details-content": PseudoDetailsContent,
+	"details-content": PseudoDetailsContent, "placeholder": PseudoPlaceholder,
 }
 
 // NewResolver indexes the rules of sheets, in order, whose media
@@ -1033,6 +1037,10 @@ func (cs *computeState) element(n, parent *html.Node) {
 		}
 		if pe == PseudoDetailsContent && (n.Namespace != "" || n.DataAtom != atom.Details) {
 			// A ::details-content exists on a details element alone.
+			continue
+		}
+		if pe == PseudoPlaceholder && (n.Namespace != "" || n.DataAtom != atom.Input && n.DataAtom != atom.Textarea) {
+			// A ::placeholder exists on an input or a textarea alone.
 			continue
 		}
 		cs.elem++

@@ -824,6 +824,17 @@ select {
 select:disabled {
   opacity: 0.7;
 }
+/* The placeholder text of a text control, which Chromium sets on one
+ * line in a single-line field, in its own colour. */
+::placeholder {
+  color: #757575;
+}
+input::placeholder {
+  line-height: initial;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow: hidden;
+}
 button:disabled,
 input:is([type="reset" i], [type="button" i], [type="submit" i]):disabled {
   color: light-dark(rgba(16, 16, 16, 0.3), rgba(255, 255, 255, 0.3));

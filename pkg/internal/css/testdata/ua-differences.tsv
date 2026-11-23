@@ -77,6 +77,7 @@ own	|::note-call|content	CSS GCPM 3, Appendix B: the footnote and note calls and
 own	|::note-call|font-size	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::note-call|vertical-align	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::note-marker|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::placeholder|color	Chromium's placeholder of a text control (::placeholder, ::-webkit-input-placeholder), measured: #757575 under either colour scheme, one unwrapped line in a single-line field
 own	|[dir=ltr i]|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
 own	|[dir=rtl i]|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
 own	|[popover]:not(dialog[open])|display	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
@@ -122,6 +123,10 @@ own	|h6|font-weight	written as h1 to h6, which :heading matches without a headin
 own	|h6|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
 own	|h6|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
 own	|hr[noshade]|border-style	hr with noshade: the Standard's presentational hint, written as a rule
+own	|input::placeholder|line-height	Chromium's placeholder of a text control (::placeholder, ::-webkit-input-placeholder), measured: #757575 under either colour scheme, one unwrapped line in a single-line field
+own	|input::placeholder|overflow	Chromium's placeholder of a text control (::placeholder, ::-webkit-input-placeholder), measured: #757575 under either colour scheme, one unwrapped line in a single-line field
+own	|input::placeholder|overflow-wrap	Chromium's placeholder of a text control (::placeholder, ::-webkit-input-placeholder), measured: #757575 under either colour scheme, one unwrapped line in a single-line field
+own	|input::placeholder|white-space	Chromium's placeholder of a text control (::placeholder, ::-webkit-input-placeholder), measured: #757575 under either colour scheme, one unwrapped line in a single-line field
 own	|input:disabled|color	Chromium's control colours: Field and FieldText for fields, ButtonFace and ButtonText for buttons and a drop-down box, #545454 for the text of a disabled field and 30 per cent opaque text on a disabled button, light-dark() for a dark colour scheme, measured
 own	|input:is([type=date i], [type=time i], [type=datetime-local i], [type=month i], [type=week i])|font-family	Chromium's control font, font: -webkit-small-control, which computes to 13.333px (10pt) and draws in the face Chromium's sans-serif takes (Liberation Sans in the pinned image); a textarea and the date and time fields in monospace
 own	|input:is([type=date i], [type=time i], [type=datetime-local i], [type=month i], [type=week i])|padding-left	Chromium's control box, which the Standard leaves to the user agent: the border, padding and margin each control takes in Chromium, measured on its printed boxes; a control drawn as its widget paints the widget in their place

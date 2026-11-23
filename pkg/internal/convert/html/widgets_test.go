@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -135,12 +136,13 @@ func TestPrepare_DateFieldsShowChromiumsText(t *testing.T) {
 // empty field's line, and builds a file input as Chromium shows it.
 func TestPrepare_PlaceholdersAndFiles(t *testing.T) {
 	t.Parallel()
-	p := prep(t, `<input id=ph placeholder="Name"><input id=v value="x" placeholder="Name"><input id=e>`+
+	p := prep(t, `<!DOCTYPE html><input id=ph placeholder="Name"><input id=v value="x" placeholder="Name"><input id=e>`+
 		`<textarea id=ta placeholder="More"></textarea><input id=f type=file><input id=fm type=file multiple>`, Options{})
-	for id, gray := range map[string]bool{"ph": true, "v": false, "ta": true} {
+	gray := css.Color{R: 0x75 / 255.0, G: 0x75 / 255.0, B: 0x75 / 255.0, A: 1}
+	for id, want := range map[string]bool{"ph": true, "v": false, "ta": true} {
 		c := byID(t, p.root, id).Children[0].Style.Color
-		if got := c == placeholderColor; got != gray {
-			t.Errorf("%s: placeholder colour %v, want %v", id, got, gray)
+		if got := c == gray; got != want {
+			t.Errorf("%s: placeholder colour %v, want %v", id, got, want)
 		}
 	}
 	if e := byID(t, p.root, "e"); len(e.Children) != 1 || e.Children[0].Kind != layout.LineBreak {
@@ -151,5 +153,43 @@ func TestPrepare_PlaceholdersAndFiles(t *testing.T) {
 		if got := treeText(f); got != want || f.Control.Kind != layout.ControlFile || f.Children[0].Control.Kind != layout.ControlButton {
 			t.Errorf("%s: %q %+v, want %q with a button", id, got, f.Control, want)
 		}
+	}
+}
+
+// TestPrepare_PlaceholderStyles styles a control's placeholder by its
+// ::placeholder rules and Chromium's ::-webkit-input-placeholder (CSS
+// Pseudo 4, 4.2): a block in the control holding the text, inheriting
+// from the control, its padding and background its own; display: none
+// leaves the field its empty line.
+func TestPrepare_PlaceholderStyles(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<!DOCTYPE html><style>
+#a::placeholder { color: red; font-style: italic; padding-left: 30px; background: yellow }
+#b::-webkit-input-placeholder { color: blue }
+#c { color: green } #c::placeholder { color: inherit }
+#d::placeholder { display: none }
+#t::placeholder { color: orange; white-space: normal }
+</style><input id=a placeholder=A><input id=b placeholder=B><input id=c placeholder=C>`+
+		`<input id=d placeholder=D><textarea id=t placeholder=T></textarea>`, Options{})
+	for id, want := range map[string]css.Color{
+		"a": {R: 1, A: 1}, "b": {B: 1, A: 1}, "c": {G: 128 / 255.0, A: 1}, "t": {R: 1, G: 165 / 255.0, A: 1},
+	} {
+		ph := byID(t, p.root, id).Children[0]
+		if ph.Kind != layout.Element || ph.Style.Display != css.Block || len(ph.Children) != 1 || ph.Children[0].Kind != layout.Text {
+			t.Fatalf("%s: placeholder %+v, want a block holding its text", id, ph)
+		}
+		if ph.Style.Color != want || ph.Children[0].Style.Color != want {
+			t.Errorf("%s: colour %v, want %v", id, ph.Style.Color, want)
+		}
+	}
+	a := byID(t, p.root, "a").Children[0].Style
+	if a.FontStyle != css.FontItalic || a.Padding[css.Left] != css.Pts(30*css.Pt) || a.BackgroundColor.A != 1 {
+		t.Errorf("a: placeholder style %v %v %v, want italic, 30px padding, a background", a.FontStyle, a.Padding[css.Left], a.BackgroundColor)
+	}
+	if ws := byID(t, p.root, "a").Children[0].Style.WhiteSpace; ws != css.Pre {
+		t.Errorf("a: white space %v, want pre on a single-line field", ws)
+	}
+	if d := byID(t, p.root, "d"); len(d.Children) != 1 || d.Children[0].Kind != layout.LineBreak {
+		t.Errorf("d: children %+v, want the empty line of a field without its placeholder", d.Children)
 	}
 }

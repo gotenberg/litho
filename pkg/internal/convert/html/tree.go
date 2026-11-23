@@ -892,6 +892,10 @@ func sizedByStyle(st *css.Style) bool {
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	var s string
 	var ctl *layout.Control
+	// ph is the box of the placeholder the control shows, nil when it
+	// shows its value or when ::placeholder is display: none.
+	var ph *layout.Node
+	shownPlaceholder := false
 	disabled := formDisabled(n)
 	textSt := st
 	role := typeset.PrintText
@@ -936,7 +940,7 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 		default:
 			ctl = &layout.Control{Kind: layout.ControlTextField, Chars: positiveAttr(n, "size", defaultInputSize)}
 			if v, _ := attr(n, "value"); v == "" && s != "" {
-				textSt = placeholderStyle(textSt)
+				ph, shownPlaceholder = b.placeholder(n, st, s), true
 			}
 		}
 	case atom.Select:
@@ -954,7 +958,7 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 		s = textContent(n)
 		if s == "" {
 			if s, _ = attr(n, "placeholder"); s != "" {
-				textSt = placeholderStyle(st)
+				ph, shownPlaceholder = b.placeholder(n, st, s), true
 			}
 		}
 		ctl = &layout.Control{Kind: layout.ControlTextArea, Chars: positiveAttr(n, "cols", defaultTextAreaCols), Rows: positiveAttr(n, "rows", defaultTextAreaRows)}
@@ -963,9 +967,12 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	node := &layout.Node{Kind: layout.Element, Style: st, Control: ctl}
 	node.ID, _ = attr(n, "id")
 	formRole(node, n, role, false)
-	if s != "" {
+	switch {
+	case ph != nil:
+		node.Children = []*layout.Node{ph}
+	case s != "" && !shownPlaceholder:
 		node.Children = []*layout.Node{{Kind: layout.Text, Style: textSt, Text: s}}
-	} else if ctl.Kind != layout.ControlButton {
+	case ctl.Kind != layout.ControlButton:
 		// An empty field keeps its line, whose baseline is the field's
 		// (CSS 2.1, 10.8.1), as its empty editor's line is in Chromium.
 		node.Children = []*layout.Node{{Kind: layout.LineBreak, Style: textSt}}

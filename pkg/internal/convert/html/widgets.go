@@ -79,21 +79,37 @@ func formRole(node *layout.Node, n *dom.Node, role typeset.PrintRole, checked bo
 	}
 }
 
-// placeholderColor is the colour of a control's placeholder text, as
-// Chromium's ::placeholder takes it under either colour scheme.
+// placeholder returns the box of the placeholder text s of the input or
+// textarea n styled st: a block in the control's content box styled by
+// its ::placeholder (CSS Pseudo 4, 4.2), as Chromium lays its placeholder
+// out in the control's shadow tree, or nil when ::placeholder is display:
+// none. Chromium applies more than the clause's first-line properties to
+// it, its padding, text alignment, opacity and background among them, as
+// a block takes them; its user agent rules colour it #757575.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints the
 //     placeholder of a text field, a textarea and a telephone field in
-//     #757575, under color-scheme: dark too.
-var placeholderColor = css.Color{R: 0x75 / 255.0, G: 0x75 / 255.0, B: 0x75 / 255.0, A: 1}
-
-// placeholderStyle returns st coloured as a placeholder.
-func placeholderStyle(st *css.Style) *css.Style {
-	c := *st
-	c.Color = placeholderColor
-	return &c
+//     #757575, under color-scheme: dark too, and whatever colour the
+//     control takes.
+//   - probe, html: Chromium 156 prints an author's ::placeholder and
+//     ::-webkit-input-placeholder colour, font style, size, family and
+//     weight, color: inherit from the field, opacity, a background as
+//     wide as the field's content box, text-transform, letter-spacing,
+//     text-align, padding and an underline; a placeholder larger than the
+//     field's line leaves the field's height unchanged.
+func (b *builder) placeholder(n *dom.Node, st *css.Style, s string) *layout.Node {
+	ps := b.computed.Pseudo(n, css.PseudoPlaceholder)
+	if ps == nil {
+		ps = st
+	}
+	if ps.Display == css.DisplayNone {
+		return nil
+	}
+	c := *ps
+	c.Display, c.Position, c.Float = css.Block, css.Static, css.FloatNone
+	return &layout.Node{Kind: layout.Element, Style: &c, Children: []*layout.Node{{Kind: layout.Text, Style: &c, Text: s}}}
 }
 
 // partStyle returns the style of a part of a control styled st, which

@@ -193,9 +193,9 @@ func addSpec(x, y uint32) uint32 {
 }
 
 // knownPseudoElements are the pseudo-elements that parse (CSS Pseudo 4).
-// Rules targeting ::before, ::after, ::marker and ::details-content give
-// the styles [Computed.Pseudo] returns; those targeting the others
-// produce nothing.
+// Rules targeting ::before, ::after, ::marker, ::details-content and
+// ::placeholder give the styles [Computed.Pseudo] returns; those targeting
+// the others produce nothing.
 // ::column (CSS Multicol 2, 4.8, which Chromium parses) takes the scroll
 // snap properties alone, which print nothing.
 var knownPseudoElements = map[string]bool{
@@ -525,6 +525,11 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 					return comp, "", &selectorError{}
 				}
 				name := lower(pe.value)
+				if name == "-webkit-input-placeholder" {
+					// Chromium's name of ::placeholder, which it parses as
+					// the same pseudo-element.
+					name = "placeholder"
+				}
 				if !knownPseudoElements[name] {
 					return comp, "", &selectorError{unsupported: "::" + name}
 				}
