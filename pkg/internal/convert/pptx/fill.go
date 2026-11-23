@@ -20,17 +20,17 @@ type fillCtx struct {
 	ph    *css.Color
 }
 
-// withPh returns fc with phClr standing for c, opaque: Impress takes a
-// style reference's colour for phClr without its alpha.
+// withPh returns fc with phClr standing for c, its alpha included: a
+// style reference's colour stands for phClr with its transforms (ECMA-376
+// Part 1, 20.1.10.54 ST_SchemeColorVal phClr; 20.1.4.2.10 fillRef), as
+// PowerPoint prints it. Impress takes the colour opaque.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/smartart-center-cycle's ellipses, whose colour
-//     definition gives accent1 at half alpha, print accent1 solid.
+//     definition gives accent1 at half alpha, print in Office at half
+//     alpha, the overlaps darker.
 func (fc *fillCtx) withPh(c css.Color) *fillCtx {
-	if c.A > 0 {
-		c.A = 1
-	}
 	out := *fc
 	out.ph = &c
 	return &out
