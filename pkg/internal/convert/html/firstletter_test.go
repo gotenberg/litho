@@ -101,11 +101,16 @@ func TestFirstLetter_Cut(t *testing.T) {
 		<p id=fl><span style="float: right">floated</span> Flow</p>
 		<p id=ct><span style="display: contents; float: right"><b style="display: contents">Contents</b></span> after</p>
 		<ol><li id=li>item</ol>
+		<ol><li id=mk><span style="display: list-item; list-style-position: inside">marked</span></ol>
+		<ol><li id=mki><span style="display: inline list-item">inline</span></ol>
 		<table><tr><td id=td>cell</table>
 		<div id=div><p id=inner>nested</p></div>
 		<div id=outer><section><h2 id=deep>Deep</h2></section></div>`, Options{})
 	for id, want := range map[string]string{
 		"span": "S", "f": "D", "b": "(", "li": "i", "td": "c", "inner": "n", "deep": "D", "fl": "F",
+		// A marker holds no first letter: the search goes past it (CSS
+		// Pseudo 4, 2.2.2).
+		"mk": "m", "mki": "i",
 		// An element of display: contents has no box: its float applies to
 		// nothing, and its text is on the first line (CSS Display 3, 2.5).
 		"ct": "C",

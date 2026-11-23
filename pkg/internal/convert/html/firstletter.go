@@ -123,8 +123,11 @@ func (w *firstLetterCut) cut(node *layout.Node, depth int) bool {
 			if st.Float != css.FloatNone || st.Position == css.Absolute || st.Position == css.Fixed {
 				continue
 			}
+			// A list item's marker holds no first letter: the search goes
+			// on past it, into the item's own content (CSS Pseudo 4,
+			// 2.2.2).
 			switch st.Display { //nolint:exhaustive // every other display value is atomic or a table, which ends the search
-			case css.Inline:
+			case css.Inline, css.InlineListItem:
 				if w.cut(c, depth+1) {
 					return true
 				}
@@ -132,7 +135,7 @@ func (w *firstLetterCut) cut(node *layout.Node, depth int) bool {
 				// The first line of a block's first in-flow block child is
 				// its first line (CSS Pseudo 4, 2.3), unless white space
 				// that stays made a line before it.
-				if w.pending != nil || w.started || c.Marker != nil && st.ListStylePosition == css.Inside {
+				if w.pending != nil || w.started {
 					return true
 				}
 				return w.cut(c, depth+1)
