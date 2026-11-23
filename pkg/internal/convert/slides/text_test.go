@@ -267,3 +267,21 @@ func TestText_Highlight(t *testing.T) {
 	}
 	t.Errorf("no green fill among %d paths", len(pp))
 }
+
+// TestText_BodyRotation states that a body's rotation turns its text
+// clockwise about the centre of its text rectangle, inside the shape
+// (ECMA-376 Part 1, 21.1.2.1.1 bodyPr rot): a quarter turn takes the line's
+// start to where the rectangle's centre turns it.
+func TestText_BodyRotation(t *testing.T) {
+	at := func(rot float64) run {
+		sh := box(100, 100, 200, 100, para("Turned", arial(20)))
+		sh.Text.Rotation = rot
+		return find(t, convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0], "Turned")
+	}
+	flat, turned := at(0), at(90)
+	// About (200, 150), y down: (x, y) goes to (200 - (y - 150), 150 + (x - 200)).
+	wx, wy := 200-(flat.y-150), 150+(flat.x-200)
+	if !near(turned.x, wx, 0.01) || !near(turned.y, wy, 0.01) {
+		t.Errorf("turned line at %.2f,%.2f, want %.2f,%.2f (flat at %.2f,%.2f)", turned.x, turned.y, wx, wy, flat.x, flat.y)
+	}
+}

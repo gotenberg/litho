@@ -320,6 +320,9 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 	default:
 		m = translate(inner.X+dx, inner.Y+dy)
 	}
+	if body.Rotation != 0 {
+		m = then(m, skewedAboutCentre(shape.TextRect(g, box), body.Rotation, 0, false, false))
+	}
 	frags := lay.frags
 	if body.Warp != nil {
 		if warped, ok := b.warpText(body, res.box, m, lw, frags); ok {

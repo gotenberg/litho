@@ -507,6 +507,10 @@ type TextBody struct {
 	// Wrap wraps the lines at the text rectangle's width; false lets them
 	// run on, the box growing as Autofit says.
 	Wrap bool
+	// Rotation turns the text clockwise by this many degrees about the
+	// centre of its text rectangle, inside the shape (21.1.2.1.1 bodyPr
+	// rot); 0 for none.
+	Rotation float64
 	// ShrinkGroup, when not 0, ties the body to every other body of the
 	// slide with the same value: an AutofitShrink body of the group takes
 	// the smallest scale any of them needs, as Impress fits the text of a

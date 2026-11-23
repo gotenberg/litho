@@ -236,6 +236,11 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("body %+v", b)
 			}
 		}},
+		{"text turned in its shape", `<a:bodyPr rot="720000"/>`, func(t *testing.T, b *slides.TextBody) {
+			if b.Rotation != 12 {
+				t.Errorf("rotation %v, want 12 degrees", b.Rotation)
+			}
+		}},
 		{"a block not centred", `<a:bodyPr anchorCtr="0"/>`, func(t *testing.T, b *slides.TextBody) {
 			if b.HorizontalAnchor != slides.HorizontalStart {
 				t.Errorf("body %+v", b)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/omml"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -243,13 +244,17 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 }
 
 // bodyProps reads the body properties along a chain of bodyPr elements
-// (21.1.2.1.1): insets, anchor, wrap, columns, vertical text, direction
-// and autofit.
+// (21.1.2.1.1): insets, anchor, wrap, the text's rotation, columns,
+// vertical text, direction and autofit.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/n862510_4 prints its spAutoFit boxes at their
 //     saved height.
+//   - libreoffice/pptx: oox/tdf149551_TextRot's text, bodyPr rot 720000 in
+//     a right triangle, prints turned 12 degrees clockwise in Office's
+//     page, about the middle of the triangle's text rectangle;
+//     oox/tdf149551_vert270AndTextRot turns its vert270 lines alike.
 func bodyProps(bc chain) *slides.TextBody {
 	b := &slides.TextBody{Insets: [4]float64{defaultInsetTB, defaultInsetLR, defaultInsetTB, defaultInsetLR}, Wrap: true}
 	for side, name := range [4]string{"tIns", "rIns", "bIns", "lIns"} {
@@ -270,6 +275,12 @@ func bodyProps(bc chain) *slides.TextBody {
 	}
 	if v, ok := bc.attr("wrap"); ok {
 		b.Wrap = v != "none"
+	}
+	if v, ok := bc.attr("rot"); ok {
+		// ST_Angle: 60000ths of a degree, at 32 bits.
+		if n, err := intconv.Atoi32(strings.TrimSpace(v)); err == nil {
+			b.Rotation = math.Mod(float64(n)/60000, 360)
+		}
 	}
 	if v, ok := bc.attr("numCol"); ok {
 		if n, ok := ooxml.Int(v); ok {
