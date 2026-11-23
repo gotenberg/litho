@@ -65,3 +65,18 @@ func TestConvert_CellStyleText(t *testing.T) {
 		t.Errorf("not drawn: %v", want)
 	}
 }
+
+// TestConvert_TableWithoutWidths spans a table that states no width, of
+// its own or of its columns, across the text area, its columns sharing it.
+func TestConvert_TableWithoutWidths(t *testing.T) {
+	body := `<table:table><table:table-column table:number-columns-repeated="2"/><table:table-row>` +
+		`<table:table-cell><text:p>L</text:p></table:table-cell><table:table-cell><text:p>R</text:p></table:table-cell></table:table-row></table:table>`
+	res := convertDoc(t, doc{body: body}.pack(t), office.Options{})
+	for _, r := range runs(res.Pages[0]) {
+		// The text area runs from 56.7 to 538.6 points: the second
+		// column starts at 297.6.
+		if r.text == "R" && (r.x < 297 || r.x > 305) {
+			t.Errorf("second cell's text at %.1f, want past 297.6", r.x)
+		}
+	}
+}

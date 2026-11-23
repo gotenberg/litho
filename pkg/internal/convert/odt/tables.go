@@ -42,12 +42,19 @@ type tableBuild struct {
 // repeated on every page, its rows and cells with their spans, borders,
 // padding, backgrounds and vertical alignment. A table whose
 // style:writing-mode is rl-tb lays its columns out from the right (ODF
-// 1.3, Part 3, 20.394).
+// 1.3, Part 3, 20.394). A table that states no width, of its own or of
+// its columns, and no table:align spans its area, as Writer lays it out.
 //
 // # Corpus evidence
 //
 //   - litho/odt: ar-rtl and he-bidi-numbers print the first column of
 //     their tables of style:writing-mode rl-tb on the right.
+//   - libreoffice/odt: layout/cell-vertical-align-middle-in-fly-at-page.fodt
+//     holds in a frame a table of no width and columns of none, which
+//     LibreOffice prints across the frame.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a table of three
+//     columns and no style prints across the page's text area, its
+//     columns a third of it each.
 func (b *builder) table(c *odf.Element, ctx blockCtx) []*layout.Node {
 	props := b.styles.Resolve(b.scope, odf.FamilyTable, c.A(odf.NSTable, "style-name"), odf.TableProps)
 	st := baseStyle()
@@ -105,12 +112,26 @@ func (b *builder) table(c *odf.Element, ctx blockCtx) []*layout.Node {
 	if !hasWidth && st.Width.Kind == css.Auto {
 		if sum := columnsWidth(n.Children); sum > 0 {
 			st.Width = css.Pts(sum)
+		} else if props.Get("table:align") == "" {
+			// Writer spans a table that states no width, of its own or
+			// of its columns, across its area.
+			st.Width = css.Dimension{Kind: css.Percent, Value: 1}
+			st.BoxSizing = css.BorderBox
 		}
 	}
 	return []*layout.Node{n}
 }
 
 // columnsWidth returns the sum of the widths of the column nodes of kids.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/cell-vertical-align-middle-in-fly-at-page.fodt
+//     holds in a frame a table of no width and columns of none, which
+//     LibreOffice prints across the frame.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a table of three
+//     columns and no style prints across the page's text area, its
+//     columns a third of it each.
 func columnsWidth(kids []*layout.Node) float64 {
 	sum := 0.0
 	for _, k := range kids {
