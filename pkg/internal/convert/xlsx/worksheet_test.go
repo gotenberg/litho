@@ -452,8 +452,18 @@ func TestChartsheet(t *testing.T) {
 			if len(sh.Drawings) != tt.want {
 				t.Fatalf("%d drawings, want %d", len(sh.Drawings), tt.want)
 			}
-			if sh.Page.Scale != 0 || sh.Page.FitWidth != 1 || sh.Page.FitHeight != 1 {
-				t.Errorf("page %+v, want fitted to one page", sh.Page)
+			// The chart prints at its size from the margins on one page:
+			// the sheet prints its first cell, which spans the chart.
+			if sh.Page.Scale != 100 || sh.Page.FitWidth != 0 || sh.Page.FitHeight != 0 || len(sh.Page.PrintAreas) != 1 || sh.Page.PrintAreas[0] != (sheet.Range{}) ||
+				sh.DefaultColumnWidth < 731.7 || sh.DefaultRowHeight < 477.9 {
+				t.Errorf("page %+v, column %v, row %v: want the chart unscaled in the first cell", sh.Page, sh.DefaultColumnWidth, sh.DefaultRowHeight)
+			}
+			out, err := Convert(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{Sheets: []string{"Chart"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(out.Pages) != 1 {
+				t.Errorf("%d pages, want the chart cut at the right margin on one", len(out.Pages))
 			}
 			d := sh.Drawings[0]
 			if !d.Absolute || d.Chart == nil {

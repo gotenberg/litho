@@ -10,7 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -753,15 +755,12 @@ func breaks(e *ooxml.Element, limit int) []int {
 
 // chartsheet reads the chartsheet part name into sh (ECMA-376 Part 1,
 // 18.3.1.12 chartsheet): a sheet without cells whose drawing holds its
-// chart, its page setup, header and footer as a worksheet's, fitted to one
-// page as LibreOffice prints the chart object it imports a chartsheet as.
-// A chart without a series prints its frame, as Excel prints it.
+// chart, its page setup, header and footer as a worksheet's, printed on
+// one page ([chartsheetPage]). A chart without a series prints its frame,
+// as Excel prints it.
 //
 // # Corpus evidence
 //
-//   - probe, xlsx: sc/tdf107586.xlsx's chartsheet, a 731.7 by 477.9 point
-//     chart, given a series prints in LibreOffice 26.8.2.2 on one Letter
-//     page at 69%, 505.99 points wide from the 0.7-inch margin.
 //   - libreoffice/xlsx: sc/tdf107586.xlsx, openxmlsdk/xlsx:
 //     v2FxTestFiles/spreadsheet/ChartSheet.xlsx, poi/xlsx:
 //     spreadsheet/56557.xlsx: charts without a series, whose chartsheets
@@ -780,7 +779,6 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	w := &sheetReader{r: r, part: name, sh: sh, rowAt: map[int]int{}}
 	r.defaultSetup(sh)
 	w.pageSetup(root)
-	sh.Page.Scale, sh.Page.FitWidth, sh.Page.FitHeight = 0, 1, 1
 	if hf := root.Child(nsMain, "headerFooter"); hf != nil {
 		sh.HeaderFooter = r.headerFooter(hf, true, nil)
 	}
@@ -799,7 +797,45 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 			d.Decorative = true
 		}
 	}
+	chartsheetPage(sh)
 	return nil
+}
+
+// chartsheetPage lays the chartsheet sh out on one page, as Excel prints
+// a chartsheet: its chart at the size of its drawing, from the top-left
+// margin, unscaled, cut at the right margin when it is wider than the
+// page. The sheet holds no cell: its first cell, the one it prints, spans
+// every drawing, its column cut to the page's width as a wider column is.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf107586.xlsx, a 731.7 by 477.9 point chart
+//     on a chartsheet without a pageSetup, prints on one Letter page from
+//     the 0.7 and 0.75 inch margins, 477.9 points tall, cut at the right
+//     margin; openxmlsdk/xlsx v2FxTestFiles/spreadsheet/ChartSheet.xlsx,
+//     684.5 by 496.5 points, the same.
+//   - litho/xlsx: chart_sheet's two chartsheets, on A4 landscape and
+//     Letter portrait, print their 682.7 by 495.5 and 472.4 by 629.9
+//     point charts at their size from the margins.
+//   - probe, xlsx: a 733 by 479 point chart on Letter portrait and on
+//     Letter landscape prints at its size, cut at the right margin; a 300
+//     by 200 point chart on Letter portrait at its size. On chartsheets
+//     without a pageSetup, the same workbook printed both charts 733 by
+//     479 points on A4 landscape: not followed, the corpus's chartsheets
+//     without one print on the default paper at their size.
+func chartsheetPage(sh *sheet.Sheet) {
+	p := &sh.Page
+	p.Scale, p.FitWidth, p.FitHeight = 100, 0, 0
+	right := p.Width - p.Margin[css.Left] - p.Margin[css.Right]
+	bottom := p.Height - p.Margin[css.Top] - p.Margin[css.Bottom]
+	for _, d := range sh.Drawings {
+		if d.Absolute && numeric.Finite(d.X+d.Width) && numeric.Finite(d.Y+d.Height) {
+			right, bottom = max(right, d.X+d.Width), max(bottom, d.Y+d.Height)
+		}
+	}
+	sh.DefaultColumnWidth = min(right+1, office.MaxPageSide)
+	sh.DefaultRowHeight = min(bottom+1, office.MaxPageSide)
+	p.PrintAreas = []sheet.Range{{}}
 }
 
 // chartSeries returns the series of the chart c.
