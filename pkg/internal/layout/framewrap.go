@@ -78,7 +78,7 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 		top := e.pageTop(s.page)
 		r := floatRect{wrap: s.mode, x0: s.x0, y0: top + s.y0, x1: s.x1, y1: top + s.y1}
 		if s.node != nil {
-			r.word = true
+			r.word, r.writer = true, s.node.Style != nil && s.node.Style.WordAnchor.Writer
 			r.border = [4]float64{s.bx, top + s.by, s.bx + s.bw, top + s.by + s.bh}
 			r.shape = newWordShape(s.shape, s.bx, top+s.by, s.bw, s.bh, s.gap)
 		}

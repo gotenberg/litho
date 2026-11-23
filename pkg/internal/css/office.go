@@ -336,12 +336,23 @@ type Office struct {
 // edge at X or Y, 0.5 its middle, for a float aligned in an area the
 // converter knows and of a size it does not (ECMA-376 Part 1, 17.4.58
 // tblpXSpec and tblpYSpec of a table, which its content sizes).
+//
+// Writer places the float as Writer places a frame anchored to a
+// paragraph (ODF 1.3 Part 3, 20.290 to 20.300): Y counts from the top of
+// the paragraph's area, Rise points above its first line's top (the
+// paragraph's top margin, border and padding) and never above the top of
+// the page area of the page that line lies on; the float wraps the lines
+// before its paragraph only when it reaches above that area; a line beside
+// it is measured against it over the line's whole height; and a float that
+// ends below its page's area leaves its paragraph on its page.
 type WordAnchor struct {
 	Set            bool
 	X, Y           float64
 	AlignX, AlignY float64
 	FromPage       bool
 	NoOverlap      bool
+	Writer         bool
+	Rise           float64
 }
 
 // WrapPoint is a point of an [Office.WrapPolygon], in fractions of the

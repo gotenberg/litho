@@ -18,9 +18,10 @@ type floatRect struct {
 	// css.Office.WrapPolygon wraps along within the rectangle.
 	shape *wordShape
 	// word marks the exclusion of a float of css.Office.WordAnchor;
-	// border is its border box, left, top, right and bottom.
-	word   bool
-	border [4]float64
+	// border is its border box, left, top, right and bottom; writer
+	// marks one of css.WordAnchor.Writer.
+	word, writer bool
+	border       [4]float64
 	// initial marks the margin box of an initial letter
 	// (initialletter.go).
 	initial bool
@@ -45,9 +46,25 @@ type floatRect struct {
 //     distT being 3.6 pt; over its lower half, 3.5 to 3.9 pt above.
 const wordBandTrim = 0.75
 
+// writerTouch is how far below a line's bottom Writer still finds a
+// frame beside the line: a twip, Writer's rectangles overlapping when
+// their edges meet (SwRect::Overlaps).
+const writerTouch = 1.0 / twips
+
 // wordBand returns the band [y, y+h) a line of height h at y is measured
-// over against the exclusion f.
+// over against the exclusion f. Writer measures a line against a frame
+// over its whole height and the twip below it ([writerTouch]).
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 13.8 pt line whose
+//     bottom a paragraph-anchored frame of right wrap overlaps by 0.2,
+//     0.5, 0.8 or 1.2 pt prints right of the frame, and the line below a
+//     frame of none wrap starts 0.07 pt under its bottom.
 func (f floatRect) wordBand(y, h float64) (float64, float64) {
+	if f.writer {
+		return y, h + writerTouch
+	}
 	if f.word && h > wordBandTrim {
 		return y, h - wordBandTrim
 	}
@@ -227,6 +244,17 @@ func (c *bfc) lineNarrowed(y, h, left, right float64) bool {
 	return l > left+eps || r < right-eps
 }
 
+// writerOver reports a float of css.WordAnchor.Writer whose exclusion
+// the band [y, y+h) a line takes overlaps.
+func (c *bfc) writerOver(y, h float64) bool {
+	for _, f := range c.floats {
+		if f.writer && f.overlaps(f.wordBand(y, h)) {
+			return true
+		}
+	}
+	return false
+}
+
 // lineBelow returns where a line that does not fit in the band [y, y+h)
 // tries next: [shapeStep] lower while a float with shape-outside overlaps
 // the band, else the lowest bottom of the floats overlapping it, +Inf
@@ -270,7 +298,11 @@ func (c *bfc) shapeTries() int {
 func (c *bfc) below(y, h float64) float64 {
 	next := math.Inf(1)
 	for _, f := range c.floats {
-		if f.overlaps(y, h) && f.y1 > y+eps {
+		by, bh := y, h
+		if f.writer {
+			by, bh = f.wordBand(y, h)
+		}
+		if f.overlaps(by, bh) && f.y1 > y+eps {
 			next = min(next, f.y1)
 		}
 	}

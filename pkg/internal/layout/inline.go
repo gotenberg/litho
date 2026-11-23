@@ -574,6 +574,32 @@ func (s *inlineState) nextPiece(y, h, from float64) bool {
 	return r > l+eps && l >= from-eps
 }
 
+// belowWriter returns where an empty line of height h at top goes: below
+// the frames of css.WordAnchor.Writer that leave it no room, as Writer
+// moves the empty line of a paragraph below a frame no text wraps beside.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/shapes-hyperlink.odt prints the empty
+//     paragraph that a shape of none wrap overlaps below the shape, and
+//     the paragraph after it lower by as much.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, of five empty
+//     paragraphs after one that anchors a frame of none wrap 1 cm below
+//     its top, the second to the fifth print below the frame.
+func (s *inlineState) belowWriter(top, h float64) float64 {
+	for range len(s.bc.floats) + 1 {
+		if l, r := s.band(top, h); r-l > eps || !s.bc.writerOver(top, h) {
+			break
+		}
+		next := s.bc.lineBelow(top, h)
+		if math.IsInf(next, 1) {
+			break
+		}
+		top = next
+	}
+	return top
+}
+
 // placeWordFloats places the floats of css.Office.WordAnchor of p, top
 // being the top of the first line of its block container.
 func (s *inlineState) placeWordFloats(p *ifcPara, top float64) {
@@ -703,14 +729,19 @@ func (e *engine) balanceLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor flo
 // pushWordFloats adds the first line of b to forced when a float of
 // css.Office.WordAnchor positioned from b's paragraph would end below its
 // page's area, b's first line not starting the page: Word moves the
-// paragraph, and the drawing with it, to the next page. It reports
-// whether it added it.
+// paragraph, and the drawing with it, to the next page; Writer leaves
+// both where they are (css.WordAnchor.Writer). It reports whether it
+// added it.
 //
 // # Corpus evidence
 //
 //   - litho/docx images-wrap: a 93.6 pt picture of wrapThrough at the top
 //     of a paragraph whose top lies 60 pt above the bottom margin moves
 //     to the next page with its paragraph and the heading kept with it.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 2 cm frame of
+//     parallel wrap 1 cm below the top of a paragraph whose first line
+//     ends 10 pt above the bottom margin prints on that page with its
+//     paragraph, reaching 33 pt into the bottom margin.
 func (e *engine) pushWordFloats(b *box, d *ifcData, forced map[int]bool) bool {
 	if forced[0] || len(b.lines) == 0 || e.atPageTop(b.lines[0].y) {
 		return false
@@ -718,7 +749,7 @@ func (e *engine) pushWordFloats(b *box, d *ifcData, forced map[int]bool) bool {
 	for _, p := range d.paras {
 		for _, f := range p.floats {
 			a := f.box.st.WordAnchor
-			if !a.Set || a.FromPage || !f.box.laidOut {
+			if !a.Set || a.FromPage || a.Writer || !f.box.laidOut {
 				continue
 			}
 			pg := e.pageOf(f.box.anchorTop + eps)
@@ -858,6 +889,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					l.changed = s.root
 				}
 				s.officeLine(l)
+				top = s.belowWriter(top, l.h)
 				top = s.position(top, l.h-l.slack, forced)
 				s.cutSlack(l, top)
 				l.y = top

@@ -532,6 +532,66 @@ func TestConvert_ParallelWrapBothSides(t *testing.T) {
 	}
 }
 
+// TestConvert_ParagraphFramesAtOffsets places frames anchored to a
+// paragraph at their offsets: across from the column whatever the
+// paragraph's indent, down from the top of the paragraph's area, its top
+// margin included, or of its content area, overlapping one another, the
+// text wrapping them. The positions are LibreOffice's print of the same
+// documents (probes through the pinned image).
+func TestConvert_ParagraphFramesAtOffsets(t *testing.T) {
+	var words strings.Builder
+	for i := 10; i < 100; i++ {
+		words.WriteString("w" + strconv.Itoa(i) + "x ")
+	}
+	frame := func(name, x, y string) string {
+		return `<draw:frame draw:style-name="fr1" draw:name="` + name + `" text:anchor-type="paragraph" svg:x="` + x + `" svg:y="` + y + `" svg:width="3cm" svg:height="2cm"><draw:text-box><text:p>` + name + `</text:p></draw:text-box></draw:frame>`
+	}
+	style := func(wrap, rel string) string {
+		return `<style:style style:name="fr1" style:family="graphic"><style:graphic-properties fo:margin="0cm" fo:padding="0cm" fo:border="none" style:wrap="` + wrap + `" style:vertical-pos="from-top" style:vertical-rel="` + rel + `" style:horizontal-pos="from-left" style:horizontal-rel="` + rel + `"/></style:style>` +
+			`<style:style style:name="PA" style:family="paragraph"><style:paragraph-properties fo:margin-top="1cm" fo:margin-left="2cm" fo:margin-right="1cm"/></style:style>` +
+			`<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.5cm"/></style:style>`
+	}
+	type at struct {
+		text string
+		x, y float64
+	}
+	tests := []struct {
+		name, auto, body string
+		want             []at
+	}{
+		{"paragraph", style("parallel", "paragraph"), `<text:p>Before</text:p><text:p text:style-name="PA">` + frame("F1", "3cm", "1cm") + words.String() + `</text:p>`,
+			[]at{{"F1", 141.7, 110.05}, {"w10x", 113.4, 110.05}, {"w11x", 226.8, 110.05}}},
+		{"content area", style("parallel", "paragraph-content"), `<text:p>Before</text:p><text:p text:style-name="PA">` + frame("F1", "3cm", "1cm") + words.String() + `</text:p>`,
+			[]at{{"F1", 198.4, 138.4}}},
+		{"bottom margin before", style("parallel", "paragraph"), `<text:p text:style-name="PB">Before</text:p><text:p text:style-name="PA">` + frame("F1", "3cm", "0cm") + words.String() + `</text:p>`,
+			[]at{{"F1", 141.7, 95.85}}},
+		{"overlapping", style("parallel", "paragraph"), `<text:p>Before</text:p><text:p text:style-name="PA">` + frame("F1", "3cm", "0.5cm") + frame("F2", "4cm", "1cm") + words.String() + `</text:p>`,
+			[]at{{"F1", 141.7, 95.85}, {"F2", 170.1, 110.05}}},
+		{"none wrap", style("none", "paragraph"), `<text:p>Before</text:p><text:p text:style-name="PA">` + frame("F1", "3cm", "1cm") + words.String() + `</text:p>`,
+			[]at{{"F1", 141.7, 110.05}, {"w10x", 113.4, 166.8}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := convertDoc(t, doc{contentAuto: tt.auto, body: tt.body}.pack(t), office.Options{})
+			rs := runs(res.Pages[0])
+			for _, w := range tt.want {
+				found := false
+				for _, r := range rs {
+					if strings.HasPrefix(strings.TrimSpace(r.text), w.text) {
+						found = true
+						if !near(r.x, w.x, 0.5) || !near(r.y, w.y, 0.5) {
+							t.Errorf("%s at %.2f, %.2f, want %.2f, %.2f", w.text, r.x, r.y, w.x, w.y)
+						}
+					}
+				}
+				if !found {
+					t.Errorf("%s not drawn", w.text)
+				}
+			}
+		})
+	}
+}
+
 // TestScanChains_MergingChainsDeterministic gives the frame two chains
 // run into the same place every time: the chain whose first frame's name
 // sorts first.

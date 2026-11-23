@@ -90,7 +90,9 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	saved := b.hf
 	b.hf = nil
 	restore := b.comments.apart()
+	b.boxed++
 	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
+	b.boxed--
 	restore()
 	b.hf = saved
 	prefix := b.run(label, bt)

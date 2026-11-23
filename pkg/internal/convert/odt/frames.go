@@ -428,6 +428,9 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 	}
 	g := b.geometry(c)
 	b.place(n, g, g.pageRelative() || g.hrel == "page")
+	if g, ok := b.anchored[n]; ok {
+		b.anchorFrame(n, g, nil)
+	}
 	if n.Style.Float == css.FloatNone && n.Style.Display != css.Block && (n.Kind != layout.Replaced || n.Style.Position == css.Absolute) {
 		st := *n.Style
 		st.Display = blockified(st.Display)
@@ -536,6 +539,20 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		st.ZIndex = css.ZIndex{Level: 0}
 		return
 	}
+	if b.offsetAnchored(g) {
+		st.Float, st.Display = css.FloatLeft, blockified(st.Display)
+		st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
+		st.WordAnchor = css.WordAnchor{Set: true, Writer: true}
+		applyFrameWrap(&st, g.wrap, frameMargins(g.props))
+		// Writer keeps a frame inside its page, a frame taller than the
+		// page at its top.
+		st.PageClamp = true
+		if b.anchored == nil {
+			b.anchored = map[*layout.Node]frameGeom{}
+		}
+		b.anchored[n] = g
+		return
+	}
 	side := css.FloatLeft
 	switch g.wrap {
 	case "left":
@@ -587,6 +604,136 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		return
 	}
 	st.Float = side
+}
+
+// offsetAnchored reports a frame of geometry g that Writer places at its
+// offsets from the paragraph it is anchored to, whatever else is there,
+// the text wrapping it as style:wrap says (ODF 1.3 Part 3, 20.393):
+// anchored to a paragraph of the body (19.758 text:anchor-type), placed
+// from the top of the paragraph's area or its content area (20.386
+// style:vertical-pos from-top, or top for a frame text wraps beside;
+// 20.387 style:vertical-rel paragraph and paragraph-content), and across
+// the paragraph, its content area, the page or its content area (20.290,
+// 20.291). A frame no text wraps placed at the top of its paragraph keeps
+// [builder.frameFirst]; a run-through frame is positioned in its
+// paragraph.
+func (b *builder) offsetAnchored(g frameGeom) bool {
+	if b.hf != nil || b.boxed > 0 || g.anchor != "paragraph" {
+		return false
+	}
+	switch g.wrap {
+	case "parallel", "left", "right", "dynamic", "biggest", "none":
+	default:
+		return false
+	}
+	switch g.vpos {
+	case "", "from-top", "top":
+	default:
+		return false
+	}
+	switch g.vrel {
+	case "", "paragraph", "paragraph-content":
+	default:
+		return false
+	}
+	switch g.hpos {
+	case "", "from-left", "left", "inside", "center", "right", "outside":
+	default:
+		return false
+	}
+	switch g.hrel {
+	case "", "paragraph", "paragraph-content", "page", "page-content":
+		return true
+	}
+	return false
+}
+
+// anchorFrames sets the offsets of the frames among kids, a paragraph's
+// inline content, that [builder.offsetAnchored] places, from the
+// paragraph's style st: across from the column (the page's content area),
+// whatever the paragraph's indents, or from the paragraph's content area,
+// its indents, borders and padding inside, for paragraph-content (ODF 1.3
+// Part 3, 20.290, 20.291); down from the top of the paragraph's area, its
+// top margin included and the bottom margin of the paragraph before it
+// not, or from the top of its content area (20.386, 20.387). svg:x and
+// svg:y place the frame's border box, its margins being the room the text
+// keeps from it. Frames overlap one another freely.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/tdf100033_2.odt prints three frames of
+//     one paragraph style at 0.333 cm below their paragraphs, overlapping,
+//     the text beside them.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, in a paragraph of
+//     2 cm left indent and 1 cm top margin after one of 0.5 cm bottom
+//     margin, a frame at svg:x 3 cm and svg:y 0 prints 5 cm from the page
+//     edge, its top 0.5 cm below the paragraph before; at svg:y 1 cm
+//     against paragraph-content, 3 cm right of the indent and 1 cm below
+//     the first line's top; svg:y -1.5 cm above the paragraph; two frames
+//     of one paragraph overlap; a frame of none wrap at svg:y 1 cm moves
+//     the paragraph's first line below it; a centred frame placed at the
+//     top centres in the column.
+func (b *builder) anchorFrames(kids []*layout.Node, st *css.Style, depth int) {
+	if len(b.anchored) == 0 || depth > odf.MaxDepth {
+		return
+	}
+	for _, k := range kids {
+		if g, ok := b.anchored[k]; ok {
+			b.anchorFrame(k, g, st)
+		} else if k.Kind == layout.Element && k.Style.Float == css.FloatNone && k.Style.Position == css.Static {
+			b.anchorFrames(k.Children, st, depth+1)
+		}
+	}
+}
+
+// anchorFrame sets the offsets of the frame n of geometry g, anchored to
+// a paragraph of style st, nil for a frame of the body that stands before
+// the paragraph it is anchored to, whose area starts where it stands.
+func (b *builder) anchorFrame(n *layout.Node, g frameGeom, st *css.Style) {
+	edge := func(s css.Side) float64 {
+		if st == nil {
+			return 0
+		}
+		w := st.Padding[s].Value + st.Margin[s].Value
+		if st.Border[s].Style != css.BorderNone && st.Border[s].Style != css.BorderHidden {
+			w += st.Border[s].Width
+		}
+		return w
+	}
+	pg := b.currentGeom()
+	col := b.contentWidth()
+	x0, w := 0.0, col
+	switch g.hrel {
+	case "paragraph-content":
+		x0, w = edge(css.Left), col-edge(css.Left)-edge(css.Right)
+	case "page":
+		x0, w = -pg.box.Margin[css.Left], pg.box.Width
+	}
+	a := css.WordAnchor{Set: true, Writer: true}
+	switch {
+	case g.hasW || g.hpos == "" || g.hpos == "from-left":
+		a.X = x0 + alignX(g, w)
+	case g.hpos == "center":
+		a.X, a.AlignX = x0+float64(w/2), 0.5
+	case g.hpos == "right" || g.hpos == "outside":
+		a.X, a.AlignX = x0+w, 1
+	default:
+		a.X = x0
+	}
+	a.Y = g.y
+	if g.vpos == "top" {
+		// A frame placed at the top puts its margin box there.
+		a.Y = frameMargins(g.props)[css.Top]
+	}
+	// The first line's top lies below the paragraph's area by its top
+	// margin, border and padding.
+	a.Rise = edge(css.Top)
+	if g.vrel == "paragraph-content" {
+		a.Y += a.Rise
+	}
+	fs := *n.Style
+	fs.WordAnchor = a
+	n.Style = &fs
 }
 
 // frameFirst moves the frames of kids, a paragraph's inline content, that
@@ -1094,7 +1241,9 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		}
 	}
 	restore := b.comments.apart()
+	b.boxed++
 	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
+	b.boxed--
 	restore()
 	return n
 }

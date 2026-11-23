@@ -129,8 +129,11 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	}
 	x, y := left+a.X, top+a.Y
 	page := e.pageOf(top + eps)
-	if a.FromPage {
+	switch {
+	case a.FromPage:
 		y = e.pageTop(page) + a.Y
+	case a.Writer:
+		y = e.writerArea(a, top) + a.Y
 	}
 	s, frozen := e.frozen[f.node]
 	if frozen {
@@ -189,6 +192,23 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	return len(bc.floats) - 1
 }
 
+// writerArea returns the top of the area of the paragraph whose first line
+// starts at top, which a float of css.WordAnchor.Writer is placed from:
+// its Rise above the line, but not above the page area's top, Writer
+// dropping the spacing above a paragraph that starts a page.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a paragraph of 1 cm
+//     top margin that a frame of none wrap moves to the next page prints
+//     its line at the page area's top and the frame 1 cm below it, the
+//     frame's svg:y; a paragraph of 0.5 cm top margin that starts the
+//     next page prints its frame placed at its top at the page area's
+//     top.
+func (e *engine) writerArea(a css.WordAnchor, top float64) float64 {
+	return max(top-a.Rise, e.pageTop(e.pageOf(top+eps)))
+}
+
 // wordRect returns the exclusion of the float f of css.Office.WordAnchor,
 // laid out: its border box grown by its wrap gap, along its contour when
 // it has one.
@@ -196,7 +216,7 @@ func wordRect(f *box) floatRect {
 	g := f.st.WrapGap
 	bw, bh := f.borderW(), f.borderH()
 	r := floatRect{
-		side: f.float, wrap: f.st.FrameWrap, word: true,
+		side: f.float, wrap: f.st.FrameWrap, word: true, writer: f.st.WordAnchor.Writer,
 		x0: f.x - g[css.Left], y0: f.y - g[css.Top],
 		x1: f.x + bw + g[css.Right], y1: f.y + bh + g[css.Bottom],
 	}
@@ -249,7 +269,13 @@ func (e *engine) collectWordWraps(b *box, out []wrapSeed) []wrapSeed {
 			if k.float != css.FloatNone && k.laidOut && k.st.WordAnchor.Set && len(out) < maxFloats {
 				_, frozen := e.frozen[k.node]
 				r := wordRect(k)
-				if frozen || (!added && r.y0 < k.anchorTop-eps) {
+				reach := k.anchorTop
+				if r.writer {
+					// A Writer frame wraps the lines before its paragraph
+					// when it reaches above the paragraph's area.
+					reach = e.writerArea(k.st.WordAnchor, k.anchorTop)
+				}
+				if frozen || (!added && r.y0 < reach-eps) {
 					added = added || !frozen
 					p := e.pageOf(k.y + eps)
 					top := e.pageTop(p)

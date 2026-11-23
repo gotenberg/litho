@@ -213,3 +213,59 @@ func TestWordAnchor_TallFloatBreaks(t *testing.T) {
 		})
 	}
 }
+
+// writer marks a float of css.WordAnchor.Writer.
+func writer(s *css.Style) { s.WordAnchor.Writer = true }
+
+// TestWordAnchor_WriterLineBottom wraps a line whose bottom a float of
+// css.WordAnchor.Writer overlaps by half a pixel, which Word's trim lets
+// run beside it unwrapped.
+func TestWordAnchor_WriterLineBottom(t *testing.T) {
+	res := run(t, doc(wpara("aa bb cc dd", wordFloat(css.FrameWrapBoth, 0, 9.5, 40, 20, writer))), page(100, 100))
+	if got, want := linePlaces(res, 1), "X@0,17.5 aa bb @40,8 cc dd@40,18 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+}
+
+// TestWordAnchor_WriterStaysOnPage leaves the paragraph of a float of
+// css.WordAnchor.Writer that would end below its page's area on its page,
+// the float moved up into the page box.
+func TestWordAnchor_WriterStaysOnPage(t *testing.T) {
+	res := run(t, doc(wpara("a"), wpara("b"), wpara("c"), wpara("d", wordFloat(css.FrameWrapBoth, 60, 0, 40, 30, writer))), page(100, 50))
+	if len(res.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(res.Pages))
+	}
+	if got, want := linePlaces(res, 1), "X@60,28 a@0,8 b@0,18 c@0,28 d@0,38 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+}
+
+// TestWordAnchor_WriterRise places a float of css.WordAnchor.Writer from
+// the top of its paragraph's area, Rise above its first line, and from
+// the page area's top when the paragraph starts the page.
+func TestWordAnchor_WriterRise(t *testing.T) {
+	rise := func(s *css.Style) { s.WordAnchor.Rise = px(10) }
+	spaced := func() *Node {
+		p := wpara("b", wordFloat(css.FrameWrapRight, 60, 0, 40, 10, writer, rise))
+		p.Style.Margin[css.Top] = css.Pts(px(10))
+		return p
+	}
+	res := run(t, doc(wpara("a"), spaced()), page(100, 100))
+	if got, want := linePlaces(res, 1), "X@60,18 a@0,8 b@0,28 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+	res = run(t, doc(spaced()), page(100, 100))
+	if got, want := linePlaces(res, 1), "X@60,8 b@0,18 "; got != want {
+		t.Errorf("first paragraph: lines %s, want %s", got, want)
+	}
+}
+
+// TestWordAnchor_WriterEmptyLine moves an empty line that a float of
+// css.WordAnchor.Writer of no wrap overlaps below it, as a line of text.
+func TestWordAnchor_WriterEmptyLine(t *testing.T) {
+	empty := el(sty(), br(sty()))
+	res := run(t, doc(wpara("a", wordFloat(css.FrameWrapNone, 0, 15, 40, 20, writer)), empty, wpara("b")), page(100, 100))
+	if got, want := linePlaces(res, 1), "X@0,23 a@0,8 b@0,53 "; got != want {
+		t.Errorf("lines %s, want %s", got, want)
+	}
+}

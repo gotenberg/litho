@@ -67,6 +67,12 @@ type builder struct {
 	// beside their paragraph's text, which a paragraph without text
 	// places at their offsets instead.
 	floats map[*layout.Node]frameGeom
+	// anchored holds the geometry of the frames [builder.place] places at
+	// their offsets from their paragraph ([builder.anchorFrames]).
+	anchored map[*layout.Node]frameGeom
+	// boxed counts the table cells, text boxes and notes being built, in
+	// which a paragraph's frames keep floating.
+	boxed int
 	// topFrames holds the frames [builder.place] stands at the top of
 	// their paragraph, the paragraph's text below them
 	// ([builder.frameFirst]).
@@ -526,6 +532,7 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	if st.TextAlign == css.AlignJustify && slices.ContainsFunc(runs, func(r scriptRun) bool { return hasArabic(r.text) }) {
 		b.warn("kashida", warn.ContentUnsupported, warn.Approximated, "justified Arabic text is stretched at its spaces, without kashida")
 	}
+	b.anchorFrames(kids, st, 0)
 	if !hasText(kids) && b.floatCount(kids) > 1 {
 		b.pinFloats(kids, p)
 	}

@@ -271,6 +271,8 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	if text, ok := b.cellValueText(c); ok {
 		content = valueParagraph(c, text)
 	}
+	b.boxed++
 	n.Children = b.wrapLists(b.blocks(content, tb.ctx), 0)
+	b.boxed--
 	return n
 }
