@@ -838,7 +838,8 @@ type Drawing struct {
 	// X and Y are the top-left corner from the sheet's origin, in points,
 	// when Absolute is set.
 	X, Y float64
-	// Picture is a raster or vector picture.
+	// Picture is a raster or vector picture; nil for a frame whose picture
+	// is not drawn, which keeps its place on the sheet.
 	Picture *layout.Picture
 	// Chart is a chart the chart package draws.
 	Chart *chart.Chart

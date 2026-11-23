@@ -93,10 +93,10 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 			}
 			return
 		}
+		// A frame whose picture is not drawn, linked from outside the
+		// package or in a format litho does not read, keeps its place:
+		// Calc prints the pages it covers ([sheet.Drawing.Picture] nil).
 		d.Picture = r.picture(img)
-		if d.Picture == nil {
-			return
-		}
 	}
 	x, _ := odf.Length(el.A(odf.NSSVG, "x"))
 	y, _ := odf.Length(el.A(odf.NSSVG, "y"))

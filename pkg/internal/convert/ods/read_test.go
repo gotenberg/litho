@@ -406,7 +406,7 @@ func TestRead_Drawings(t *testing.T) {
 }
 
 // TestRead_MetafileWarnings locks the warning code of each metafile
-// format, which is not drawn.
+// format, which is not drawn, its frame keeping its place.
 func TestRead_MetafileWarnings(t *testing.T) {
 	emf := make([]byte, 48)
 	copy(emf[40:], " EMF")
@@ -418,8 +418,8 @@ func TestRead_MetafileWarnings(t *testing.T) {
 	data := zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "content.xml", content,
 		"Pictures/a.wmf", "\xd7\xcd\xc6\x9a0000", "Pictures/b.emf", string(emf), "Pictures/c.svm", "VCLMTF0000")
 	doc, w := read(t, data)
-	if n := len(doc.Sheets[0].Drawings); n != 0 {
-		t.Errorf("%d drawings, want none", n)
+	if ds := doc.Sheets[0].Drawings; len(ds) != 3 || ds[0].Picture != nil || !near(ds[0].Width, 72) {
+		t.Errorf("drawings %+v, want three frames of no picture", ds)
 	}
 	for _, format := range []string{"WMF", "EMF", "SVM"} {
 		if !hasWarningAbout(w, warn.PictureFormatUnsupported, format) {
@@ -779,5 +779,24 @@ func TestRead_LinkToNamedRange(t *testing.T) {
 		if c := cellAt(doc.Sheets[0], 0, col); c == nil || c.Href != want {
 			t.Errorf("link %d = %+v, want %q", col, c, want)
 		}
+	}
+}
+
+// TestRead_LinkedPictureKeepsItsPlace locks that a frame whose linked
+// picture is not read keeps its place on the sheet, so that Calc's pages
+// of it print.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/document_with_linked_graphic.ods, a frame 6.8
+//     inches wide linking a picture beside the document from 1.78 inches,
+//     prints two blank pages.
+func TestRead_LinkedPictureKeepsItsPlace(t *testing.T) {
+	content := `<office:document-content ` + nsDecl + `><office:body><office:spreadsheet><table:table table:name="S"><table:shapes>` +
+		`<draw:frame svg:x="1.78in" svg:y="0.5in" svg:width="6.8in" svg:height="4.9in"><draw:image xlink:href="../linked_graphic.jpg"/></draw:frame>` +
+		`</table:shapes></table:table></office:spreadsheet></office:body></office:document-content>`
+	doc, _ := read(t, zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "content.xml", content))
+	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Picture != nil || !near(ds[0].X, 1.78*72) || !near(ds[0].Width, 6.8*72) {
+		t.Errorf("drawings %+v, want the frame without its picture", ds)
 	}
 }
