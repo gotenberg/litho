@@ -243,12 +243,13 @@ type Node struct {
 	// with an initial letter, or that establishes a formatting context,
 	// goes below the initial letters before it.
 	InitialLetter bool
-	// MarginQuirks are the margin quirks of an Element of a document in
-	// quirks mode (HTML Standard, 15.3.3): [QuirkyContainer] for a body,
-	// td or th element, [QuirkyTop] and [QuirkyBottom] for a top or bottom
-	// margin of the user agent sheet that such a container drops at its
-	// content's start or end. Zero for every other node.
-	MarginQuirks MarginQuirks
+	// Quirks are the quirks of an Element of a document in quirks mode:
+	// [QuirkyContainer] for a body, td or th element, [QuirkyTop] and
+	// [QuirkyBottom] for a top or bottom margin of the user agent sheet
+	// that such a container drops at its content's start or end (HTML
+	// Standard, 15.3.3), [FillsViewport] for the html and body elements
+	// (Quirks Mode Standard, 3.6 and 3.7). Zero for every other node.
+	Quirks Quirks
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
 	// is laid out in the footnote area of the page the call lands on, or
@@ -297,19 +298,23 @@ const (
 	FieldsetContent
 )
 
-// MarginQuirks is the set of margin quirks of a node (see
-// [Node.MarginQuirks]).
-type MarginQuirks uint8
+// Quirks is the set of quirks of a node (see [Node.Quirks]).
+type Quirks uint8
 
-// The margin quirks.
+// The quirks.
 const (
 	// QuirkyContainer drops the quirky margins that adjoin the start or
 	// the end of its content.
-	QuirkyContainer MarginQuirks = 1 << iota
+	QuirkyContainer Quirks = 1 << iota
 	// QuirkyTop marks a quirky top margin.
 	QuirkyTop
 	// QuirkyBottom marks a quirky bottom margin.
 	QuirkyBottom
+	// FillsViewport makes the html element as tall as the initial
+	// containing block, and the body element as tall as the html
+	// element's content box, less their margins, when their height is
+	// auto (Quirks Mode Standard, 3.6 and 3.7).
+	FillsViewport
 )
 
 // Options parametrises one [Layout] call.

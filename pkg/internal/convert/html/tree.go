@@ -175,6 +175,9 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 	if st.Display == css.DisplayNone {
 		return n, nil
 	}
+	if b.frameOpts.mode == css.Quirks && root.Namespace == "" {
+		n.Quirks = quirksOf(root, st)
+	}
 	b.container(n, root)
 	v := b.applyCounters(root, st)
 	if b.counters.innermost(footnoteCounter) == nil {
@@ -441,7 +444,7 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 	}
 	node.Role = roles[n.DataAtom]
 	if b.frameOpts.mode == css.Quirks {
-		node.MarginQuirks = marginQuirks(n, node.Style)
+		node.Quirks = quirksOf(n, node.Style)
 	}
 	if lang, ok := attr(n, "lang"); ok {
 		node.Lang = strings.TrimSpace(lang)

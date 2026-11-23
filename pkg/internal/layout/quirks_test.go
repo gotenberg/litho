@@ -55,8 +55,8 @@ func TestLineQuirks_NoStrut(t *testing.T) {
 // collapsed with a margin that is not quirky, which stays; elsewhere a
 // quirky margin collapses as any other.
 func TestMarginQuirks_DroppedAtContainerEdges(t *testing.T) {
-	quirky := func(q MarginQuirks, n *Node) *Node {
-		n.MarginQuirks = q
+	quirky := func(q Quirks, n *Node) *Node {
+		n.Quirks = q
 		return n
 	}
 	para := func(text string) *Node {
@@ -83,14 +83,14 @@ func TestMarginQuirks_DroppedAtContainerEdges(t *testing.T) {
 		{"between two", func() []*Node { return []*Node{para("a"), para("b")} }, [2]float64{36, 0}, [2]float64{68, 16}},
 	} {
 		for _, quirks := range []bool{true, false} {
-			q := MarginQuirks(0)
+			q := Quirks(0)
 			kids := tc.kids()
 			if quirks {
 				q = QuirkyContainer
 			} else {
 				var clear func(*Node)
 				clear = func(n *Node) {
-					n.MarginQuirks = 0
+					n.Quirks = 0
 					for _, k := range n.Children {
 						clear(k)
 					}
@@ -110,6 +110,33 @@ func TestMarginQuirks_DroppedAtContainerEdges(t *testing.T) {
 			if got != want {
 				t.Errorf("%s, quirky %v: height and first top %v, want %v", tc.name, quirks, got, want)
 			}
+		}
+	}
+}
+
+// TestFillQuirks_ViewportAndPercentages makes the html element as tall as
+// the initial containing block and the body as tall as the html element's
+// content box, less their margins (Quirks Mode Standard, 3.6 and 3.7), and
+// resolves a percentage height past the auto-height block containers to
+// the body's filled content box (3.5); in no-quirks mode the boxes keep
+// their content's height and the percentage computes to auto.
+func TestFillQuirks_ViewportAndPercentages(t *testing.T) {
+	for _, mode := range []css.DocumentMode{css.Quirks, css.LimitedQuirks, css.NoQuirks} {
+		half := el(sty(func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }), txt(inlineSty(), "x"))
+		body := el(sty(margin(10, 10, 10, 10), border(2, css.Solid, black)), el(sty(), half))
+		root := el(sty(margin(5, 0, 5, 0)), body)
+		if mode == css.Quirks {
+			body.Quirks = FillsViewport | QuirkyContainer
+			root.Quirks = FillsViewport
+		}
+		rb := boxesWith(t, root, Options{Page: page(200, 200), Mode: mode})
+		got := [3]float64{rect(rb)[3], rect(kid(t, rb, 0))[3], rect(kid(t, rb, 0, 0, 0))[3]}
+		want := [3]float64{10 + 14 + 10, 14, 10}
+		if mode == css.Quirks {
+			want = [3]float64{190, 170, 83}
+		}
+		if got != want {
+			t.Errorf("mode %d: html, body and 50%% heights %v, want %v", mode, got, want)
 		}
 	}
 }

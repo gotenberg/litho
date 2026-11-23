@@ -72,6 +72,7 @@ func (e *engine) captionsHeight(w *box, cb cblock, y float64) float64 {
 func wrapperCB(b *box, kcb, cb cblock) cblock {
 	if b.tpart == partWrapper {
 		kcb.h, kcb.hDefinite = cb.h, cb.hDefinite
+		kcb.quirk = cb.quirk
 	}
 	return kcb
 }

@@ -19,6 +19,27 @@ type cblock struct {
 	// is known, whose percentage-height scroll containers then take
 	// their min-height alone ([engine.layoutCell]).
 	shrinkScrollers bool
+	// quirk holds the heights of the quirks of a document in quirks
+	// mode, nil in any other mode or where none applies.
+	quirk *quirkHeight
+}
+
+// quirkHeight is what a containing block holds for the quirks of a
+// document in quirks mode.
+type quirkHeight struct {
+	// h is the height a percentage height resolves against when the
+	// containing block's own is not definite: the height of the nearest
+	// ancestor that is no block container of auto height (Quirks Mode
+	// Standard, 3.5).
+	h float64
+	// fillEnd, when fill is set, is where the content box of an html
+	// element filling the viewport ends, the initial containing block's
+	// bottom for the html element itself ([engine.fillHeight]).
+	fillEnd float64
+	fill    bool
+	// below is how far the containing blocks reach under fillEnd: the
+	// bottom margins, borders and paddings of the filled boxes around it.
+	below float64
 }
 
 // strut is a set of adjoining margins being collapsed (CSS 2.1, 8.3.1):
@@ -65,13 +86,91 @@ func (s strut) sum() float64 {
 	return max(s.pos, s.quirky) + s.neg
 }
 
+// fillHeight returns the content height the html or body element b fills
+// in quirks mode, its height auto, in the containing block cb (Quirks Mode
+// Standard, 3.6 and 3.7): the html element's border box reaches the
+// bottom of the initial containing block less its bottom margin, the
+// body's the bottom of the html element's content box less its own; its
+// top is where its collapsed top margin put it. A body positioned
+// absolutely, floated or inline-level fills nothing; nor does a page sized
+// to its content, which has no viewport to fill.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a short
+//     quirks mode document on a 3 inch page with its html border box
+//     278 px tall under margins of 5 px, and its body border box 250 px
+//     tall under 10 px margins and the html's 4 px border, a body whose
+//     first child's 40 px margin collapses through its top 248 px tall;
+//     with <!DOCTYPE html> they are as tall as their content.
+func (e *engine) fillHeight(b *box, cb cblock, hSet bool) (float64, bool) {
+	if e.opts.Mode != css.Quirks || hSet || cb.quirk == nil || !cb.quirk.fill || b.node == nil || b.anon || b.node.Quirks&FillsViewport == 0 ||
+		b.abs || b.float != css.FloatNone || b.inline || e.opts.FitFirstPage || b.st.WritingMode != css.HorizontalTB {
+		return 0, false
+	}
+	return max(cb.quirk.fillEnd-b.y-b.m[css.Bottom]-vEdges(b), 0), true
+}
+
+// fillTo returns the content height of the html or body element b, laid
+// out to its content height, once it fills the content height fill
+// ([engine.fillHeight]) in the containing block cb. The height a fill adds
+// never overflows the page it is on: it is at most the remainder of the
+// flow area of the page b's content ends on, the footnote area, the note
+// area and the bands' room left out, less what b and the filled boxes
+// around it keep under it, and nothing on a page b's content fills or runs
+// past. So the fill never makes a page of its own, as Chromium's never
+// does on the one page a viewport is.
+func (e *engine) fillTo(b *box, cb cblock, fill float64) float64 {
+	if fill <= b.h {
+		return b.h
+	}
+	if e.paginating() && e.cols == nil {
+		end := b.contentY() + b.h
+		// pageOf reads a position within eps of a page's top as on that
+		// page: a content that ends on a page's last line is on it.
+		p := max(e.pageOf(b.contentY()), e.pageOf(end-2*eps))
+		room := e.pageTop(p+1) - cb.quirk.below - b.m[css.Bottom] - b.pd[css.Bottom] - b.bd[css.Bottom] - end
+		fill = min(fill, b.h+max(room, 0))
+	}
+	return max(fill, b.h)
+}
+
+// quirkCB returns the height the percentage heights of b's children
+// resolve against in quirks mode when kcb, the containing block b gives
+// them, has no definite one and b fills nothing (Quirks Mode Standard,
+// 3.5): for a block container of auto height, cb's own,
+// which its children see through it; a table part, a
+// flex or grid container and an absolutely positioned box stop the walk,
+// a table wrapper passes cb's to its table box.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a quirks
+//     mode div of height 50% in a body with 10 px margins and a 2 px
+//     border on a 3 inch page 132 px tall, half the body's filled content
+//     box, and a table of height 100% as tall as the page; with <!DOCTYPE
+//     html> both are as tall as their content.
+func quirkCB(b *box, cb, kcb cblock) *quirkHeight {
+	switch {
+	case kcb.hDefinite:
+		return &quirkHeight{h: kcb.h}
+	case b.tpart == partWrapper:
+		// The table box resolves its percentage height in the wrapper's
+		// own containing block (wrapperCB).
+		return cb.quirk
+	case b.abs || b.tpart != partNone || b.st.FlexOrGrid():
+		return nil
+	}
+	return cb.quirk
+}
+
 // marginQuirks returns whether the top and bottom margins of b are quirky,
-// and whether b is a quirky container (see [Node.MarginQuirks]).
+// and whether b is a quirky container (see [Node.Quirks]).
 func marginQuirks(b *box) (top, bottom, container bool) {
 	if b.node == nil || b.anon {
 		return false, false, false
 	}
-	q := b.node.MarginQuirks
+	q := b.node.Quirks
 	return q&QuirkyTop != 0, q&QuirkyBottom != 0, q&QuirkyContainer != 0
 }
 
@@ -551,10 +650,20 @@ func specWidth(b *box, d css.Dimension, cbw float64) (float64, bool) {
 // false for auto, none, or a percentage of an indefinite height (CSS 2.1,
 // 10.5).
 func specHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
-	if !d.IsLength() || d.HasPercent() && !cb.hDefinite {
+	if !d.IsLength() {
 		return 0, false
 	}
-	h := resolve(d, cb.h)
+	base := cb.h
+	if d.HasPercent() && !cb.hDefinite {
+		if cb.quirk == nil || d != b.st.Height || b.abs || b.tpart.tabular() {
+			return 0, false
+		}
+		// The percentage height calculation quirk (Quirks Mode Standard,
+		// 3.5): a static, relative or sticky box resolves its percentage
+		// height past the block containers of auto height around it.
+		base = cb.quirk.h
+	}
+	h := resolve(d, base)
 	if b.st.BoxSizing == css.BorderBox {
 		h -= vEdges(b)
 	}
@@ -706,6 +815,9 @@ func (e *engine) shrinkToFit(b *box, avail float64) float64 {
 // page area (CSS 2.1, 10.1), as tall as [Options.ViewportHeight] when set.
 func (e *engine) layoutRoot(rb *box) {
 	cb := cblock{x: 0, w: e.pageW, h: e.icbHeight(), hDefinite: true}
+	if e.opts.Mode == css.Quirks {
+		cb.quirk = &quirkHeight{h: cb.h, fillEnd: cb.h, fill: true}
+	}
 	rb.setMotionCB(typeset.Rect{Width: cb.w, Height: cb.h})
 	bc := &bfc{}
 	mc := &marginState{}
@@ -893,6 +1005,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		kh, kDefinite = cb.h, cb.hDefinite
 	}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: kh, hDefinite: kDefinite}, cb)
+	if fill, filled := e.fillHeight(b, cb, hSet); filled {
+		kcb.quirk = &quirkHeight{h: fill, fillEnd: b.contentY() + fill, fill: true, below: cb.quirk.below + b.m[css.Bottom] + b.pd[css.Bottom] + b.bd[css.Bottom]}
+	} else if e.opts.Mode == css.Quirks {
+		kcb.quirk = quirkCB(b, cb, kcb)
+	}
 	cloned := e.enterClone(b, b.y, hSet)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	e.leaveClone(cloned, end)
@@ -966,6 +1083,12 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 	}
 	b.h = usedHeight(b, max(h, 0), max(content, 0), hSet, cb)
+	// Its top margin resolved: b fills down from where it lands.
+	if fill, filled := e.fillHeight(b, cb, hSet); filled {
+		// Filled as a min-height would fill it: the margins of its last
+		// child do not collapse through its bottom.
+		b.h = e.fillTo(b, cb, fill)
+	}
 	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	bottom := b.y + b.borderH()
@@ -1185,6 +1308,12 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	_, _, quirkyBox := marginQuirks(b)
 	mc.strut.quirkStart = quirkyBox
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
+	fill, filled := e.fillHeight(b, cb, hSet)
+	if filled {
+		kcb.quirk = &quirkHeight{h: fill, fillEnd: b.contentY() + fill, fill: true, below: cb.quirk.below + b.m[css.Bottom] + b.pd[css.Bottom] + b.bd[css.Bottom]}
+	} else if e.opts.Mode == css.Quirks {
+		kcb.quirk = quirkCB(b, cb, kcb)
+	}
 	saved := e.enterClamp(b, cb, b.contentY())
 	cloned := e.enterClone(b, b.y, hSet)
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
@@ -1215,6 +1344,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		}
 	}
 	b.h = usedHeight(b, h, content, hSet, cb)
+	if filled {
+		b.h = e.fillTo(b, cb, fill)
+	}
 	e.alignContent(b, content)
 	e.cloneEdges(b, hSet)
 	fillFieldset(b)

@@ -120,7 +120,8 @@ func TestQuirksMode_TablesTakeTheBodyColour(t *testing.T) {
 }
 
 // TestQuirksMode_MarksQuirkyMargins marks the body, td and th elements of a
-// document in quirks mode as quirky containers and the margins the user
+// document in quirks mode as quirky containers, the body as filling the
+// viewport, and the margins the user
 // agent sheet gives the elements of HTML Standard, 15.3.3 as quirky: both
 // of a p, the top one of an h1, none an author sets; a document with an
 // HTML5 DOCTYPE has none.
@@ -132,15 +133,15 @@ func TestQuirksMode_MarksQuirkyMargins(t *testing.T) {
 			src = "<!DOCTYPE html>" + body
 		}
 		p := prep(t, src, Options{})
-		want := map[string]layout.MarginQuirks{
-			"b": layout.QuirkyContainer, "c": layout.QuirkyContainer, "p": layout.QuirkyTop | layout.QuirkyBottom,
+		want := map[string]layout.Quirks{
+			"b": layout.QuirkyContainer | layout.FillsViewport, "c": layout.QuirkyContainer, "p": layout.QuirkyTop | layout.QuirkyBottom,
 			"h": layout.QuirkyTop, "a": layout.QuirkyBottom, "f": 0,
 		}
 		for id, w := range want {
 			if !quirks {
 				w = 0
 			}
-			if got := byID(t, p.root, id).MarginQuirks; got != w {
+			if got := byID(t, p.root, id).Quirks; got != w {
 				t.Errorf("quirks %v: #%s margin quirks %v, want %v", quirks, id, got, w)
 			}
 		}

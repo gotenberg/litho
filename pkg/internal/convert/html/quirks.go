@@ -8,9 +8,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
-// marginQuirks returns the margin quirks of the HTML element n of style st
-// in a document in quirks mode (HTML Standard, 15.3.3, "Margin collapsing
-// quirks", as Chromium lays them out): the document's body element, a td
+// quirksOf returns the quirks of the HTML element n of style st
+// in a document in quirks mode: the root html element and the document's
+// body element fill the viewport (Quirks Mode Standard, 3.6 and 3.7). For
+// the margin collapsing quirks (HTML Standard, 15.3.3), as Chromium lays
+// them out: the document's body element, a td
 // and a th are quirky containers, which drop the quirky margins that adjoin
 // the start or the end of their content; the top margin the user agent
 // sheet gives a p, pre, xmp, listing, plaintext, h1 to h6, ul, ol, dl,
@@ -25,17 +27,21 @@ import (
 //     neither of a figure; through a div, at the start of the body, after
 //     an empty span or an empty p, under a cell's padding, and at the end
 //     of a floated body; an author's margin: 1em 0 stays.
-func marginQuirks(n *dom.Node, st *css.Style) layout.MarginQuirks {
+func quirksOf(n *dom.Node, st *css.Style) layout.Quirks {
 	if st == nil || st.WritingMode != css.HorizontalTB {
 		return 0
 	}
-	var q layout.MarginQuirks
+	var q layout.Quirks
 	switch n.DataAtom { //nolint:exhaustive // the other elements have no margin quirk
 	case atom.Td, atom.Th:
 		q = layout.QuirkyContainer
+	case atom.Html:
+		if n.Parent != nil && n.Parent.Type == dom.DocumentNode {
+			q = layout.FillsViewport
+		}
 	case atom.Body:
 		if p := n.Parent; p != nil && p.DataAtom == atom.Html && p.Namespace == "" && p.Parent != nil && p.Parent.Type == dom.DocumentNode {
-			q = layout.QuirkyContainer
+			q = layout.QuirkyContainer | layout.FillsViewport
 		}
 	case atom.P, atom.Pre, atom.Xmp, atom.Listing, atom.Plaintext:
 		if !st.AuthorMarginBottom {
