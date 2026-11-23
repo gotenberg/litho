@@ -145,3 +145,42 @@ func TestFrameTouchesLineBefore(t *testing.T) {
 		}
 	}
 }
+
+// TestPageFrameInParagraph locks that a page-anchored frame a producer
+// nests in a paragraph prints at its page offsets, on the page its
+// paragraph lands on or on the page its text:anchor-page-number names.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 3 by 2 cm frame
+//     anchored to the page at svg:x 8 cm and svg:y 10 cm inside a
+//     paragraph that starts page 2 prints on page 2 with its text at
+//     226.75, 283.96; with text:anchor-page-number 1 it prints on page 1
+//     at the same place; a draw:rect so nested prints too.
+func TestPageFrameInParagraph(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties fo:margin="0cm" fo:padding="0cm" fo:border="none" style:wrap="right" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>` +
+		`<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
+	for _, tc := range []struct {
+		number string
+		page   int
+	}{{"", 1}, {` text:anchor-page-number="1"`, 0}} {
+		frame := `<draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="page"` + tc.number + ` svg:x="8cm" svg:y="10cm" svg:width="3cm" svg:height="2cm"><draw:text-box><text:p>FRAME</text:p></draw:text-box></draw:frame>`
+		body := `<text:p>One</text:p><text:p text:style-name="PB">Two ` + frame + `text</text:p>`
+		d := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+		if len(d.Pages) != 2 {
+			t.Fatalf("number %q: %d pages, want 2", tc.number, len(d.Pages))
+		}
+		found := false
+		for _, r := range runs(d.Pages[tc.page]) {
+			if strings.TrimSpace(r.text) == "FRAME" {
+				found = true
+				if !near(r.x, 226.77, 0.2) {
+					t.Errorf("number %q: FRAME at x %.2f, want 226.77", tc.number, r.x)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("number %q: no FRAME on page %d", tc.number, tc.page+1)
+		}
+	}
+}

@@ -493,7 +493,11 @@ func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, 
 		}
 		*out = append(*out, n)
 	case "page":
+		// A page-anchored frame nested in a paragraph prints as one among
+		// the body's blocks does: on the page its text:anchor-page-number
+		// names, else the page its paragraph lands on.
 		b.place(n, g, true)
+		*out = append(*out, n)
 	default:
 		// A header's or footer's paragraph-anchored frame stays where
 		// its paragraph puts it: Writer keeps it off the body.
