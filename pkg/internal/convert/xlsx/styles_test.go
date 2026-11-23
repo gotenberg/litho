@@ -71,7 +71,7 @@ func TestRead_NumberFormats(t *testing.T) {
 	}
 }
 
-// TestRead_Fonts checks the font records: LibreOffice's Cambria 11 for
+// TestRead_Fonts checks the font records: Excel's Calibri 11 for
 // what a record leaves out, the attributes, the underline kinds and the
 // colours by rgb, theme with tint and palette index.
 func TestRead_Fonts(t *testing.T) {
@@ -84,11 +84,11 @@ func TestRead_Fonts(t *testing.T) {
 			`<font><color theme="0" tint="0.5"/><color auto="1"/></font>`,
 		"", "", "", `<xf fontId="1"/><xf fontId="2"/><xf fontId="3"/><xf fontId="4"/><xf fontId="5"/>`, 5)
 	for i, want := range []sheet.Font{
-		{Families: []string{"Cambria"}, Size: 11, Bold: true},
+		{Families: []string{"Calibri"}, Size: 11, Bold: true},
 		{Families: []string{"Arial"}, Size: 9, Italic: true, Strike: true, Underline: sheet.Double, Script: sheet.Superscript, Color: css.Color{R: 1, A: 1}},
 		{Families: []string{"Arial"}, Size: 11, Underline: sheet.Single, Color: tint(rgb(0x4472C4), -0.5)},
-		{Families: []string{"Cambria"}, Size: 11, Underline: sheet.Single, Color: rgb(0x008000)},
-		{Families: []string{"Cambria"}, Size: 11},
+		{Families: []string{"Calibri"}, Size: 11, Underline: sheet.Single, Color: rgb(0x008000)},
+		{Families: []string{"Calibri"}, Size: 11},
 	} {
 		got := styleOf(t, doc, i).Font
 		if got.Families[0] != want.Families[0] || got.Size != want.Size || got.Bold != want.Bold || got.Italic != want.Italic ||
@@ -299,11 +299,11 @@ func TestRead_SubstituteFamily(t *testing.T) {
 }
 
 // TestRead_NoStyles checks that a workbook without a styles part draws
-// with Calc's Default cell style font, Liberation Sans 10.
+// in Excel's default font, Calibri 11.
 func TestRead_NoStyles(t *testing.T) {
 	t.Parallel()
 	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>`}}, "", "", "", nil)))
-	if f := doc.Default.Font; len(f.Families) != 1 || f.Families[0] != "Liberation Sans" || f.Size != 10 {
+	if f := doc.Default.Font; len(f.Families) != 1 || f.Families[0] != "Calibri" || f.Size != 11 {
 		t.Errorf("default font %+v", f)
 	}
 }

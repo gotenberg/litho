@@ -62,7 +62,7 @@ func TestParity_GotenbergWorkbooks(t *testing.T) {
 			}
 			sum, monthly := doc.Sheets[0], doc.Sheets[1]
 			title, _ := cellAt(sum, 0, 0)
-			if title.Value.Text != "FY2026 Budget" || title.Style == nil || title.Style.Font.Families[0] != "Cambria" || !title.Style.Font.Bold || title.Style.Font.Size != 16 {
+			if title.Value.Text != "FY2026 Budget" || title.Style == nil || title.Style.Font.Families[0] != "Calibri" || !title.Style.Font.Bold || title.Style.Font.Size != 16 {
 				t.Errorf("A1 %+v", title)
 			}
 			if v, _ := cellAt(sum, 3, 1); v.Value != (sheet.Value{Kind: sheet.Number, Number: 120000}) {

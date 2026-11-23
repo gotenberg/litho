@@ -20,11 +20,20 @@ import (
 // spec-mandated: Excel stops at 64,000 cell formats and 512 fonts.
 const maxStyleRecords = 1 << 16
 
-// The default font of a font record that names no face or size: what
-// LibreOffice's import starts every font from (its theme buffer's default
-// font model, Cambria at 11 points), not the Normal style's font.
+// The default font of a font record that names no face or size, and of a
+// workbook that holds no font record: Excel prints them in Calibri at 11
+// points, the face and size of its own Normal style. ECMA-376 Part 1,
+// 18.8.22 gives a font record no default face.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: tdf122336, whose first font record holds no
+//     element, prints in Calibri 11.04 (11 points on Excel's printer grid);
+//     tdf121887, which has no styles part, in Calibri 11.04.
+//   - poi/xlsx: 56278 and 59021, which have no styles part, print in
+//     Calibri 11.04.
 const (
-	defaultFontName = "Cambria"
+	defaultFontName = "Calibri"
 	defaultFontSize = 11.0
 )
 
@@ -327,13 +336,8 @@ func (r *reader) resolve(x xf) *sheet.Style {
 }
 
 // fontAt returns font record i, the first record for an index past the
-// table, and Calc's Default cell style font, Liberation Sans 10, when the
-// workbook has none.
-//
-// # Corpus evidence
-//
-//   - probe, xlsx: a workbook without a styles part prints, in
-//     LibreOffice 26.8.2.2, its cells in Liberation Sans 10 points.
+// table, and Excel's default font, Calibri 11 ([defaultFontName]), when
+// the workbook has none.
 func (r *reader) fontAt(i int) sheet.Font {
 	fonts := r.styles.fonts
 	switch {
@@ -342,7 +346,7 @@ func (r *reader) fontAt(i int) sheet.Font {
 	case len(fonts) > 0:
 		return fonts[0]
 	}
-	return sheet.Font{Families: []string{"Liberation Sans"}, Size: 10}
+	return sheet.Font{Families: []string{defaultFontName}, Size: defaultFontSize}
 }
 
 // format returns the code of number format id: the workbook's own, else
@@ -381,7 +385,7 @@ func (r *reader) normal() sheet.Style {
 }
 
 // font reads a font record (ECMA-376 Part 1, 18.8.22): what it does not
-// set takes LibreOffice's default font, Cambria at 11 points.
+// set takes Excel's default font, Calibri at 11 points.
 func (r *reader) font(e *ooxml.Element) sheet.Font {
 	f := sheet.Font{Families: []string{defaultFontName}, Size: defaultFontSize}
 	r.fontProps(e, &f)
