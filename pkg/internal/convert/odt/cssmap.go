@@ -393,6 +393,10 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
 	st.TabStops = b.tabStops(p.tabs, p.margin[css.Left])
+	if p.indent < 0 && (len(st.TabStops) == 0 || st.TabStops[0].Pos > 0) {
+		// A hanging first line tabs to the paragraph's indent first.
+		st.TabStops = append([]css.TabStop{{Pos: 0}}, st.TabStops...)
+	}
 	if p.tabDist > 0 {
 		st.TabSize = css.Pts(p.tabDist)
 	}
@@ -461,7 +465,11 @@ var tabTypes = map[string]css.TabAlign{"left": css.TabLeft, "center": css.TabCen
 //     it once the stops count from the indent once.
 //   - probe, odt: through gotenberg/gotenberg:9.4.1, the text after a
 //     tab to a left stop at 3 cm in a paragraph indented by 2 cm prints
-//     5 cm from the page area's edge.
+//     5 cm from the page area's edge; with a first line indent of -1 cm,
+//     the text after the first line's tab prints at the indent, 2 cm.
+//   - libreoffice/odt: layout/tdf117245.odt: the item text after "2)" of
+//     its paragraphs of a -1 in first line indent prints at their 1 in
+//     indent, not on their right stop.
 func (b *builder) tabStops(ts *odf.Element, indent float64) []css.TabStop {
 	out := []css.TabStop{}
 	if b.tabsRelative {

@@ -26,3 +26,23 @@ func TestConvert_TabsFromTheIndent(t *testing.T) {
 		t.Fatal("X not drawn")
 	}
 }
+
+// TestConvert_HangingTabToTheIndent takes the tab of a hanging first line
+// to the paragraph's indent before its custom stops, as LibreOffice
+// prints the same paragraph (probe through the pinned image).
+func TestConvert_HangingTabToTheIndent(t *testing.T) {
+	auto := `<style:style style:name="H" style:family="paragraph"><style:paragraph-properties fo:margin-left="2cm" fo:text-indent="-2cm"><style:tab-stops><style:tab-stop style:position="10cm" style:type="right"/></style:tab-stops></style:paragraph-properties></style:style>`
+	res := convertDoc(t, doc{contentAuto: auto, body: `<text:p text:style-name="H">2)<text:tab/>X</text:p>`}.pack(t), office.Options{})
+	found := false
+	for _, r := range runs(res.Pages[0]) {
+		if r.text == "X" {
+			found = true
+			if !near(r.x, 113.39, 0.5) {
+				t.Errorf("text after the tab at %.2f, want 113.39", r.x)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("X not drawn")
+	}
+}
