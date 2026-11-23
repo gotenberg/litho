@@ -1,10 +1,13 @@
 package sheet
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestConvert_RightToLeftSheet locks Calc's print of a right-to-left
@@ -71,5 +74,38 @@ func TestPlan_RightToLeftSheetOfDrawings(t *testing.T) {
 		if n := len(convert(t, newDoc(sh), office.Options{}).Pages); n != tc.want {
 			t.Errorf("right to left %t, a value %t: %d pages, want %d", tc.rtl, tc.value, n, tc.want)
 		}
+	}
+}
+
+// TestConvert_RightToLeftPaintedDrawing locks where Calc prints a drawing
+// whose painted box differs from its anchors' box on a right-to-left
+// sheet: the painted box is mirrored, so a shape turned to paint right of
+// its corner paints left of the mirrored corner.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137082_RTL_cell_anchored.ods prints its
+//     skewed and turned shape, anchored in C3 and painting 22.8 mm right
+//     of its corner, from 72.2 to 95 mm left of the sheet's right edge,
+//     where mirroring its anchors' box put it 7.4 mm further right.
+func TestConvert_RightToLeftPaintedDrawing(t *testing.T) {
+	var got []typeset.Rect
+	pic := &layout.Picture{Width: 40, Height: 20, Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		got = append(got, r)
+		return nil
+	}}
+	sh := &Sheet{Name: "S", DefaultColumnWidth: 85, RightToLeft: true, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "A1", nil)}}}}
+	sh.Drawings = []Drawing{{
+		From: Anchor{Row: 1, Column: 1, DX: 10}, To: &Anchor{Row: 1, Column: 1, DX: 50, DY: 20},
+		Width: 40, Height: 20, Unbounded: true, Shape: true, Picture: pic,
+		Painted: &typeset.Rect{X: 0, Y: 0, Width: 70, Height: 20},
+	}}
+	// The region of the printed columns A and B, 170 points wide, runs
+	// from the right: the painted box ends 95 points left of its right
+	// edge, where its anchors' box would start the drawing 30 points
+	// further right.
+	out := convert(t, newDoc(sh), office.Options{})
+	if want := 170.0 - (85 + 10 + 70); len(got) != 1 || !near(got[0].X, want, 0.1) {
+		t.Errorf("drawn at %+v on %d pages, want once from x %.2f in the region", got, len(out.Pages), want)
 	}
 }

@@ -27,9 +27,8 @@ func (g *grid) rowY(r int) float64 {
 // column, the drawings moved with the columns and not turned, the row
 // headings on the right, each cell's text set right to left (the
 // trailing period of a Hebrew cell at its left end, a percentage sign
-// at its number's left). Where Calc puts a drawing anchored in a cell of
-// such a sheet is not decided: the one reference that holds some places
-// them elsewhere than their cells and offsets say.
+// at its number's left). A drawing whose painted box differs from its
+// anchors' box, a turned shape, is placed by its painted box mirrored.
 //
 // # Corpus evidence
 //
@@ -44,7 +43,8 @@ func (g *grid) rowY(r int) float64 {
 //   - libreoffice/ods: sc/tdf137082_RTL_cell_anchored.ods stores its two
 //     cell-anchored shapes 12.22 and 2.2 mm from the sheet's origin
 //     though they are anchored in columns C and G, and prints the one of
-//     column C 21 points left of where litho mirrors it.
+//     column C with the box it paints mirrored, within 4 points of where
+//     litho puts it.
 func (g *grid) mirrored() bool {
 	return g.sh.RightToLeft && !g.doc.ExcelRules
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -61,8 +62,13 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 			x := rg.x0 + rc.X - g.layoutColX(rg.cols.first)
 			if rg.rtl {
 				// The columns run from the right, and the drawing with
-				// them, unturned ([grid.mirrored]).
-				x = rg.x0 + rg.w - (rc.X + rc.Width - g.layoutColX(rg.cols.first))
+				// them, unturned ([grid.mirrored]): the box it paints is
+				// mirrored, its anchors' box moving with it.
+				left, width := rc.X, rc.Width
+				if p := d.Painted; p != nil && !d.Absolute && numeric.Finite(p.X) {
+					left, width = rc.X+p.X, clampSide(p.Width)
+				}
+				x = rg.x0 + rg.w - (left + width - g.layoutColX(rg.cols.first)) - (left - rc.X)
 			}
 			y := rg.y0 + rc.Y - g.layoutRowY(rg.rows.first)
 			if x >= rg.x0+rg.w || y >= rg.y0+rg.h || before(x+rc.Width, rg.x0, rc.Width) || before(y+rc.Height, rg.y0, rc.Height) {
