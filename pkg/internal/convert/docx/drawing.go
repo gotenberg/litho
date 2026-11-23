@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -36,12 +37,15 @@ const (
 // set. It returns nil with a warning when the part is missing or does not
 // parse, the frame then keeping its room empty.
 //
-// The Figure carries alt, the description of its drawing; Word gives a
-// chart's title no part in it. Without one, and with
-// office.Options.DerivedAltText, it carries the description
-// [chart.AltText] derives from the chart's model, its title first, in
-// English, which the Figure states when the document's language is
-// another ([chart.AltTextLang]).
+// The Figure carries alt, the description of its drawing. Without one it
+// carries the chart's title, as the chart of a sheet or a slide does: the
+// title is what the source states of the chart for a reader, and a Figure
+// needs a description (ISO 14289-1, 7.3; ISO 14289-2, 8.2.5.28.2). Word's
+// PDF tags such a chart as a Figure without one. With
+// office.Options.DerivedAltText, an undescribed chart carries the
+// description [chart.AltText] derives from the chart's model instead, its
+// title first, in English, which the Figure states when the document's
+// language is another ([chart.AltTextLang]).
 //
 // An Office 2016 chart sits in an mc:AlternateContent whose Choice
 // requires the cx1 or cx2 namespace; the converter takes the Choice, as
@@ -55,6 +59,8 @@ const (
 //   - litho/docx charts-chartex: Word prints the titles, legends and axis
 //     labels of the Office 2016 charts and not their fallback pictures;
 //     the Choice raises text F1 from 0.11 to 0.50.
+//   - litho/docx charts-bar-column: Word's PDF tags its seven titled
+//     charts as Figures without Alt.
 func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float64, alt string, ex bool) *layout.Node {
 	id, _ := ref.AttrNS(ooxml.NSR, "id")
 	rel, ok := d.pkg.RelationshipByID(d.ctx, s.part, id)
@@ -95,9 +101,13 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 		return chart.Render(ctx, fonts, c, r)
 	}
 	n := &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
-	if alt == "" && d.opts.DerivedAltText {
+	switch {
+	case alt != "":
+	case d.opts.DerivedAltText:
 		// The node holds no text: its language is its description's.
 		n.Alt, n.Lang = chart.AltText(c), chart.AltTextLang(d.lang())
+	case c.Title != nil:
+		n.Alt = strings.Join(strings.Fields(c.Title.Text), " ")
 	}
 	return n
 }

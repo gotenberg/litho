@@ -706,7 +706,16 @@ func TestDrawings_RelativeSize(t *testing.T) {
 // not describe takes under office.Options.DerivedAltText: chart.AltText of
 // its model, in English, stated on the Figure in a document of another
 // language; a described chart keeps its own, and without the option an
-// undescribed chart takes none.
+// undescribed chart takes its title, as a sheet's or a slide's chart does
+// (ISO 14289-1, 7.3), and one without a title takes none.
+//
+// # Corpus evidence
+//
+//   - litho/docx charts-bar-column, charts-chartex, charts-line-area,
+//     charts-pie-doughnut, charts-scatter-bubble-radar, charts-stock-combo,
+//     charts-trendlines-errorbars: every chart is titled and none is
+//     described; their Figures without a description failed PDF/UA-1 and
+//     PDF/UA-2, with their titles they pass.
 func TestChartDerivedAltText(t *testing.T) {
 	t.Parallel()
 	frame := func(descr string) string {
@@ -739,8 +748,16 @@ func TestChartDerivedAltText(t *testing.T) {
 	if c := chartOf(frame(` descr="Own"`), office.Options{DerivedAltText: true}); c.Alt != "Own" || c.Lang != "" {
 		t.Errorf("described: alt %q lang %q", c.Alt, c.Lang)
 	}
-	if c := chartOf(frame(""), office.Options{}); c.Alt != "" || c.Lang != "" {
-		t.Errorf("without the option: alt %q lang %q", c.Alt, c.Lang)
+	if c := chartOf(frame(""), office.Options{}); c.Alt != "Quarterly" || c.Lang != "" {
+		t.Errorf("without the option: alt %q lang %q, want the title", c.Alt, c.Lang)
+	}
+	untitled := map[string]string{"word/charts/chart1.xml": strings.Replace(part["word/charts/chart1.xml"], `<c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly</a:t></a:r></a:p></c:rich></c:tx></c:title>`, `<c:autoTitleDeleted val="1"/>`, 1)}
+	got := find(buildWith(t, frame(""), untitled, office.Options{}).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(got) != 1 {
+		t.Fatalf("an untitled chart: %d replaced boxes, want 1", len(got))
+	}
+	if got[0].Alt != "" {
+		t.Errorf("an untitled chart: alt %q, want none", got[0].Alt)
 	}
 }
 
