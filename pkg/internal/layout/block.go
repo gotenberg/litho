@@ -2057,6 +2057,9 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 		if y, ok := baseline(c, last); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
+	case a.st.BaselineAtBottom:
+		// A Word inline drawing sits on the line by its bottom margin
+		// edge, the baseline of a box without one.
 	case !scrollContainer(a.st) && a.st.BaselineSource == css.BaselineFirst:
 		// baseline-source: first aligns an inline-block by its first line
 		// (CSS Inline 3, 4.3).

@@ -315,6 +315,12 @@ type Office struct {
 	// (see text.EmojiJoins). It applies to the characters of the inline
 	// box that sets it.
 	KeepEmoji bool
+	// BaselineAtBottom gives the inline-level block container that sets
+	// it its bottom margin edge as its baseline, whatever lines it holds,
+	// as Word sits an inline drawing on the line by its bottom edge
+	// (ECMA-376 Part 1, 20.4.2.8 inline): a text box among them, where
+	// CSS takes the baseline of its last line (CSS 2.1, 10.8.1).
+	BaselineAtBottom bool
 	// TextEffects are the effects drawn around the glyphs of the inline
 	// box that sets it, nil for none: the glow, shadow and reflection of
 	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,

@@ -137,6 +137,7 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			sink.add(n)
 			continue
 		}
+		onBaseline(n)
 		effectExtent(n, k.Child(ooxml.NSWP, "effectExtent"))
 		if href := d.drawingLink(s, k.Child(ooxml.NSWP, "docPr")); href != "" {
 			sink.openLink(href)
@@ -146,6 +147,25 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 		}
 		sink.add(n)
 	}
+}
+
+// onBaseline sits the inline drawing n on its line by its bottom edge,
+// as Word sets every inline drawing (ECMA-376 Part 1, 20.4.2.8 inline),
+// a text box included, whose box would else align by its top or its
+// last line.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/inline-textbox-position.docx: Word sets an
+//     inline text box 63 points tall beside one 189 points tall with
+//     both bottom edges on the line's baseline, each box's one line at
+//     its top.
+func onBaseline(n *layout.Node) {
+	if n.Style == nil || n.Style.Display != css.InlineBlock {
+		return
+	}
+	n.Style.VerticalAlign = css.VerticalAlign{}
+	n.Style.BaselineAtBottom = true
 }
 
 // maxEffectExtent bounds each side of an inline drawing's effect extent,

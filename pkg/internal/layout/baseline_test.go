@@ -82,3 +82,17 @@ func computedStyle(t *testing.T, decls string) *css.Style {
 	find(root)
 	return c.Style(div)
 }
+
+// TestBaseline_AtBottom sets an inline-block of css.Office.BaselineAtBottom
+// holding a line on its bottom margin edge, as Word sits an inline text
+// box, where the same box without it aligns by its line.
+func TestBaseline_AtBottom(t *testing.T) {
+	for _, bottom := range []bool{false, true} {
+		ib := el(sty(display(css.InlineBlock), width(20), height(40), func(s *css.Style) { s.BaselineAtBottom = bottom }), txt(sty(), "a"))
+		rb := boxes(t, doc(el(sty(), txt(sty(), "x"), ib)), page(200, 200))
+		a := ofNode(rb, ib)
+		if a.hasBaseline == bottom {
+			t.Errorf("BaselineAtBottom %v: has a baseline %v", bottom, a.hasBaseline)
+		}
+	}
+}

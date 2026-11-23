@@ -2305,6 +2305,9 @@ func equalOffice(a, b *Office) bool {
 	if a.KeepEmoji != b.KeepEmoji {
 		return false
 	}
+	if a.BaselineAtBottom != b.BaselineAtBottom {
+		return false
+	}
 	if a.TextEffects != b.TextEffects {
 		return false
 	}
@@ -2339,6 +2342,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.KeepHangul)
 	h = mixBool(h, x.OfficeEmoji)
 	h = mixBool(h, x.KeepEmoji)
+	h = mixBool(h, x.BaselineAtBottom)
 	h = mixBool(h, x.TextEffects != nil)
 	h = mixBool(h, x.TextPaint != nil)
 	return h

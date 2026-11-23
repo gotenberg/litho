@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -564,6 +565,42 @@ func TestTextBox_Rotation(t *testing.T) {
 	}
 	if tr := figs[1].Style.Transform; len(tr) != 0 {
 		t.Errorf("upright box transform %+v", tr)
+	}
+}
+
+// TestTextBox_InlineOnBaseline sits two inline text boxes of different
+// heights on their line by their bottom edges, as Word sets every inline
+// drawing (ECMA-376 Part 1, 20.4.2.8 inline): the taller box's first line
+// stands the difference of their heights above the shorter one's.
+func TestTextBox_InlineOnBaseline(t *testing.T) {
+	t.Parallel()
+	box := func(cy, text string) string {
+		return `<w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="` + cy + `"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>` + text + `</w:t></w:r></w:p></w:txbxContent></wps:txbx>` +
+			`<wps:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
+	}
+	doc := convertBytes(t, docx(t, `<w:p>`+box("800000", "Short")+box("2400000", "Tall")+`</w:p>`, nil), office.Options{})
+	ys := map[string]float64{}
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Text:
+				ys[glyphText(v)] = v.Origin.Y
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(doc.Pages[0].Content)
+	short, ok1 := ys["Short"]
+	tall, ok2 := ys["Tall"]
+	if !ok1 || !ok2 {
+		t.Fatalf("texts %v", ys)
+	}
+	// 2400000 less 800000 EMU is 126 points.
+	if d := short - tall; math.Abs(d-126) > 0.5 {
+		t.Errorf("short box's line %.2f points below the tall one's, want 126", d)
 	}
 }
 
