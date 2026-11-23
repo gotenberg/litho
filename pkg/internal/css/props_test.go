@@ -126,6 +126,14 @@ func TestProperties_Longhands(t *testing.T) {
 		// establishes a block formatting context.
 		{"display: flow-root list-item", func(s *Style) bool { return s.Display == ListItem && s.ListItemRoot }},
 		{"display: list-item", func(s *Style) bool { return s.Display == ListItem && !s.ListItemRoot }},
+		// An inline-level one is an inline block with a marker, which
+		// blockifies to a block-level one.
+		{"display: inline flow-root list-item", func(s *Style) bool {
+			return s.Display == InlineBlock && s.ListItemRoot && s.MakesListItem()
+		}},
+		{"display: list-item inline flow-root; float: left", func(s *Style) bool { return s.Display == ListItem && s.ListItemRoot }},
+		{"display: inline list-item", func(s *Style) bool { return s.Display == InlineListItem && s.MakesListItem() }},
+		{"display: inline-block", func(s *Style) bool { return !s.MakesListItem() }},
 		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineGrid }},
 		{"position: sticky", func(s *Style) bool { return s.Position == Sticky }},
 		{"opacity: 150%", func(s *Style) bool { return s.Opacity == 1 }},

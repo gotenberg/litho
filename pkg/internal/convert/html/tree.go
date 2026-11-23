@@ -208,7 +208,7 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	if st.BookmarkLevel > 0 {
 		bookmark = b.bookmark(node, st)
 	}
-	if isListItem(st.Display) {
+	if st.MakesListItem() {
 		node.ListValue = v
 		node.Marker = b.marker(ctx, n, st, v)
 	}

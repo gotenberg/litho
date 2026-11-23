@@ -559,8 +559,9 @@ var displays3 = map[string]Display{
 }
 
 // flowRootListItem is the specified display: flow-root list-item, a
-// block-level list item that establishes a block formatting context.
-type flowRootListItem struct{}
+// block-level list item that establishes a block formatting context, or,
+// inline, display: inline flow-root list-item, an inline-level one.
+type flowRootListItem struct{ inline bool }
 
 // parseDisplay parses display (CSS Display 3, 2), the one- and two-keyword
 // forms.
@@ -594,9 +595,9 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 	inline := words["inline"]
 	if words["list-item"] {
 		// CSS Display 3, 2: list-item with an outer display and flow or
-		// flow-root inside. A block-level list item of flow-root inside
-		// establishes a block formatting context (2.3); an inline one is
-		// laid out as an inline list item.
+		// flow-root inside. A list item of flow-root inside establishes a
+		// block formatting context (2.3): a block-level one is a block
+		// container, an inline-level one an inline block.
 		for w := range words {
 			if w != "list-item" && w != "inline" && w != "block" && w != "flow" && w != "flow-root" {
 				return nil, false
@@ -605,11 +606,11 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		if inline && words["block"] || words["flow"] && words["flow-root"] {
 			return nil, false
 		}
+		if words["flow-root"] {
+			return flowRootListItem{inline: inline}, true
+		}
 		if inline {
 			return InlineListItem, true
-		}
-		if words["flow-root"] {
-			return flowRootListItem{}, true
 		}
 		return ListItem, true
 	}
@@ -830,6 +831,9 @@ func init() {
 				st.Display, st.flexOrGrid, st.LineClamp.webkitBox = d.d, true, d.webkitBox
 			case flowRootListItem:
 				st.Display, st.flexOrGrid, st.LineClamp.webkitBox, st.ListItemRoot = ListItem, false, false, true
+				if d.inline {
+					st.Display = InlineBlock
+				}
 			}
 		}, copyFrom: func(dst, src *Style) {
 			dst.Display, dst.flexOrGrid, dst.LineClamp.webkitBox, dst.ListItemRoot = src.Display, src.flexOrGrid, src.LineClamp.webkitBox, src.ListItemRoot

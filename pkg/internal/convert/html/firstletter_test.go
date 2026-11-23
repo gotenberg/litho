@@ -105,6 +105,7 @@ func TestFirstLetter_Cut(t *testing.T) {
 		<p id=dash>&#x2014;</p>
 		<p id=br><br>after</p>
 		<p id=ib><span style="display: inline-block">ib</span> after</p>
+		<p id=ibl><span style="display: inline flow-root list-item">ib</span> after</p>
 		<p id=fl><span style="float: right">floated</span> Flow</p>
 		<p id=ct><span style="display: contents; float: right"><b style="display: contents">Contents</b></span> after</p>
 		<ol><li id=li>item</ol>
@@ -132,7 +133,9 @@ func TestFirstLetter_Cut(t *testing.T) {
 			t.Errorf("#%s: first letter positioned", id)
 		}
 	}
-	for _, id := range []string{"dash", "br", "ib"} {
+	// An inline block holds no first letter of the block around it, an
+	// inline list item of flow-root inside included (CSS Display 3, 2).
+	for _, id := range []string{"dash", "br", "ib", "ibl"} {
 		if fl := firstLetterOf(byID(t, p.root, id)); fl != nil {
 			t.Errorf("#%s: first letter %q, want none", id, treeText(fl))
 		}

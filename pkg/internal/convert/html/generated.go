@@ -156,10 +156,6 @@ func (c *counterState) values(name string) []int {
 	return out
 }
 
-// isListItem reports a display value that makes a list item, block or
-// inline (CSS Lists 3, 2).
-func isListItem(d css.Display) bool { return d == css.ListItem || d == css.InlineListItem }
-
 // clampCounter keeps a counter value within the range of an <integer>,
 // [css.MinInteger] to [css.MaxInteger]: a counter holds a 32-bit
 // integer, as in Chromium, and saturates at its bounds.
@@ -197,7 +193,7 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 		}
 		inst(op.Name, v, rev)
 	}
-	isItem := isListItem(st.Display)
+	isItem := st.MakesListItem()
 	implicit := isItem
 	// A footnote element increments the footnote counter (CSS GCPM 3,
 	// 3.5.1), unless its counter-increment names it.
@@ -346,7 +342,7 @@ func (b *builder) reversedStart(n *dom.Node) int {
 		if c.Type != dom.ElementNode {
 			continue
 		}
-		if st := b.computed.Style(c); st == nil || !isListItem(st.Display) {
+		if st := b.computed.Style(c); st == nil || !st.MakesListItem() {
 			continue
 		}
 		if first {

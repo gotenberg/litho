@@ -972,7 +972,7 @@ func (cs *computeState) element(n, parent *html.Node) {
 	cs.parentLang = cs.lang
 	for pe := range numPseudos {
 		x := &cs.r.pseudos[pe]
-		if x.empty() || st.Display == DisplayNone || pe == PseudoMarker && st.Display != ListItem && st.Display != InlineListItem {
+		if x.empty() || st.Display == DisplayNone || pe == PseudoMarker && !st.MakesListItem() {
 			// A ::marker exists on a list item alone (CSS Lists 3, 3.1).
 			continue
 		}
@@ -1573,6 +1573,7 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 		// container or annotation are inlinified.
 		st.Display = inlinify(st.Display)
 	}
+	fixupListItemRoot(st)
 }
 
 // noContentsElements are the HTML elements display: contents computes to
@@ -1609,6 +1610,25 @@ func contentsIsNone(n *html.Node) bool {
 		return true
 	}
 	return false
+}
+
+// fixupListItemRoot keeps a list item of flow-root inside a list item
+// when its outer display changes (CSS Display 3, 2.7): blockified, an
+// inline one is a block-level list item, inlinified, a block-level one an
+// inline block. Any other display is no such list item.
+func fixupListItemRoot(st *Style) {
+	if !st.ListItemRoot {
+		return
+	}
+	switch st.Display { //nolint:exhaustive // every other display value is no list item of flow-root inside
+	case ListItem, InlineBlock:
+	case Block:
+		st.Display = ListItem
+	case InlineListItem:
+		st.Display = InlineBlock
+	default:
+		st.ListItemRoot = false
+	}
 }
 
 // fixupDisplay applies CSS 2.1, 9.7: an absolutely positioned box does

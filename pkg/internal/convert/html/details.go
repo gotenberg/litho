@@ -129,7 +129,7 @@ func (b *builder) defaultSummary(ss, ms *css.Style) *layout.Node {
 	v := b.applyCounters(nil, ss)
 	b.counters.leave(b.counters.pushed)
 	node := &layout.Node{Kind: layout.Element, Style: ss, Children: []*layout.Node{{Kind: layout.Text, Style: ss, Text: defaultSummaryText}}}
-	if isListItem(ss.Display) {
+	if ss.MakesListItem() {
 		node.ListValue = v
 		node.Marker = &layout.Node{Kind: layout.Element, Style: ms}
 	}

@@ -1683,9 +1683,19 @@ type Style struct {
 	// which are flex or grid items (CSS Page 3, 4.1), any more than to
 	// those of a flex container it lays out.
 	flexOrGrid bool
-	// ListItemRoot marks a ListItem of display: flow-root list-item, which
-	// establishes a block formatting context (CSS Display 3, 2.3).
+	// ListItemRoot marks a list item that establishes a block formatting
+	// context (CSS Display 3, 2.3): a ListItem of display: flow-root
+	// list-item, or an InlineBlock of display: inline flow-root list-item,
+	// an inline-level block container with a marker (see
+	// [Style.MakesListItem]).
 	ListItemRoot bool
+}
+
+// MakesListItem reports a style whose box is a list item, which has a
+// marker and counts in the list-item counter (CSS Lists 3, 2): display
+// list-item in any of its forms.
+func (s *Style) MakesListItem() bool {
+	return s.Display == ListItem || s.Display == InlineListItem || s.Display == InlineBlock && s.ListItemRoot
 }
 
 // colorSlots is a bit set of the colour longhands other than color.

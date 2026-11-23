@@ -427,6 +427,15 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.inline = true
 		cctx := e.enter(n, b, ctx)
 		cctx.decos = ownDecos(b, b.st)
+		if st.ListItemRoot {
+			// An inline-level list item of flow-root inside: an inline
+			// block with a marker (CSS Display 3, 2).
+			*ordinal++
+			if n.ListValue != 0 {
+				*ordinal = n.ListValue
+			}
+			cctx = e.genMarker(n, b, cctx, *ordinal, false)
+		}
 		e.genChildren(b, n.Children, cctx)
 		return []*box{b}
 	}
