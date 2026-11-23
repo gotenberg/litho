@@ -258,9 +258,8 @@ func TestTextDirections(t *testing.T) {
 }
 
 // TestHeadersFooters_UndefinedFirst checks which header and footer a
-// title page shows when the section defines no first one, as LibreOffice
-// prints it: none, unless the default reference comes before the
-// section's first first-page reference.
+// title page shows when the section defines no first one, as Word prints
+// it: none, wherever the default reference stands.
 func TestHeadersFooters_UndefinedFirst(t *testing.T) {
 	t.Parallel()
 	part := func(tag, text string) string {
@@ -282,7 +281,7 @@ func TestHeadersFooters_UndefinedFirst(t *testing.T) {
 	}{
 		{"no first references", dh + df, nil, []string{"DefaultHead", "DefaultFoot"}},
 		{"first header, then the default footer", fh + df, []string{"FirstHead"}, []string{"DefaultFoot"}},
-		{"default footer, then the first header", df + fh, []string{"FirstHead", "DefaultFoot"}, nil},
+		{"default footer, then the first header", df + fh, []string{"FirstHead"}, []string{"DefaultFoot"}},
 	} {
 		body := `<w:p><w:r><w:t>one</w:t></w:r></w:p><w:sectPr>` + tc.refs + `<w:titlePg/></w:sectPr>`
 		doc := convertBytes(t, docx(t, body, extra), office.Options{})

@@ -57,10 +57,6 @@ type section struct {
 	titlePage        bool
 	frame            *layout.PageFrame
 	headers, footers map[string]string
-	// shared names the first and even headers and footers ("header
-	// first", "footer even") the section does not define that show the
-	// default one: see [section.part].
-	shared           map[string]bool
 	blocks           []blockNode
 	pending          []pendingAnchor
 	headerH, footerH map[string]float64
@@ -152,7 +148,15 @@ func columned(e *ooxml.Element) bool {
 }
 
 // parseSection reads a w:sectPr (17.6.17), headers and footers it does not
-// name inherited from prev (17.10.5).
+// name inherited from prev (17.10.5). A first or even header or footer
+// that neither names is none, never the default one (17.10.2
+// footerReference, 17.10.5 headerReference).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/TestVMLData.docx: a section of a title
+//     page that references a default footer before its first header, and
+//     no first footer, prints its first page with no footer.
 func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	pw, ph := d.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
 	s := &section{
@@ -162,7 +166,6 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		cols: 1, colSpace: 36, breakType: "nextPage",
 		headers: map[string]string{}, footers: map[string]string{},
 		headerH: map[string]float64{}, footerH: map[string]float64{},
-		shared: map[string]bool{},
 	}
 	if prev != nil {
 		maps.Copy(s.headers, prev.headers)
@@ -222,33 +225,15 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	if b := e.Child(w, "pgBorders"); b != nil {
 		s.frame = d.pageFrame(b, s)
 	}
-	// LibreOffice gives a first or even page the default header or
-	// footer the section does not define for that kind when the default
-	// reference comes before the section's first reference of the kind;
-	// any other undefined one is empty.
-	seenDefault := map[string]bool{}
-	seenKind := map[string]bool{}
 	for _, c := range e.Kids() {
 		var refs map[string]string
-		var which string
 		switch {
 		case c.Is(w, "headerReference"):
-			refs, which = s.headers, "header"
+			refs = s.headers
 		case c.Is(w, "footerReference"):
-			refs, which = s.footers, "footer"
+			refs = s.footers
 		default:
 			continue
-		}
-		switch t := attrOr(c, "type"); t {
-		case "", "default":
-			seenDefault[which] = true
-		case "first", "even":
-			if !seenKind[t] {
-				seenKind[t] = true
-				for _, other := range []string{"header", "footer"} {
-					s.shared[other+" "+t] = seenDefault[other]
-				}
-			}
 		}
 		id, _ := c.AttrNS(ooxml.NSR, "id")
 		rel, ok := d.pkg.RelationshipByID(d.ctx, d.main, id)
@@ -291,21 +276,6 @@ func (s *section) placeGutter(atTop, rtl bool) {
 		return
 	}
 	s.gutter = 0
-}
-
-// part returns the kind of header or footer (which) a page of the given
-// kind shows: its own when the section chain defines it, else the default
-// one when LibreOffice shares it ([section.shared]), else the kind, which
-// names none and leaves the page without one, as Word shows it.
-func (s *section) part(which, kind string) string {
-	refs := s.headers
-	if which == "footer" {
-		refs = s.footers
-	}
-	if kind == "default" || refs[kind] != "" || !s.shared[which+" "+kind] {
-		return kind
-	}
-	return "default"
 }
 
 // applyOptions lays the conversion options over the section's page (see

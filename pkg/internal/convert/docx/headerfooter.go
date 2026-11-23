@@ -280,9 +280,8 @@ func (p *pages) numbering(page, total int) (*section, int) {
 // section's header and footer for the page's kind (17.10.1: the first
 // page of a section with a title page takes the first header, even pages
 // the even one when the settings ask for them, every other page the
-// default; a first or even one the sections leave undefined is empty, or
-// the default one as [section.part] says), with the page fields of the
-// page.
+// default; a first or even one the sections leave undefined is empty),
+// with the page fields of the page.
 func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 	if info.Blank {
 		return nil
@@ -332,9 +331,8 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 		}
 		root.Children = append(root.Children, n)
 	}
-	hk, fk := s.part("header", kind), foot.part("footer", footKind)
-	place(s, s.headers[hk], s.header, false, s.headerH[hk])
-	place(foot, foot.footers[fk], foot.footer, true, foot.footerH[fk])
+	place(s, s.headers[kind], s.header, false, s.headerH[kind])
+	place(foot, foot.footers[footKind], foot.footer, true, foot.footerH[footKind])
 	if len(root.Children) == 0 {
 		return nil
 	}
