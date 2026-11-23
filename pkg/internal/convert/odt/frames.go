@@ -230,6 +230,16 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 	}
 	g.x, _ = odf.Length(c.A(odf.NSSVG, "x"))
 	g.y, _ = odf.Length(c.A(odf.NSSVG, "y"))
+	if c.Is(odf.NSDraw, "line") {
+		// A line states its ends, not its box (ODF 1.3 Part 3, 10.3.3,
+		// svg:x1 to svg:y2): its box spans them, placed as a frame is.
+		x1, _ := odf.Length(c.A(odf.NSSVG, "x1"))
+		y1, _ := odf.Length(c.A(odf.NSSVG, "y1"))
+		x2, _ := odf.Length(c.A(odf.NSSVG, "x2"))
+		y2, _ := odf.Length(c.A(odf.NSSVG, "y2"))
+		g.x, g.y = min(x1, x2), min(y1, y2)
+		g.w, g.h, g.hasW, g.hasH = math.Abs(x2-x1), math.Abs(y2-y1), true, true
+	}
 	g.props = b.styles.Resolve(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"), odf.GraphicProps)
 	g.wrap = g.props.Get("style:wrap")
 	g.hpos, g.hrel = g.props.Get("style:horizontal-pos"), g.props.Get("style:horizontal-rel")

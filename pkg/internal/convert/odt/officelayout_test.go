@@ -592,6 +592,27 @@ func TestConvert_ParagraphFramesAtOffsets(t *testing.T) {
 	}
 }
 
+// TestConvert_LineAtItsEnds places a line anchored to a paragraph by its
+// ends: its box from 1 cm to 1.5 cm below the paragraph's top moves the
+// third line, which it overlaps, below it, as LibreOffice prints the same
+// document (probe through the pinned image: baselines 67.9, 81.7 and
+// 110.5).
+func TestConvert_LineAtItsEnds(t *testing.T) {
+	auto := `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties fo:margin="0cm" svg:stroke-width="0cm" style:wrap="none" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>`
+	body := `<text:p><draw:line draw:style-name="gr1" text:anchor-type="paragraph" svg:x1="1cm" svg:y1="1cm" svg:x2="5cm" svg:y2="1.5cm"><text:p/></draw:line>AAA</text:p><text:p>BBB</text:p><text:p>CCC</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	ls := lines(res.Pages[0])
+	want := []float64{67.9, 81.7, 110.5}
+	if len(ls) != len(want) {
+		t.Fatalf("lines = %+v", ls)
+	}
+	for i, l := range ls {
+		if !near(l.y, want[i], 0.5) {
+			t.Errorf("line %q at %.2f, want %.2f", l.text, l.y, want[i])
+		}
+	}
+}
+
 // TestScanChains_MergingChainsDeterministic gives the frame two chains
 // run into the same place every time: the chain whose first frame's name
 // sorts first.
