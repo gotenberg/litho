@@ -269,3 +269,28 @@ func TestWordAnchor_WriterEmptyLine(t *testing.T) {
 		t.Errorf("lines %s, want %s", got, want)
 	}
 }
+
+// TestWordAnchor_WriterIndents starts the lines of a paragraph of
+// css.Office.WriterIndents beside a float that takes their start its
+// indent past the float's edge, and keeps its indent where a piece of the
+// line is left before the float.
+func TestWordAnchor_WriterIndents(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		x    float64
+		want string
+	}{
+		{"float at the start", 0, "X@0,8 aa @60,8 bb @60,18 cc@20,28 "},
+		{"float inside", 40, "X@40,8 aa @20,8 bb @80,8 cc@20,18 "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := wpara("aa bb cc", wordFloat(css.FrameWrapBoth, tc.x, 0, 40, 20, writer))
+			p.Style.Margin[css.Left] = css.Pts(px(20))
+			p.Style.WriterIndents = true
+			res := run(t, doc(p), page(100, 100))
+			if got := linePlaces(res, 1); got != tc.want {
+				t.Errorf("lines %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

@@ -561,7 +561,49 @@ func (s *inlineState) band(y, h float64) (float64, float64) {
 	if s.seg && math.Abs(y-s.segTop) <= eps {
 		return s.bc.bandFrom(y, h, cb.x, cb.x+cb.w, s.segFrom)
 	}
+	if s.root.st.WriterIndents && s.bc.officeOnly(y, h) {
+		return s.writerBand(y, h)
+	}
 	return s.bc.lineBand(y, h, cb.x, cb.x+cb.w)
+}
+
+// writerBand returns the band of a line of height h at y beside the
+// exclusions of the Office boxes of a container of css.Office
+// WriterIndents: cut from its column, the content box of the root of its
+// formatting context, its start and end indents counted from the band's
+// edges where an exclusion cut them, its content box's where none did.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a paragraph of 2 cm
+//     left indent beside a 3 cm frame anchored to it 3 cm from the
+//     column of right wrap, of dynamic wrap, or of parallel wrap at 0 cm,
+//     starts its lines 2 cm right of the frame; beside a page-anchored
+//     frame of parallel wrap ending where its indent ends, 2 cm right of
+//     that edge too; beside a frame of parallel wrap 1 cm inside its
+//     indent, at its indent, the rest of the line right after the frame.
+func (s *inlineState) writerBand(y, h float64) (float64, float64) {
+	cb := s.cb
+	colL, colR := cb.x, cb.x+cb.w
+	for p := s.root; p != nil; p = p.parent {
+		if p.establishesBFC() {
+			colL = p.contentX()
+			colR = p.x + p.borderW() - p.bd[css.Right] - p.pd[css.Right]
+			break
+		}
+	}
+	l, r := s.bc.lineBand(y, h, colL, colR)
+	if l > colL+eps {
+		l += cb.x - colL
+	} else {
+		l = cb.x
+	}
+	if r < colR-eps {
+		r -= colR - (cb.x + cb.w)
+	} else {
+		r = cb.x + cb.w
+	}
+	return l, max(r, l)
 }
 
 // nextPiece reports whether the line at y of height h has a piece of

@@ -269,6 +269,17 @@ type Office struct {
 	// an empty line is a line of the container's font. It applies to a
 	// block container whose [Style.WordRules] is 0.
 	WriterLines bool
+	// WriterIndents measures the lines of a block container beside the
+	// exclusions of [Office.FrameWrap] and [Office.WordAnchor] boxes as
+	// Writer measures a paragraph's lines beside its frames: the band a
+	// line takes is cut from the column, the content box of the root of
+	// its block formatting context, whatever the container's indents, and
+	// the container's start and end indents then count from the edges of
+	// that band, so that a line starting past a frame starts its indent
+	// past the frame's edge. A line no exclusion narrows keeps the
+	// container's content box. It applies to a block container whose
+	// lines no float without those fields narrows.
+	WriterIndents bool
 	// HangPunctuation lets an ideographic comma or full stop, or their
 	// fullwidth forms, that ends a line and does not fit on it hang past
 	// the line's end, drawn but neither fitted nor aligned, as Writer

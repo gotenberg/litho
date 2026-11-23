@@ -244,6 +244,23 @@ func (c *bfc) lineNarrowed(y, h, left, right float64) bool {
 	return l > left+eps || r < right-eps
 }
 
+// officeOnly reports whether the floats over the band [y, y+h) are all
+// exclusions of css.Office.WordAnchor or css.Office.FrameWrap boxes, one
+// at least.
+func (c *bfc) officeOnly(y, h float64) bool {
+	n := 0
+	for _, f := range c.floats {
+		if by, bh := f.wordBand(y, h); !f.overlaps(by, bh) {
+			continue
+		}
+		if !f.word && f.wrap == css.FrameWrapThrough {
+			return false
+		}
+		n++
+	}
+	return n > 0
+}
+
 // writerOver reports a float of css.WordAnchor.Writer whose exclusion
 // the band [y, y+h) a line takes overlaps.
 func (c *bfc) writerOver(y, h float64) bool {
