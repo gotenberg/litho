@@ -162,6 +162,11 @@ func (s *Shadows) depth(root *html.Node) int {
 	return s.depths[root]
 }
 
+// InShadowTree reports whether n is a node of a shadow tree.
+func (s *Shadows) InShadowTree(n *html.Node) bool {
+	return s != nil && treeScope(n) != nil
+}
+
 // Slot returns the slot n is assigned to, nil for none.
 func (s *Shadows) Slot(n *html.Node) *html.Node {
 	if s == nil {

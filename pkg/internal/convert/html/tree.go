@@ -449,13 +449,19 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 	if lang, ok := attr(n, "lang"); ok {
 		node.Lang = strings.TrimSpace(lang)
 	}
-	node.ID, _ = attr(n, "id")
+	// A fragment names an element of the document tree (HTML Standard,
+	// 7.4.6.4, find a potential indicated element): an ID in a shadow
+	// tree is no link target.
+	inShadow := b.frameOpts.shadows.InShadowTree(n)
+	if !inShadow {
+		node.ID, _ = attr(n, "id")
+	}
 	if id, ok := b.ids[n]; ok {
 		node.ID = id
 	}
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.A:
-		if node.ID == "" {
+		if node.ID == "" && !inShadow {
 			// A named anchor is a link target (HTML Standard, 7.4.6.4).
 			node.ID, _ = attr(n, "name")
 		}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // textColor returns the colour of the first glyph run of pg holding s.
@@ -201,5 +202,27 @@ func TestShadow_CrossTreeSelectors(t *testing.T) {
 				t.Errorf("X is %v, want blue", c)
 			}
 		})
+	}
+}
+
+func TestShadow_FragmentsNameTheDocumentTree(t *testing.T) {
+	t.Parallel()
+	// HTML Standard, 7.4.6.4: a fragment names an element of the document
+	// tree; an ID in a shadow tree is no target, a link inside one goes to
+	// the document's.
+	src := `<!DOCTYPE html><a href="#s">TO-SHADOW</a> <a href="#d">TO-DOC</a>` +
+		`<div><template shadowrootmode="open"><p id="s">S</p><a href="#d">FROM-SHADOW</a></template></div><p id="d">D</p>`
+	doc := convertDoc(t, src, Options{})
+	internal := 0
+	for _, l := range doc.Pages[0].Links {
+		if l.Dest != nil {
+			internal++
+		}
+	}
+	if internal != 2 {
+		t.Errorf("%d internal links, want 2: to #d from the document and from the shadow tree", internal)
+	}
+	if !hasWarning(doc.Warnings, warn.LinkUnresolved, `"#s"`) {
+		t.Errorf("no warning for #s: %+v", doc.Warnings)
 	}
 }

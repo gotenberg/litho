@@ -355,12 +355,14 @@ func (b *builder) markCounters(n *dom.Node, st *css.Style, before [][]int) {
 	if slices.EqualFunc(before, last, slices.Equal) && slices.EqualFunc(after, before, slices.Equal) {
 		return
 	}
+	// An ID of a shadow tree's element is no anchor ([builder.semantics]).
+	inShadow := b.frameOpts.shadows.InShadowTree(n)
 	id, ok := b.ids[n]
-	if !ok {
+	if !ok && !inShadow {
 		id, _ = attr(n, "id")
 	}
 	if id == "" {
-		if n.DataAtom == atom.A {
+		if n.DataAtom == atom.A && !inShadow {
 			// A named anchor's name is its anchor.
 			return
 		}
