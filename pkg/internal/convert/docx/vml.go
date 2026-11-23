@@ -301,7 +301,13 @@ func vmlRotation(vs ooxml.VMLStyle) float64 {
 // vmlGeometry returns the preset geometry a VML shape draws (Part 4,
 // 14.1.2): its element's, else its shape type's o:spt mapped onto the
 // DrawingML preset of the same shape ([ooxml.VMLPreset]), "" for a shape
-// of its own v:path or a type without a preset.
+// of its own path (14.1.2.19 path, or its v:path's v), which draws that
+// path whatever its o:spt names, or a type without a preset.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/cloud.docx: Word prints a v:shape of
+//     o:spt 100 and a path of its own, a cloud of arcs, as that cloud.
 func (d *document) vmlGeometry(k *ooxml.Element) string {
 	switch k.Local {
 	case "rect":
@@ -316,12 +322,24 @@ func (d *document) vmlGeometry(k *ooxml.Element) string {
 	default:
 		return ""
 	}
+	if ownPath(k) {
+		return ""
+	}
 	spt := d.vmlType(k)
 	if spt < 0 {
 		return ""
 	}
 	p, _ := ooxml.VMLPreset(spt)
 	return p
+}
+
+// ownPath reports a VML shape k that spells out a path of its own.
+func ownPath(k *ooxml.Element) bool {
+	if v, ok := k.Attr("path"); ok && strings.TrimSpace(v) != "" {
+		return true
+	}
+	v, _ := k.Child(ooxml.NSV, "path").Attr("v")
+	return strings.TrimSpace(v) != ""
 }
 
 // vmlCustom returns the geometry a v:shape spells out with its own path

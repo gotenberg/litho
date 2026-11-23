@@ -183,3 +183,24 @@ func TestVML_LineFromItsEndPoints(t *testing.T) {
 		t.Errorf("line at %v, %v, %v by %v; want 340, 6, 90 by 50", st.Left, st.Top, st.Width, st.Height)
 	}
 }
+
+// TestVMLGeometry_OwnPathOverType draws a v:shape of a path of its own by
+// that path whatever preset its o:spt maps to, and one of no path of its
+// own by its type's preset.
+func TestVMLGeometry_OwnPathOverType(t *testing.T) {
+	t.Parallel()
+	d := &document{vmlTypes: map[string]int{}}
+	for _, tc := range []struct{ xml, want string }{
+		{`<v:shape o:spt="100" path="ar,0,10,10,0,0,10,10e"/>`, ""},
+		{`<v:shape o:spt="100"><v:path v="m,l10,10e"/></v:shape>`, ""},
+		{`<v:shape o:spt="100"/>`, "pie"},
+	} {
+		root, err := ooxml.Parse(t.Context(), []byte(`<w:pict `+nsDecl+`>`+tc.xml+`</w:pict>`), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := d.vmlGeometry(root.Kids()[0]); got != tc.want {
+			t.Errorf("%s: geometry %q, want %q", tc.xml, got, tc.want)
+		}
+	}
+}
