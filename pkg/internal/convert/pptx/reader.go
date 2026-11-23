@@ -43,11 +43,18 @@ const (
 
 // understood lists the namespaces whose mc:Choice the reader takes
 // (ECMA-376 Part 3, 10.2): PresentationML, DrawingML and its picture and
-// chart vocabularies, and the DrawingML extensions of Office 2010, whose
+// chart vocabularies, the DrawingML extensions of Office 2010, whose
 // Choice holds a text body's equations (a14:m) where the Fallback holds
-// their picture; any other Choice, an OLE object's VML one or a
-// PowerPoint 2010 extension, takes its Fallback.
-var understood = append([]string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.NSChart, nsA14}, chartExChoices...)
+// their picture, and PowerPoint 2010's, whose Choice holds a slide's ink
+// (p:contentPart), which PowerPoint prints nothing for where the Fallback
+// holds its picture, and transitions, which print nothing; any other
+// Choice, an OLE object's VML one among them, takes its Fallback.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: ink's three inks, each a p:contentPart in a Choice
+//     requiring p14 beside a picture in its Fallback, print nothing.
+var understood = append([]string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.NSChart, nsA14, nsP14}, chartExChoices...)
 
 // printableSlides returns the most slides the conversion's pages can
 // print: one a page, two pages a slide with notes pages, a handout's

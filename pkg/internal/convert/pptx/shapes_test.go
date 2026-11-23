@@ -164,6 +164,37 @@ func TestShapes_FillsAndLines(t *testing.T) {
 	}
 }
 
+// TestShapes_InkPrintsNothing checks that ink, a p:contentPart in a Choice
+// requiring PowerPoint 2010's namespace, prints nothing, as PowerPoint
+// prints it, where its Fallback holds a picture, and that a Choice of
+// another namespace still takes its Fallback.
+func TestShapes_InkPrintsNothing(t *testing.T) {
+	t.Parallel()
+	alt := func(prefix, ns string) string {
+		return `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:` + prefix + `="` + ns + `" Requires="` + prefix + `">` +
+			`<p:contentPart r:id="rIdI"><p14:nvContentPartPr xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"><p14:cNvPr id="3" name="Ink"/><p14:cNvContentPartPr/><p14:nvPr/></p14:nvContentPartPr></p:contentPart></mc:Choice>` +
+			`<mc:Fallback><p:pic><p:nvPicPr><p:cNvPr id="3" name="Ink"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/><a:stretch/></p:blipFill>` +
+			`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="38100" cy="25400"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:pic></mc:Fallback></mc:AlternateContent>`
+	}
+	rels := `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/image1.png"/>`
+	doc, warnings := readDeck(t, testDeck{
+		slides: []testSlide{
+			{tree: alt("p14", "http://schemas.microsoft.com/office/powerpoint/2010/main"), rels: rels},
+			{tree: alt("p15", "http://schemas.microsoft.com/office/powerpoint/2012/main"), rels: rels},
+		},
+		parts: map[string]string{"ppt/media/image1.png": pngBytes(t)},
+	})
+	if ink := shapeNamed(doc.Slides[0].Shapes, "Ink"); ink != nil {
+		t.Errorf("ink printed as %+v, want nothing", ink)
+	}
+	if !slices.ContainsFunc(warnings, func(w typeset.Warning) bool { return strings.Contains(w.Message, "ink") }) {
+		t.Errorf("warnings %+v, want the ink reported", warnings)
+	}
+	if pic := shapeNamed(doc.Slides[1].Shapes, "Ink"); pic == nil || pic.Kind != slides.KindPicture {
+		t.Errorf("fallback %+v, want its picture", pic)
+	}
+}
+
 func TestShapes_BackgroundGroupPictureConnector(t *testing.T) {
 	t.Parallel()
 	pic := `<p:pic><p:nvPicPr><p:cNvPr id="4" name="Pic"><a:hlinkClick r:id="rIdH"/></p:cNvPr><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/><a:srcRect l="25000"/><a:stretch/></p:blipFill>` +
