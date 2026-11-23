@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T15:28:25Z",
+  "captured_at": "2026-11-23T16:38:55Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -74368,84 +74368,84 @@
               "text_f1": 1
             },
             "chart-3d": {
-              "layout": 0.675,
+              "layout": 0.6812,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8531
+              "text_f1": 0.9419
             },
             "chart-area": {
-              "layout": 0.9682,
+              "layout": 0.9739,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9016
+              "text_f1": 1
             },
             "chart-bar": {
-              "layout": 0.9512,
+              "layout": 0.9674,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 0.9068
+              "strict": 1,
+              "text_f1": 1
             },
             "chart-combo": {
-              "layout": 0.964,
+              "layout": 0.9755,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.942
+              "text_f1": 1
             },
             "chart-labels-axes": {
-              "layout": 0.8925,
+              "layout": 0.9193,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.92
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "chart-line": {
-              "layout": 0.9,
+              "layout": 0.9193,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.925
+              "text_f1": 1
             },
             "chart-pie": {
-              "layout": 0.6999,
+              "layout": 0.7151,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8214
+              "text_f1": 1
             },
             "chart-radar": {
-              "layout": 0.877,
+              "layout": 0.9117,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8776
+              "text_f1": 1
             },
             "chart-scatter-bubble": {
-              "layout": 0.5117,
+              "layout": 0.5424,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8898
+              "text_f1": 0.9673
             },
             "chart-stock": {
-              "layout": 0.9428,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9
+              "text_f1": 1
             },
             "chart-surface": {
               "layout": 0,
@@ -74453,23 +74453,23 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.3056
+              "text_f1": 0.2619
             },
             "chart-untitled": {
-              "layout": 0.9698,
+              "layout": 0.9798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9355
+              "text_f1": 1
             },
             "chart-untitled-derived": {
-              "layout": 0.9698,
+              "layout": 0.9798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9355
+              "text_f1": 1
             },
             "chartex": {
               "layout": 0.8912,
@@ -74520,12 +74520,12 @@
               "text_f1": 1
             },
             "deck-quarterly-report": {
-              "layout": 0.9089,
+              "layout": 0.9349,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.8333,
-              "text_f1": 0.9771
+              "text_f1": 0.9959
             },
             "effects-3d": {
               "layout": 0.6713,
