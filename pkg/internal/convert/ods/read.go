@@ -359,6 +359,10 @@ type tableState struct {
 	// pending is a run of rows without cells whose height, hidden flag or
 	// break is their own: listed once a later row needs their index.
 	pending []pendingRows
+	// standard holds the runs of rows without cells at Calc's standard
+	// height, which the model leaves out while the sheet's default is that
+	// height.
+	standard []pendingRows
 	// header rows and columns seen.
 	headerRows, headerCols *sheet.Range
 	// rowHidden reports the row whose frames are being read hidden.
@@ -442,6 +446,10 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	if !calcext {
 		r.styleMaps(sh)
 	}
+	// The rows a drawing reaches place it, though no cell holds a value
+	// there.
+	r.flushPending(ts, drawnRows(sh))
+	r.listStandardRows(ts, max(drawnRows(sh), lastListed(sh)))
 	return sh
 }
 
@@ -671,6 +679,10 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 			row := tmpl
 			row.Index = start
 			ts.pending = append(ts.pending, pendingRows{row: row, n: n})
+		} else if len(ts.standard) < maxStandardRuns {
+			row := tmpl
+			row.Index = start
+			ts.standard = append(ts.standard, pendingRows{row: row, n: n})
 		}
 		ts.row = start + n
 		ts.rowY += float64(float64(n) * height)
@@ -832,11 +844,80 @@ func calcTwips(v float64) float64 {
 // (0.178in is 12.816 points for Calc's 12.8).
 const rowHeightSlack = 0.05
 
-// flushPending lists the pending rows without cells that come before the
-// row index next.
-func (r *reader) flushPending(ts *tableState, next int) {
-	for _, p := range ts.pending {
+// maxStandardRuns bounds the runs of standard rows a sheet remembers.
+// Anti-DoS guard, not spec-mandated: each run is one row element, and a
+// sheet Calc writes holds a few hundred at most.
+const maxStandardRuns = 4096
+
+// listStandardRows lists the rows of standard height before the row
+// index next that the model left out, when the sheet's default row height,
+// the height of its last row element, is another: those rows keep Calc's
+// standard height, not the default the rows the model omits take.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf115655_HideDetail.ods prints its picture,
+//     anchored in the second row of 74.86 mm, below a first row of the
+//     standard height.
+func (r *reader) listStandardRows(ts *tableState, next int) {
+	if len(ts.standard) == 0 || math.Abs(ts.sh.DefaultRowHeight-defaultRowHeight) <= rowHeightSlack {
+		return
+	}
+	added := false
+	for _, p := range ts.standard {
 		for i := 0; i < p.n && p.row.Index+i < next; i++ {
+			if r.rows >= maxRowEntries {
+				break
+			}
+			row := p.row
+			row.Index += i
+			r.rows++
+			ts.sh.Rows = append(ts.sh.Rows, row)
+			added = true
+		}
+	}
+	if added {
+		sort.SliceStable(ts.sh.Rows, func(i, j int) bool { return ts.sh.Rows[i].Index < ts.sh.Rows[j].Index })
+	}
+}
+
+// lastListed returns one past the last row the sheet lists, 0 for none.
+func lastListed(sh *sheet.Sheet) int {
+	if len(sh.Rows) == 0 {
+		return 0
+	}
+	return sh.Rows[len(sh.Rows)-1].Index + 1
+}
+
+// drawnRows returns one past the last row a drawing anchored to cells
+// reaches, 0 for none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137044_CoverHiddenRows.ods anchors a
+//     rectangle 5 mm into the fourth row, below three rows of 10 mm and no
+//     cell, and Calc prints its top 35 mm below the sheet's origin.
+func drawnRows(sh *sheet.Sheet) int {
+	n := 0
+	for _, d := range sh.Drawings {
+		if d.Absolute {
+			continue
+		}
+		n = max(n, d.From.Row+1)
+		if d.To != nil {
+			n = max(n, d.To.Row+1)
+		}
+	}
+	return n
+}
+
+// flushPending lists the pending rows without cells that come before the
+// row index next, and keeps those from next on pending.
+func (r *reader) flushPending(ts *tableState, next int) {
+	var rest []pendingRows
+	for _, p := range ts.pending {
+		i := 0
+		for ; i < p.n && p.row.Index+i < next; i++ {
 			if r.rows >= maxRowEntries {
 				ts.pending = nil
 				return
@@ -846,8 +927,13 @@ func (r *reader) flushPending(ts *tableState, next int) {
 			r.rows++
 			ts.sh.Rows = append(ts.sh.Rows, row)
 		}
+		if i < p.n {
+			p.row.Index += i
+			p.n -= i
+			rest = append(rest, p)
+		}
 	}
-	ts.pending = nil
+	ts.pending = rest
 }
 
 // frameAt is a frame of a cell, with the cell it sits in.

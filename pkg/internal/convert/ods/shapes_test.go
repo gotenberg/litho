@@ -200,3 +200,72 @@ func TestSpacedText_Cap(t *testing.T) {
 		t.Errorf("%d bytes of text, want past %d by one write at most", n, maxFieldText)
 	}
 }
+
+// TestRead_RowsUnderDrawingsKeepTheirHeights locks the heights of the
+// rows above and under a cell-anchored shape that no cell of the sheet
+// holds a value in: they place the shape, as Calc places it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137044_CoverHiddenRows.ods prints its
+//     rectangle, anchored 5 mm into the fourth row under three rows of
+//     10 mm, 35 mm below the sheet's origin; sc/LargeAnchorOffset.ods and
+//     sc/tdf137082_LTR_arrow_image.ods their shapes below rows of their
+//     own height.
+func TestRead_RowsUnderDrawingsKeepTheirHeights(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="ro1" style:family="table-row"><style:table-row-properties style:row-height="10mm" style:use-optimal-row-height="false"/></style:style>` +
+			`<style:style style:name="ro2" style:family="table-row"><style:table-row-properties style:row-height="30mm" style:use-optimal-row-height="false"/></style:style>`,
+		body: `<table:table table:name="S">` +
+			`<table:table-row table:style-name="ro1" table:number-rows-repeated="3"><table:table-cell/></table:table-row>` +
+			`<table:table-row table:style-name="ro2"><table:table-cell>` +
+			`<draw:custom-shape draw:name="box" svg:x="5mm" svg:y="5mm" svg:width="15mm" svg:height="110mm" table:end-cell-address="S.A7" table:end-x="20mm" table:end-y="25mm">` +
+			`<draw:enhanced-geometry svg:viewBox="0 0 21600 21600" draw:type="rectangle" draw:enhanced-path="M 0 0 L 21600 0 21600 21600 0 21600 Z N"/></draw:custom-shape>` +
+			`</table:table-cell></table:table-row>` +
+			`<table:table-row table:style-name="ro2" table:number-rows-repeated="1048572"><table:table-cell/></table:table-row>` +
+			`</table:table>`,
+	}
+	doc, _ := read(t, f.bytes())
+	sh := doc.Sheets[0]
+	if len(sh.Drawings) != 1 {
+		t.Fatalf("drawings %d, want 1", len(sh.Drawings))
+	}
+	heights := map[int]float64{}
+	for _, r := range sh.Rows {
+		heights[r.Index] = r.Height
+	}
+	for i := range 3 {
+		if h, ok := heights[i]; !ok || !near(h, 28.35) {
+			t.Errorf("row %d height %v (listed %v), want 28.35", i, h, ok)
+		}
+	}
+	if !near(sh.DefaultRowHeight, 85.05) {
+		t.Errorf("default row height %v, want 85.05", sh.DefaultRowHeight)
+	}
+}
+
+// TestRead_StandardRowsUnderATallDefault locks a row of Calc's standard
+// height above a drawing on a sheet whose last row element, and so its
+// default row, is taller: the row keeps the standard height.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf115655_HideDetail.ods prints its picture,
+//     anchored in a second row of 74.86 mm, below a first row of the
+//     standard height.
+func TestRead_StandardRowsUnderATallDefault(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="ro2" style:family="table-row"><style:table-row-properties style:row-height="74.86mm" style:use-optimal-row-height="false"/></style:style>`,
+		body: `<table:table table:name="S">` +
+			`<table:table-row><table:table-cell/></table:table-row>` +
+			`<table:table-row table:style-name="ro2"><table:table-cell>` +
+			`<draw:custom-shape draw:name="box" svg:x="0mm" svg:y="0mm" svg:width="15mm" svg:height="15mm">` +
+			`<draw:enhanced-geometry svg:viewBox="0 0 21600 21600" draw:type="rectangle" draw:enhanced-path="M 0 0 L 21600 0 21600 21600 0 21600 Z N"/></draw:custom-shape>` +
+			`</table:table-cell></table:table-row></table:table>`,
+	}
+	doc, _ := read(t, f.bytes())
+	sh := doc.Sheets[0]
+	if len(sh.Rows) == 0 || sh.Rows[0].Index != 0 || !near(sh.Rows[0].Height, defaultRowHeight) {
+		t.Errorf("rows %+v, want row 0 at %v", sh.Rows, defaultRowHeight)
+	}
+}
