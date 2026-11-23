@@ -294,7 +294,9 @@ func TestRead_ShapeBoxIsItsOutline(t *testing.T) {
 
 // TestMeasureGuides locks the guides of a dimension line (see
 // [measureArt]): each from its point's guide length less the guide
-// distance past the point to the guide overhang past the dimension line.
+// distance past the point to the guide overhang past the dimension line,
+// stroked at 0 where the hairline dimension line is stroked at 0.1 point
+// ([measureHairline]).
 func TestMeasureGuides(t *testing.T) {
 	f := flat{
 		auto: `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:stroke="solid" draw:line-distance="1.82mm" draw:start-guide="5.95mm" draw:end-guide="7.31mm"/></style:style>`,
@@ -306,7 +308,8 @@ func TestMeasureGuides(t *testing.T) {
 	if len(ds) != 1 || ds[0].Picture == nil {
 		t.Fatalf("drawings %+v", ds)
 	}
-	var lengths []float64
+	var lengths, widths []float64
+	mainWidth := -1.0
 	for _, fr := range ds[0].Picture.Vector(t.Context(), typeset.Rect{Width: ds[0].Width, Height: ds[0].Height}) {
 		var walk func(typeset.Fragment)
 		walk = func(fr typeset.Fragment) {
@@ -316,8 +319,13 @@ func TestMeasureGuides(t *testing.T) {
 					walk(c)
 				}
 			case *typeset.Path:
-				if v.Stroke != nil && len(v.Ops) == 2 && v.Ops[0].P[0].X == v.Ops[1].P[0].X {
+				switch {
+				case v.Stroke == nil || len(v.Ops) != 2:
+				case v.Ops[0].P[0].X == v.Ops[1].P[0].X:
 					lengths = append(lengths, math.Abs(v.Ops[1].P[0].Y-v.Ops[0].P[0].Y))
+					widths = append(widths, v.Stroke.Width)
+				default:
+					mainWidth = v.Stroke.Width
 				}
 			}
 		}
@@ -327,5 +335,8 @@ func TestMeasureGuides(t *testing.T) {
 	want := []float64{(1.82 + 2 + 5.95 - 1) * mm, (1.82 + 2 + 7.31 - 1) * mm}
 	if len(lengths) != 2 || math.Abs(lengths[0]-want[0]) > 0.01 || math.Abs(lengths[1]-want[1]) > 0.01 {
 		t.Errorf("guides %v points long, want %v", lengths, want)
+	}
+	if mainWidth != measureHairline || len(widths) != 2 || widths[0] != 0 || widths[1] != 0 {
+		t.Errorf("dimension line stroked at %v, guides at %v; want %v and 0", mainWidth, widths, measureHairline)
 	}
 }

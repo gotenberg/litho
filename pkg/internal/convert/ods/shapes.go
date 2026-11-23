@@ -26,6 +26,18 @@ var (
 	poolStroke = odf.Color{R: 0x34, G: 0x65, B: 0xa4}
 )
 
+// measureHairline is the width LibreOffice strokes a dimension line of no
+// stroke width at: the 0.1 point every page of its PDF starts with, the
+// line naming no width of its own, where its guides are stroked at 0.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/LargeAnchorOffset.ods, sc/tdf137576_Measureline.ods,
+//     sc/tdf137081_RTL_page_anchored.ods and sc/measurelineHideColSave.ods
+//     stroke the dimension line under the page's "0.1 w" and each guide
+//     under "0 w".
+const measureHairline = 0.1
+
 // The dimension line defaults of LibreOffice's drawing item pool, in
 // points: the dimension line 0.8 cm from the measured points, the guides
 // starting 1 mm from them and passing the dimension line by 2 mm, the
@@ -487,7 +499,15 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 		bounds: bounds(pts, math.Max(arrow, s.line.Width)),
 		line:   [4]float64{ax, ay, bx, by},
 		draw: func(context.Context) []typeset.Fragment {
-			out := s.stroke(segment(ax, ay, bx, by))
+			main := s
+			if s.hairline {
+				// LibreOffice strokes a hairline dimension line at the
+				// 0.1 point its page starts with, its guides at 0.
+				thin := *s
+				thin.hairline, thin.line.Width = false, measureHairline
+				main = &thin
+			}
+			out := main.stroke(segment(ax, ay, bx, by))
 			out = append(out, s.stroke(guide(x1, y1, startGuide))...)
 			out = append(out, s.stroke(guide(x2, y2, endGuide))...)
 			if s.startArrow > 0 {
