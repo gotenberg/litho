@@ -62,7 +62,8 @@ func TestConditional_Rules(t *testing.T) {
 		{"an expression, relative", Rule{Kind: RuleExpression, Formula: "A1>1"}, []bool{false, true, true, true, false, true, true}},
 		{"an expression on the row", Rule{Kind: RuleExpression, Formula: "ISEVEN(ROW())"}, []bool{false, true, false, true, false, true, false}},
 		{"an expression the evaluator does not compute", Rule{Kind: RuleExpression, Formula: "VLOOKUP(A1,B1:B2,1)"}, []bool{false, false, false, false, false, false, false}},
-		{"a formula operand is not applied", Rule{Kind: RuleCellIs, Operator: "equal", Values: []Value{num(1)}, Formula: "B1"}, []bool{false, false, false, false, false, false, false}},
+		// A formula operand is computed at each cell: B is empty, 0.
+		{"a formula operand, relative", Rule{Kind: RuleCellIs, Operator: "equal", Values: []Value{num(1)}, Formula: "B1"}, []bool{false, false, false, false, true, false, false}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

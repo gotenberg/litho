@@ -234,13 +234,6 @@ var conditionFuncs = map[string]sheet.RuleKind{
 // ones, which the model has no operator for.
 func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel *relative) sheet.Rule {
 	v = strings.TrimSpace(v)
-	name, args, call := strings.Cut(v, "(")
-	if call {
-		args = strings.TrimSuffix(args, ")")
-	}
-	if kind, ok := conditionFuncs[name]; ok {
-		return sheet.Rule{Kind: kind}
-	}
 	var rule sheet.Rule
 	operands := func(list ...string) {
 		for _, a := range list {
@@ -250,6 +243,22 @@ func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel 
 			}
 			rule.Values = append(rule.Values, c)
 		}
+	}
+	// A comparison's operand may be a call, "<TODAY()": the operator
+	// comes first.
+	for _, o := range conditionOps {
+		if rest, ok := strings.CutPrefix(v, o.prefix); ok {
+			rule.Kind, rule.Operator = sheet.RuleCellIs, o.op
+			operands(rest)
+			return rule
+		}
+	}
+	name, args, call := strings.Cut(v, "(")
+	if call {
+		args = strings.TrimSuffix(args, ")")
+	}
+	if kind, ok := conditionFuncs[name]; ok {
+		return sheet.Rule{Kind: kind}
 	}
 	switch name {
 	case "between", "not-between":
@@ -287,16 +296,6 @@ func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel 
 		}
 		rule.Values = []sheet.Value{{Kind: sheet.Number, Number: n}}
 		return rule
-	}
-	if call {
-		return sheet.Rule{Kind: sheet.RuleExpression, Formula: v}
-	}
-	for _, o := range conditionOps {
-		if rest, ok := strings.CutPrefix(v, o.prefix); ok {
-			rule.Kind, rule.Operator = sheet.RuleCellIs, o.op
-			operands(rest)
-			return rule
-		}
 	}
 	return sheet.Rule{Kind: sheet.RuleExpression, Formula: v}
 }

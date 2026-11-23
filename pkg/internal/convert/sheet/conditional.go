@@ -124,6 +124,9 @@ type conditions struct {
 	// compare with when dated is set ([conditions.setToday]).
 	today float64
 	dated bool
+	// now is the print date the rules' formulas read NOW() and TODAY() at
+	// under Calc's rules, zero leaving them unevaluated.
+	now time.Time
 }
 
 // maxSerialDay is the last day a serial number names, 9999-12-31 (ECMA-376
@@ -139,6 +142,9 @@ func (cs *conditions) setToday(t time.Time) {
 	y, m, d := t.Date()
 	cs.today = math.Round(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Sub(nullDate).Hours() / 24)
 	cs.dated = true
+	if !cs.doc.ExcelRules {
+		cs.now = t
+	}
 }
 
 // inPeriod reports whether the serial number v names a day of the period
@@ -253,7 +259,7 @@ func evaluable(r *Rule) bool {
 		set := iconSets[r.Icons]
 		return r.Formula == "" && len(set) > 0 && len(r.Values) == len(set)
 	case RuleCellIs:
-		return r.Formula == "" && len(r.Values) > 0
+		return len(r.Values) > 0 && (r.Formula == "" || len(r.Values) == 1)
 	case RuleText:
 		return r.Formula == "" && len(r.Values) > 0
 	case RuleColorScale:
@@ -307,7 +313,10 @@ func (cs *conditions) formula(f string, ci, r, c int) (fval, bool) {
 		return fval{}, false
 	}
 	if cs.eval == nil {
+		// Under Calc's rules a rule's formula reads NOW() and TODAY() at
+		// the print date, as the cells' formulas do.
 		cs.eval = newFormulaEval(cs.ctx, cs.doc)
+		cs.eval.now = cs.now
 	}
 	return cs.eval.evalAt(f, cs.sheet, r, c, r-rgs[0].FirstRow, c-rgs[0].FirstColumn)
 }
@@ -473,6 +482,17 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage, RuleErrors, RuleNoErrors, RuleTimePeriod:
 			if res.style != nil {
 				continue
+			}
+			if rule.Kind == RuleCellIs && rule.Formula != "" {
+				// A comparison with a formula, "<TODAY()", compares with
+				// what the formula gives at the cell.
+				v, ok := cs.formula(rule.Formula, cr.f.index, r, c)
+				if !ok || v.rng != nil {
+					continue
+				}
+				computed := *rule
+				computed.Formula, computed.Values = "", []Value{v.v}
+				rule = &computed
 			}
 			if holds = cellHolds(rule, cr.f, g, cell); holds && rule.Style != nil {
 				res.style = rule.Style

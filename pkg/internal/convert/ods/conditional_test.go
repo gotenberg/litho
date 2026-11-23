@@ -228,3 +228,20 @@ func TestRead_TopPercentOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_ComparisonWithCall locks that a comparison whose operand is a
+// call reads as a comparison with that formula, not as an expression.
+func TestRead_ComparisonWithCall(t *testing.T) {
+	f := flat{body: `<table:table table:name="S"><table:table-row><table:table-cell office:value-type="date" office:date-value="2020-05-01"/></table:table-row>` +
+		`<calcext:conditional-formats><calcext:conditional-format calcext:target-range-address="S.A1:S.A1">` +
+		`<calcext:condition calcext:value="&lt;TODAY()" calcext:base-cell-address="S.A1"/>` +
+		`</calcext:conditional-format></calcext:conditional-formats></table:table>`}
+	doc, _ := read(t, f.bytes())
+	cf := doc.Sheets[0].Conditional
+	if len(cf) != 1 || len(cf[0].Rules) != 1 {
+		t.Fatalf("conditional formats %+v", cf)
+	}
+	if r := cf[0].Rules[0]; r.Kind != sheet.RuleCellIs || r.Operator != "lessThan" || r.Formula != "TODAY()" {
+		t.Errorf("rule %+v, want lessThan TODAY()", r)
+	}
+}
