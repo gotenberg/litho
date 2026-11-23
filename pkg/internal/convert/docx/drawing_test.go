@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/png"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -321,6 +322,33 @@ func TestTextBox_ShapeAndAnchor(t *testing.T) {
 	}
 	if bottom := figure(box("rect", "b")); bottom.Children[0].Style.JustifyContent != css.BoxFlexEnd {
 		t.Errorf("a bottom-anchored box justifies %v", bottom.Children[0].Style.JustifyContent)
+	}
+}
+
+// TestTextBox_InsetsLeaveNoRoom checks that a text box whose top and
+// bottom insets take its whole height prints no text, as Word prints it,
+// and warns, where a box with room keeps its text.
+func TestTextBox_InsetsLeaveNoRoom(t *testing.T) {
+	t.Parallel()
+	box := func(tIns, bIns string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx>` +
+			`<wps:bodyPr vertOverflow="overflow" tIns="` + tIns + `" bIns="` + bIns + `" anchor="ctr"/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	for _, tc := range []struct {
+		name, tIns, bIns string
+		text             bool
+	}{
+		{"insets fill the box", "508000", "762000", false},
+		{"insets past the box", "762000", "762000", false},
+		{"room left", "508000", "635000", true},
+	} {
+		b := build(t, box(tc.tIns, tc.bIns), nil)
+		figs := role(b.root, "Figure")
+		warned := slices.ContainsFunc(b.d.warnings, func(w typeset.Warning) bool { return strings.Contains(w.Message, "leave it no height") })
+		if (len(figs) == 1) != tc.text || warned == tc.text {
+			t.Errorf("%s: %d figures, warned %v; want text %v", tc.name, len(figs), warned, tc.text)
+		}
 	}
 }
 

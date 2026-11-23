@@ -506,7 +506,13 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		boxText := d.boxText
 		d.boxText = d.boxTextColor(sp.Child(ooxml.NSWPS, "style"))
-		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
+		insets := bodyInsets(bodyPr)
+		content := tb.Child(ooxml.NSW, "txbxContent")
+		if noTextRoom(insets, h, tb, bodyPr) {
+			d.warn(warn.ContentUnsupported, warn.Omitted, "the text of a text box whose insets leave it no height is left out, as Word prints it")
+			content = nil
+		}
+		n := d.textBox(s, content, w, h, ss, insets, alt, depth)
 		if bodyPr.Child(ooxml.NSA, "spAutoFit") != nil {
 			fitToText(n)
 		}
@@ -702,6 +708,27 @@ func (d *document) turn(n *layout.Node, dir string) {
 	}
 	setWritingMode(n.Style, dir)
 }
+
+// noTextRoom reports a text box of height h that prints no text, as Word
+// prints it: a box of horizontal text, neither linked nor fitted to its
+// text, whose top and bottom insets take its whole height, whatever its
+// vertOverflow says (ECMA-376 Part 1, 20.1.2.1.1 bodyPr).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: layout/tdf137025.docx, a 198.45 point box whose
+//     insets of 30 and 40 mm add up to its height, prints its fill and no
+//     text, its bodyPr saying vertOverflow overflow.
+func noTextRoom(insets [4]float64, h float64, tb, bodyPr *ooxml.Element) bool {
+	if attrOr(tb, "id") != "" || bodyPr.Child(ooxml.NSA, "spAutoFit") != nil || bodyVert(attrOr(bodyPr, "vert")) != "" {
+		return false
+	}
+	return h > 0 && insets[css.Top]+insets[css.Bottom] >= h-roomEpsilon
+}
+
+// roomEpsilon absorbs the rounding of EMUs to points when insets are
+// compared with the height they fill.
+const roomEpsilon = 1e-6
 
 // bodyInsets returns the insets of a text box's body properties, top,
 // right, bottom, left (20.1.2.1.1 bodyPr: 0.1 inch left and right, 0.05
