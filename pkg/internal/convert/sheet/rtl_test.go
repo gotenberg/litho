@@ -51,3 +51,25 @@ func TestConvert_RightToLeftCellDirection(t *testing.T) {
 		}
 	}
 }
+
+// TestPlan_RightToLeftSheetOfDrawings locks the pages Calc prints of a
+// right-to-left sheet that holds drawings and no value: those of its
+// first band of columns alone (see [grid.holdsValue]). A value on the
+// sheet, or a left-to-right sheet, prints the band further on too.
+func TestPlan_RightToLeftSheetOfDrawings(t *testing.T) {
+	for _, tc := range []struct {
+		rtl, value bool
+		want       int
+	}{{true, false, 1}, {true, true, 2}, {false, false, 2}} {
+		sh := &Sheet{Name: "S", Page: a4(), DefaultColumnWidth: 85, RightToLeft: tc.rtl}
+		for _, c := range []int{1, 6} {
+			sh.Drawings = append(sh.Drawings, Drawing{From: Anchor{Row: 2, Column: c}, Width: 40, Height: 20, Shape: true})
+		}
+		if tc.value {
+			sh.Rows = []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil)}}}
+		}
+		if n := len(convert(t, newDoc(sh), office.Options{}).Pages); n != tc.want {
+			t.Errorf("right to left %t, a value %t: %d pages, want %d", tc.rtl, tc.value, n, tc.want)
+		}
+	}
+}

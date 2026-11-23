@@ -303,6 +303,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 	var hidden [][]bool
 	vis = false
 	from = a.FirstRow
+	firstBandOnly := g.mirrored() && !g.holdsValue()
 	flush := func(last int) {
 		b := band{from, last}
 		if sp.firstRows == nil {
@@ -323,6 +324,9 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 				// unless the page left of it does not (ScDocument::IsPrintEmpty).
 				if h[i] && !leftEmpty && cb.first > 0 && sp.g.extendPrint(cb.first-1, b.first, b.last) >= cb.first {
 					h[i] = false
+				}
+				if i > 0 && firstBandOnly {
+					h[i] = true
 				}
 				leftEmpty = h[i]
 			}
@@ -349,6 +353,38 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		flush(a.LastRow)
 	}
 	return cols, rows, hidden, nil
+}
+
+// holdsValue reports a sheet with a cell that holds a value.
+//
+// Calc prints a right-to-left sheet that holds none, its drawings alone,
+// on the pages of its first band of columns: the pages further left
+// ([grid.mirrored]) do not print, whatever drawings they hold, where a
+// left-to-right sheet prints each page that holds a drawing, and a
+// right-to-left sheet holding a value does too. No clause of ODF states
+// which pages print; the rule is Calc's, measured.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137081_RTL_page_anchored.ods and
+//     sc/tdf137082_RTL_cell_anchored.ods, sheets of drawings only, print
+//     one page of columns A to E and leave out the shape in column G.
+//   - probe, ods: on a right-to-left sheet of 30 mm columns, five a page,
+//     rectangles in B and G print one page, B alone; in G alone, or in G
+//     and K, nothing but a blank page; in B on rows 3 and 21, the pages
+//     of both row bands; in B on row 21 alone, that page alone. The same
+//     sheets left to right print a page for each band holding a
+//     rectangle; with a value in A1 the right-to-left sheet prints the
+//     page of G too.
+func (g *grid) holdsValue() bool {
+	for _, ri := range g.rowOrder {
+		for i := range g.rows[ri].Cells {
+			if hasContent(&g.rows[ri].Cells[i]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // pagedRowHeight returns the room row r takes on a page at zoom percent,

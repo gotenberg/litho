@@ -39,11 +39,12 @@ func (g *grid) rowY(r int) float64 {
 //   - libreoffice/ods: sc/tdf137081_RTL_page_anchored.ods prints the label
 //     of its dimension line at the area's width less the line's offset,
 //     1.3 points from where litho puts it; its rotated polyline lies 17
-//     points further left, and its third shape is not printed.
+//     points further left, and its third shape, in column G, is not
+//     printed ([grid.holdsValue]).
 //   - libreoffice/ods: sc/tdf137082_RTL_cell_anchored.ods stores its two
 //     cell-anchored shapes 12.22 and 2.2 mm from the sheet's origin
-//     though they are anchored in columns C and G, and prints one of
-//     them 16 points left of where litho mirrors it.
+//     though they are anchored in columns C and G, and prints the one of
+//     column C 21 points left of where litho mirrors it.
 func (g *grid) mirrored() bool {
 	return g.sh.RightToLeft && !g.doc.ExcelRules
 }
