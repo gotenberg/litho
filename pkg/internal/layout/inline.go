@@ -927,7 +927,14 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
-				if first1 != nil {
+				switch {
+				case e.lineQuirks() && p.brk != nil && !p.sizeless:
+					// In quirks mode no strut is made: a line that holds a
+					// line break alone is as tall as the break's own line
+					// height (Quirks Mode Standard, 3.3 and 3.4).
+					v := s.newVbox(p.brk, nil)
+					l.h, l.baseline = v.above+v.below, v.above
+				case first1 != nil:
 					// An empty first line takes the ::first-line's strut.
 					v := s.newVbox(first1.root, nil)
 					l.h, l.baseline = v.above+v.below, v.above
@@ -2091,6 +2098,16 @@ func (s *inlineState) edge(b *box, left bool, x *float64, widen func(*box, float
 func (s *inlineState) vertical(l *lineBox) {
 	root := s.rootV
 	top, bottom := -root.above, root.below
+	// quirky lays the line out by the line height calculation quirk and
+	// the blocks ignore line-height quirk (Quirks Mode Standard, 3.3 and
+	// 3.4): no strut is made, and an inline box counts only when it holds
+	// text on the line or takes room at its inline edges.
+	quirky := s.e.lineQuirks()
+	var textual map[*vbox]bool
+	if quirky {
+		top, bottom = math.Inf(1), math.Inf(-1)
+		textual = map[*vbox]bool{}
+	}
 	include := func(v *vbox, t, b float64) {
 		if v != nil && (v.inAligned || v.aligned) {
 			return
@@ -2171,6 +2188,18 @@ func (s *inlineState) vertical(l *lineBox) {
 		// An empty inline box kept for its edges has no glyphs to lay out:
 		// its own box, included below, is all it adds (CSS 2.1, 10.8.1).
 		empty := it.text == nil && it.ascent == 0 && it.descent == 0
+		if quirky {
+			if it.text != nil && it.end-it.start <= it.hang {
+				// White space that hangs at the line's end is collapsed
+				// away: it holds no text.
+				continue
+			}
+			if it.text != nil {
+				textual[v] = true
+			} else if it.box.kind == kindInline && !quirkyEdges(v.b) {
+				continue
+			}
+		}
 		if v.b.st.LineHeight.Kind == css.Normal && it.text != nil {
 			// line-height: normal lays a glyph run out at the normal line
 			// height of the face that draws it, a fallback face included,
@@ -2198,7 +2227,14 @@ func (s *inlineState) vertical(l *lineBox) {
 		}
 	}
 	for _, v := range s.vboxes {
+		if quirky && !textual[v] && !quirkyEdges(v.b) {
+			continue
+		}
 		include(v, v.shift-v.above, v.shift+v.below)
+	}
+	if math.IsInf(top, 1) {
+		// A quirky line nothing grew.
+		top, bottom = 0, 0
 	}
 	// Top and bottom aligned boxes settle against the line box (CSS 2.1,
 	// 10.8.1), growing it when taller.
@@ -2302,6 +2338,29 @@ func (s *inlineState) vertical(l *lineBox) {
 		f.bottom = b + v.cd + f.box.pd[css.Bottom] + f.box.bd[css.Bottom]
 	}
 	s.officeLine(l)
+}
+
+// lineQuirks reports a document whose line boxes follow the line height
+// calculation quirk and the blocks ignore line-height quirk: quirks and
+// limited-quirks mode (Quirks Mode Standard, 3.3 and 3.4).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays out a 40 px
+//     block holding a 10 px span as an 11 px line, a block holding an
+//     image alone or an empty span of line-height 50px as the image's
+//     height or nothing, a line with a line break alone at the break's
+//     line height, and an empty span with a horizontal border or padding,
+//     a no-break space or a zero width space as in no-quirks mode, in
+//     quirks and limited-quirks mode alike.
+func (e *engine) lineQuirks() bool { return e.opts.Mode != css.NoQuirks }
+
+// quirkyEdges reports whether the inline box b takes room on its inline
+// axis by a border or a padding, which keeps its line height in quirks mode
+// (Quirks Mode Standard, 3.3). A line is laid out along x, a vertical one
+// before it is turned, so the inline axis is the left and right sides.
+func quirkyEdges(b *box) bool {
+	return b.bd[css.Left] != 0 || b.bd[css.Right] != 0 || b.pd[css.Left] != 0 || b.pd[css.Right] != 0
 }
 
 // shiftedRun returns a copy of the glyph run t with its glyphs moved by

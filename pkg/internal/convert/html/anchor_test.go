@@ -11,7 +11,7 @@ import (
 
 // anchorHead is the head of the anchor positioning test documents: pages
 // of 800 by 400 CSS pixels without margins, positioned boxes of 30 by 20.
-const anchorHead = `<style>@page { size: 800px 400px; margin: 0 } html, body { margin: 0 }
+const anchorHead = `<!DOCTYPE html><style>@page { size: 800px 400px; margin: 0 } html, body { margin: 0 }
 .c { position: relative; width: 600px; height: 300px; margin: 40px 0 0 100px }
 .a { position: absolute; width: 40px; height: 40px; background: blue }
 .p { position: absolute; width: 30px; height: 20px }

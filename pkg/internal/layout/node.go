@@ -347,6 +347,11 @@ type Options struct {
 	// face's underline position, content drawn into the side margins, a
 	// link that names an element or nothing.
 	BrowserRules bool
+	// Mode is the mode of the HTML document laid out (see
+	// [css.DocumentMode]): in quirks and limited-quirks mode a line box is
+	// as tall as its content's line heights alone (Quirks Mode Standard,
+	// 3.3 and 3.4). The Office converters leave it at no-quirks.
+	Mode css.DocumentMode
 	// FeatureValues, when not nil, returns the @font-feature-values of a
 	// family, nil for none: font-variant-alternates resolves its names
 	// against those of the family of the face a run is drawn in (CSS

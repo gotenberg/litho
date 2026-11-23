@@ -497,6 +497,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			FittedLimit:      setup.fitted,
 			PixelFontMetrics: !o.FractionalFontMetrics,
 			BrowserRules:     true,
+			Mode:             o.mode,
 			FeatureValues:    resolver.FontFeatureValues,
 			PaletteValues:    resolver.FontPaletteValues,
 			Lang:             scan.lang,

@@ -74,6 +74,8 @@ type ifcPara struct {
 	// clear is the clear value of the line break that ends the paragraph:
 	// the next line moves below the floats it names.
 	clear css.Clear
+	// brk is the line break that ends the paragraph, nil for none.
+	brk *box
 	// openAt and closeAt index opens and closes by position, openPos and
 	// closePos by box.
 	openAt, closeAt   map[int][]*box
@@ -239,7 +241,7 @@ func (c *collector) walk(k *box) {
 			c.collapsed.para, c.collapsed.n, c.collapsed.opens = para, n, len(para.opens)
 		}
 	case k.kind == kindBreak:
-		c.cur.clear = k.st.Clear
+		c.cur.clear, c.cur.brk = k.st.Clear, k
 		c.breakPara()
 	case k.kind == kindInline:
 		start := c.cur.n
