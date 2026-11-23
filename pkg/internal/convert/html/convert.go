@@ -80,10 +80,11 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	if err != nil {
 		return nil, err
 	}
-	doc, err := parse(data)
+	doc, mode, err := parseDocument(data)
 	if err != nil {
 		return nil, err
 	}
+	o.mode = mode
 	// Every layout pass prepares the tree again, so it lives until the
 	// document is assembled: its charge is given back as Convert returns.
 	charged, err := chargeTree(ctx, doc, len(data))
@@ -272,17 +273,19 @@ type heading struct {
 	closed   bool
 }
 
-// parse parses the HTML source data, running the insertion steps of the
-// elements it inserts that change the tree.
-func parse(data []byte) (*dom.Node, error) {
-	doc, err := dom.Parse(strings.NewReader(Decode(data)))
+// parseDocument parses the HTML source data, running the insertion steps
+// of the elements it inserts that change the tree, and returns the mode
+// its DOCTYPE sets the document in (see [documentMode]).
+func parseDocument(data []byte) (*dom.Node, css.DocumentMode, error) {
+	src := Decode(data)
+	doc, err := dom.Parse(strings.NewReader(src))
 	if err != nil {
 		// A strings.Reader never fails, so the parser fails only on its
 		// own nesting cap.
-		return nil, fmt.Errorf("%w: %w", ErrTooDeep, err)
+		return nil, css.NoQuirks, fmt.Errorf("%w: %w", ErrTooDeep, err)
 	}
 	closeExclusiveDetails(doc)
-	return doc, nil
+	return doc, documentMode(src), nil
 }
 
 // prepareDoc cascades the stylesheets of the parsed document doc and
@@ -330,6 +333,12 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	}
 	if o.OmitBackgrounds {
 		sheets = append(sheets, exactColorsSheet(ctx))
+	}
+	// The bands are documents of their own, in no-quirks mode: they take
+	// the source's sheets without the quirks mode user agent sheet.
+	docSheets := sheets
+	if o.mode == css.Quirks {
+		sheets = slices.Insert(slices.Clone(sheets), 1, css.Sheet{Sheet: css.QuirksUserAgent(), Origin: css.UserAgent})
 	}
 
 	media := css.Media{Type: o.Media, Features: o.MediaFeatures}
@@ -431,7 +440,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 
 	// The bands are built first: the source's builder records what their
 	// cross-references read at their targets.
-	env := bandEnv{o: o, scan: scan, sheets: sheets, media: media, res: res, c: c, opts: computeOpts}
+	env := bandEnv{o: o, scan: scan, sheets: docSheets, media: media, res: res, c: c, opts: computeOpts}
 	bands, bandBoxes, bandWarns, err := buildBands(ctx, env, rootStyle)
 	if err != nil {
 		return nil, err

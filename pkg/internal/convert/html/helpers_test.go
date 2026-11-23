@@ -18,6 +18,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	dom "golang.org/x/net/html"
+
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -244,4 +246,11 @@ func (*zeroFile) Close() error                 { return nil }
 func (*zeroFile) Read(p []byte) (int, error) {
 	clear(p)
 	return len(p), nil
+}
+
+// parse parses the HTML source data as [parseDocument] does, without its
+// mode.
+func parse(data []byte) (*dom.Node, error) {
+	doc, _, err := parseDocument(data)
+	return doc, err
 }

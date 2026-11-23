@@ -36,3 +36,19 @@ var uaMathSheet = sync.OnceValue(func() *Stylesheet {
 	s, _ := Parse(context.Background(), uaMathCSS, ParseOptions{userAgent: true})
 	return s
 })
+
+//go:embed ua-quirks.css
+var uaQuirksCSS []byte
+
+// QuirksUserAgent returns litho's user agent stylesheet for an HTML
+// document in quirks mode, which a cascade holds after [HTMLUserAgent]:
+// the rules the HTML Standard's Rendering section expects in quirks mode
+// alone. It is parsed once and shared.
+func QuirksUserAgent() *Stylesheet { return uaQuirksSheet() }
+
+var uaQuirksSheet = sync.OnceValue(func() *Stylesheet {
+	// The embedded sheet is far below every cap and fetches nothing, so
+	// Parse cannot fail on it; TestQuirksUserAgent_ParsesClean checks it.
+	s, _ := Parse(context.Background(), uaQuirksCSS, ParseOptions{userAgent: true})
+	return s
+})

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -215,6 +216,9 @@ type Options struct {
 	// frame, when set, makes the document the one of a frame, laid out on
 	// its viewport ([builder.frame]).
 	frame *frameDoc
+	// mode is the document's mode, which its DOCTYPE sets
+	// ([documentMode]).
+	mode css.DocumentMode
 	// maxElements caps the elements of the document: [MaxElements] when
 	// zero, which a larger value cannot raise. A test lowers it to hold a
 	// document at the cap without cascading the full count.
