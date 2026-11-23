@@ -511,12 +511,17 @@ func (b *vmlBuilder) pathCommands(s string) {
 				return
 			}
 			// A repeated quadrant alternates its direction (14.1.2.19
-			// qx, qy).
-			switch kind { //nolint:exhaustive // only the quadrants alternate
+			// qx, qy); a repeated ar or wr goes on from where the arc
+			// before it ended, as at and wa do, and starts no subpath.
+			switch kind { //nolint:exhaustive // only the quadrants and the arcs that move change
 			case vmlQuadrantX:
 				kind = vmlQuadrantY
 			case vmlQuadrantY:
 				kind = vmlQuadrantX
+			case vmlArc:
+				kind = vmlArcTo
+			case vmlClockwiseArc:
+				kind = vmlClockwiseArcTo
 			}
 		}
 	}

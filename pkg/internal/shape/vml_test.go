@@ -289,6 +289,24 @@ func TestVML_QuadraticAndQuadrants(t *testing.T) {
 	}
 }
 
+// TestVML_RepeatedArcs goes on from the end of an arc of ar or wr whose
+// parameters repeat, as at and wa do: only the first starts a subpath.
+func TestVML_RepeatedArcs(t *testing.T) {
+	t.Parallel()
+	c, problems := VML(VMLSource{Path: "ar,,10,10,0,10,10,0,10,,10,10,0,0,0,10wr0,0,10,10,10,0,0,10,0,0,10,10,0,10,10,0xe", SizeX: 20, SizeY: 20})
+	if len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	var kinds []CmdKind
+	for _, cmd := range c.Paths[0].Cmds {
+		kinds = append(kinds, cmd.Kind)
+	}
+	want := []CmdKind{CmdArcMove, CmdArcTo, CmdClockwiseArcMove, CmdClockwiseArcTo, CmdClose}
+	if !slices.Equal(kinds, want) {
+		t.Errorf("commands %v, want %v", kinds, want)
+	}
+}
+
 // FuzzVML compiles and draws arbitrary paths and formulas.
 func FuzzVML(f *testing.F) {
 	f.Add("m@0,l,21600r21600,xe", "val #0")
