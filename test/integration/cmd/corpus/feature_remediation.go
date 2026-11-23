@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -110,46 +111,104 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 // (auto-tagging makes remediation target PDF/UA, and WTPDF adopts the
 // ISO 14289-2 rules, so all three are supported). ok is false for a profile
 // the remediation engine does not target.
-func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
+//
+// The remediate closure takes the options the caller states (see
+// [remediateStating]); accessible reports a profile built on ISO 14289,
+// which needs a title and a language litho never writes on its own.
+func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate statedRemediation, accessible, ok bool) {
 	var opts []pdf.RemediateOption
 	if f.aggressive {
 		opts = append(opts, pdf.WithAggressiveFixes())
+	}
+	with := func(stated []pdf.RemediateOption) []pdf.RemediateOption {
+		return append(slices.Clone(opts), stated...)
 	}
 	if p, isA := dirToPDFAProfile[profile]; isA {
 		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 				return r.ValidatePDFAReport(ctx, p)
 			},
-			func(ctx context.Context, w *pdf.Writer) error { _, err := w.RemediatePDFA(ctx, p, opts...); return err },
-			true
+			func(ctx context.Context, w *pdf.Writer, stated []pdf.RemediateOption) (*models.RemediationReport, error) {
+				return w.RemediatePDFA(ctx, p, with(stated)...)
+			},
+			false, true
 	}
 	if p, isUA := dirToPDFUAProfile[profile]; isUA {
 		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 				return r.ValidatePDFUAReport(ctx, p)
 			},
-			func(ctx context.Context, w *pdf.Writer) error {
-				_, err := w.RemediatePDFUA(ctx, p, opts...)
-				return err
+			func(ctx context.Context, w *pdf.Writer, stated []pdf.RemediateOption) (*models.RemediationReport, error) {
+				return w.RemediatePDFUA(ctx, p, with(stated)...)
 			},
-			true
+			true, true
 	}
 	if p, isWT := dirToWTPDFProfile[profile]; isWT {
 		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 				return r.ValidateWTPDFReport(ctx, p)
 			},
-			func(ctx context.Context, w *pdf.Writer) error {
-				_, err := w.RemediateWTPDF(ctx, p, opts...)
-				return err
+			func(ctx context.Context, w *pdf.Writer, stated []pdf.RemediateOption) (*models.RemediationReport, error) {
+				return w.RemediateWTPDF(ctx, p, with(stated)...)
 			},
-			true
+			true, true
 	}
-	return nil, nil, false
+	return nil, nil, false, false
+}
+
+// statedRemediation remediates w with the options the caller states,
+// after the cell's own.
+type statedRemediation func(ctx context.Context, w *pdf.Writer, stated []pdf.RemediateOption) (*models.RemediationReport, error)
+
+// remediateStating remediates data as a caller does, and returns the
+// bytes written and whether the output carries a title or a language the
+// cell stated. To an accessible profile (PDF/UA, WTPDF) it states
+// [statedLanguage], which the remediation writes only where the document
+// states no valid language, and, when the report then finds the document
+// untitled ([untitled]), it remediates data again with title set through
+// [pdf.Writer.SetMetadata]: litho writes neither on its own (ISO 14289-1,
+// 7.1 and 7.2; ISO 14289-2, 8.11.1 and 8.4.4). A remediation error is
+// returned as is; a write error is wrapped "write: ".
+func remediateStating(ctx context.Context, data []byte, accessible bool, title string, remediate statedRemediation) (out []byte, stated bool, err error) {
+	run := func(title string) ([]byte, *models.RemediationReport, error) {
+		r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			return nil, nil, fmt.Errorf("pdf.Open: %w", err)
+		}
+		defer r.Close()
+		w := pdf.NewWriter(r)
+		// Removes the remediation output when the write below never runs.
+		defer w.Close()
+		if title != "" {
+			w.SetMetadata(models.Metadata{Title: title})
+		}
+		var opts []pdf.RemediateOption
+		if accessible {
+			opts = append(opts, pdf.WithLanguage(statedLanguage))
+		}
+		rep, err := remediate(ctx, w, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+		var buf bytes.Buffer
+		if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
+			return nil, rep, fmt.Errorf("write: %w", err)
+		}
+		return buf.Bytes(), rep, nil
+	}
+	out, report, err := run("")
+	if err == nil && accessible && untitled(report) {
+		out, report, err = run(title)
+		stated = err == nil
+	}
+	if err == nil && accessible && languageStated(report) {
+		stated = true
+	}
+	return out, stated, err
 }
 
 // preparePerProfile remediates every fixture for one conformance
 // profile, then asks VeraPDF for its verdict on the staging directory
 // that holds the remediated copies.
 func (f *remediationFeature) preparePerProfile(ctx context.Context, profile string, fixtures []Fixture) error {
-	validate, remediate, ok := f.remediators(profile)
+	validate, remediate, accessible, ok := f.remediators(profile)
 	if !ok {
 		// Profile the remediation engine does not target (e.g. an unknown
 		// directory name); record a stub verdict so Compare can render it.
@@ -205,7 +264,7 @@ func (f *remediationFeature) preparePerProfile(ctx context.Context, profile stri
 			if golden != nil {
 				res.litho.VeraPre = len(golden.FailedRules)
 			}
-			if err := remediateOnce(fctx, fx.PDFPath, validate, remediate, stagingDir, &res.litho, &res.stagingPath); err != nil {
+			if err := remediateOnce(fctx, fx.PDFPath, validate, remediate, accessible, stagingDir, &res.litho, &res.stagingPath); err != nil {
 				res.litho.Error = err.Error()
 			}
 		}()
@@ -291,7 +350,10 @@ type remediationOutput struct {
 	VeraRules   []string `json:"verapdf_post_rules,omitempty"`
 	LithoRules  []string `json:"litho_post_rules,omitempty"`
 	ParseFailed bool     `json:"parse_failed,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	// Stated marks an output that carries the title or the language the
+	// cell stated (see [remediateStating]).
+	Stated bool   `json:"stated,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 func (f *remediationFeature) Run(_ context.Context, _, fixtureID string) ([]byte, error) {
@@ -329,17 +391,18 @@ func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
 	// diffBaseline iterates the baseline's own key set, so the bar stops
 	// gating entirely: a later regression in that metric goes unreported.
 	metrics := map[string]int{
-		"litho_pre":         got.LithoPre,
-		"litho_post":        got.LithoPost,
-		"verapdf_pre":       got.VeraPre,
-		"verapdf_post":      got.VeraPost,
-		"litho_fixed":       max(0, got.LithoPre-got.LithoPost),
-		"verapdf_fixed":     max(0, got.VeraPre-got.VeraPost),
-		"disagreement":      disagreement,
-		"parse_failed":      boolToInt(got.ParseFailed),
-		"fully_fixed":       boolToInt(fullyFixed),
-		"litho_regressed":   boolToInt(got.LithoPost > got.LithoPre),
-		"verapdf_regressed": boolToInt(got.VeraPost > got.VeraPre),
+		"litho_pre":          got.LithoPre,
+		"litho_post":         got.LithoPost,
+		"verapdf_pre":        got.VeraPre,
+		"verapdf_post":       got.VeraPost,
+		"litho_fixed":        max(0, got.LithoPre-got.LithoPost),
+		"verapdf_fixed":      max(0, got.VeraPre-got.VeraPost),
+		"disagreement":       disagreement,
+		"parse_failed":       boolToInt(got.ParseFailed),
+		"fully_fixed":        boolToInt(fullyFixed),
+		"fully_fixed_stated": boolToInt(fullyFixed && got.Stated),
+		"litho_regressed":    boolToInt(got.LithoPost > got.LithoPre),
+		"verapdf_regressed":  boolToInt(got.VeraPost > got.VeraPre),
 	}
 
 	raw, _ := json.Marshal(remediationReport{
@@ -378,11 +441,12 @@ type remediationReport struct {
 }
 
 // remediateOnce opens pdfPath, validates with litho via validate, applies the
-// remediation engine via remediate, validates the buffer with litho, and writes
-// the remediated bytes to stagingDir under <basename>.pdf. The validate and
+// remediation engine via remediate as [remediateStating] does, the basename
+// as the title it states, validates the buffer with litho, and writes the
+// remediated bytes to stagingDir under <basename>.pdf. The validate and
 // remediate closures bind the conformance profile (PDF/A or PDF/UA), keeping the
 // open/write/stage skeleton profile-agnostic. The basename comes from pdfPath.
-func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
+func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate statedRemediation, accessible bool, stagingDir string, out *remediationOutput, stagingPath *string) error {
 	data, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
@@ -398,21 +462,15 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	}
 	out.LithoPre = len(distinctRuleIDs(pre))
 
-	w := pdf.NewWriter(r)
-	// Removes the remediation output when the write below never runs.
-	defer w.Close()
-	if err := remediate(ctx, w); err != nil {
+	base := strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))
+	remediated, stated, err := remediateStating(ctx, data, accessible, base, remediate)
+	if err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre
 		return nil
 	}
-
-	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
-		out.LithoPost = out.LithoPre
-		out.VeraPost = out.VeraPre
-		return nil
-	}
+	out.Stated = stated
+	buf := bytes.NewBuffer(remediated)
 
 	r2, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
@@ -443,7 +501,6 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	}
 
 	// Write the remediated bytes for the upcoming VeraPDF batch run.
-	base := strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))
 	*stagingPath = filepath.Join(stagingDir, base+".pdf")
 	if err := os.WriteFile(*stagingPath, buf.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("write staging: %w", err)

@@ -120,7 +120,10 @@ type remediationPairOutput struct {
 	VeraPDFA         []string `json:"verapdf_pdfa_rules,omitempty"`
 	VeraPDFUA        []string `json:"verapdf_pdfua_rules,omitempty"`
 	ParseFailed      bool     `json:"parse_failed,omitempty"`
-	Error            string   `json:"error,omitempty"`
+	// Stated marks an output that carries the title or the language the
+	// cell stated (see [remediateStating]).
+	Stated bool   `json:"stated,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 // Prepare remediates every PDF to its pair and runs veraPDF on the outputs,
@@ -248,6 +251,8 @@ func (f *remediationPairFeature) preparePair(ctx context.Context, pdfaDir, pdfua
 }
 
 // remediatePairOnce remediates the PDF at pdfPath to pdfa and pdfua together,
+// stating what a caller states of a document that states no title or no
+// language, as [remediateStating] does with the basename as the title,
 // records in out what litho finds before and after at each profile, and writes
 // the output to stagingDir under the PDF's basename, whose path it returns. A
 // remediation that fails leaves the PDF as it was, which out records with the
@@ -269,18 +274,15 @@ func remediatePairOnce(ctx context.Context, pdfPath string, pdfa models.PDFAProf
 	out.LithoPre = len(preA) + len(preUA)
 
 	result := data
-	w := pdf.NewWriter(r)
-	// Removes the remediation output when the write below never runs.
-	defer w.Close()
-	if _, err := w.RemediatePDFA(ctx, pdfa, pdf.WithPDFUA(pdfua)); err != nil {
+	base := strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))
+	remediated, stated, err := remediateStating(ctx, data, true, base, func(ctx context.Context, w *pdf.Writer, stated []pdf.RemediateOption) (*models.RemediationReport, error) {
+		return w.RemediatePDFA(ctx, pdfa, append([]pdf.RemediateOption{pdf.WithPDFUA(pdfua)}, stated...)...)
+	})
+	if err != nil {
 		out.RemediationError = err.Error()
 	} else {
-		var buf bytes.Buffer
-		if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
-			out.RemediationError = fmt.Sprintf("write: %v", err)
-		} else {
-			result = buf.Bytes()
-		}
+		result = remediated
+		out.Stated = stated
 	}
 
 	r2, err := pdf.Open(ctx, bytes.NewReader(result), int64(len(result)))
@@ -293,7 +295,7 @@ func remediatePairOnce(ctx context.Context, pdfPath string, pdfa models.PDFAProf
 	if err != nil {
 		return "", fmt.Errorf("validate post: %w", err)
 	}
-	path := filepath.Join(stagingDir, strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))+".pdf")
+	path := filepath.Join(stagingDir, base+".pdf")
 	if err := os.WriteFile(path, result, 0o600); err != nil { //nolint:gosec // G703: path is the staging dir this run made joined with a fixture's base name
 		return "", fmt.Errorf("write staging: %w", err)
 	}
@@ -352,6 +354,9 @@ func (*remediationPairFeature) Compare(fixtureID string, output []byte) Verdict 
 		"disagreement": disagreement,
 		"parse_failed": boolToInt(got.ParseFailed),
 		"fully_fixed":  boolToInt(fullyFixed),
+		// fully_fixed_stated counts the outputs fully fixed only with the
+		// title or the language the cell stated.
+		"fully_fixed_stated": boolToInt(fullyFixed && got.Stated),
 	}
 	raw, _ := json.Marshal(struct {
 		File string `json:"file"`

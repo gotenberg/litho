@@ -52,7 +52,7 @@ func TestManifestProfilesAreMapped(t *testing.T) {
 			if !isA && !isUA && !isWT {
 				t.Errorf("%s: %s maps to no litho validator", m.Name, profile)
 			}
-			if _, _, ok := newRemediationFeature(false).remediators(profile); !ok {
+			if _, _, _, ok := newRemediationFeature(false).remediators(profile); !ok {
 				t.Errorf("%s: %s has no remediation", m.Name, profile)
 			}
 		}
