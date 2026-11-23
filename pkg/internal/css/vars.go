@@ -198,6 +198,14 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 			// a URL, so a document's attributes cannot make litho fetch.
 			return nil, false
 		}
+		if t.typ == tFunction && eqFold(t.value, "if") {
+			v, ok := cs.ifValue(&t, lookup, budget, depth+1)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, v...)
+			continue
+		}
 		if t.typ == tFunction && eqFold(t.value, "var") {
 			args := t.children
 			i := 0

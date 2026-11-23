@@ -350,13 +350,13 @@ func validVars(l []token) bool {
 	return true
 }
 
-// containsSubstitution reports whether a value calls attr(), env() or a
-// tree-counting function anywhere: each takes its value from the element
-// at computed-value time.
+// containsSubstitution reports whether a value calls attr(), env(), if()
+// or a tree-counting function anywhere: each takes its value from the
+// element at computed-value time.
 func containsSubstitution(l []token) bool {
 	for i := range l {
 		t := &l[i]
-		if t.typ == tFunction && (eqFold(t.value, "attr") || eqFold(t.value, "env") || treeCounting(t.value)) {
+		if t.typ == tFunction && (eqFold(t.value, "attr") || eqFold(t.value, "env") || eqFold(t.value, "if") || treeCounting(t.value)) {
 			return true
 		}
 		if len(t.children) > 0 && containsSubstitution(t.children) {
