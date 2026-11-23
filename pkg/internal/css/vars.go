@@ -2,6 +2,8 @@ package css
 
 import (
 	"maps"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -101,6 +103,12 @@ func (cs *computeState) resolveCustom(names []string, declared map[string][]toke
 		}
 		budget := maxVarTokens
 		v, ok := cs.substitute(raw, func(ref string) ([]token, bool) { return resolve(ref, depth+1) }, &budget, 0)
+		if ok && reg != nil && !reg.universal {
+			// A registered value computes on its element, its
+			// tree-counting functions with it; an unregistered one keeps
+			// them for the element that uses it (CSS Values 5, 9).
+			v, ok = cs.countSiblings(v, 0)
+		}
 		if !ok || reg != nil && !reg.matches(significant(v)) {
 			return invalid(name)
 		}
@@ -426,6 +434,9 @@ func (cs *computeState) substituteDecl(d *Declaration, vars map[string][]token) 
 		x, ok := vars[name]
 		return x, ok
 	}, &budget, 0)
+	if ok {
+		v, ok = cs.countSiblings(v, 0)
+	}
 	if !ok {
 		return nil
 	}
@@ -439,4 +450,53 @@ func (cs *computeState) substituteDecl(d *Declaration, vars map[string][]token) 
 		return nil
 	}
 	return entries
+}
+
+// treeCounting reports a tree-counting function by its name: sibling-index()
+// and sibling-count() (CSS Values 5, 9).
+func treeCounting(name string) bool {
+	return eqFold(name, "sibling-index") || eqFold(name, "sibling-count")
+}
+
+// countSiblings replaces each sibling-index() and sibling-count() in l by
+// the integer it stands for on the element being styled (CSS Values 5,
+// 9): its 1-based position among the element children of its parent, and
+// their number, a pseudo-element's those of its originating element. A
+// tree-counting function with arguments makes the value invalid.
+func (cs *computeState) countSiblings(l []token, depth int) ([]token, bool) {
+	if depth > maxNestingDepth {
+		return nil, false
+	}
+	out := l
+	for i := range l {
+		t := l[i]
+		switch {
+		case t.typ == tFunction && treeCounting(t.value):
+			if len(significant(t.children)) > 0 || cs.node == nil {
+				return nil, false
+			}
+			info := cs.m.infoOf(cs.node)
+			n := info.index
+			if eqFold(t.value, "sibling-count") {
+				n = info.count
+			}
+			t = token{typ: tNumber, num: float64(n), repr: strconv.Itoa(n), integer: true}
+		case len(t.children) > 0:
+			kids, ok := cs.countSiblings(t.children, depth+1)
+			if !ok {
+				return nil, false
+			}
+			if &kids[0] == &t.children[0] {
+				continue
+			}
+			t.children = kids
+		default:
+			continue
+		}
+		if &out[0] == &l[0] {
+			out = slices.Clone(l)
+		}
+		out[i] = t
+	}
+	return out, true
 }
