@@ -156,8 +156,9 @@ func (r reftestRef) equal(d pixelDiff) bool {
 // Ahem, the font most reftests draw with.
 //
 // An XHTML test or reference (.xht) is converted as HTML once the CDATA
-// markers of its style sheets are stripped ([stripStyleCDATA]), the bytes
-// on disk left as WPT holds them. Only the test and its references are
+// markers of its style sheets are stripped ([stripStyleCDATA]) and a
+// DOCTYPE keeps it in no-quirks mode, as an XML parse does
+// ([xhtNoQuirks]), the bytes on disk left as WPT holds them. Only the test and its references are
 // read so: the selector keeps out embedded documents, so no other XHTML
 // file is loaded.
 type reftestFeature struct {
@@ -539,6 +540,7 @@ func (f *reftestFeature) draw(ctx context.Context, root string, doc reftestDocum
 		if stripped, ok := stripStyleCDATA(src); ok {
 			src = stripped
 		}
+		src = xhtNoQuirks(src)
 	}
 	f.mu.RLock()
 	fonts := f.fontDirs

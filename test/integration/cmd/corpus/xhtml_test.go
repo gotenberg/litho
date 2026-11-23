@@ -77,8 +77,23 @@ func TestReftestFeature_StripsXHTMLCDATA(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if want := []string{plain, plain, marked, plain}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
+	if want := []string{xhtDoctype + plain, xhtDoctype + plain, marked, xhtDoctype + plain}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
 		t.Errorf("converted %q, want %q", got, want)
+	}
+}
+
+// TestXHTNoQuirks puts the DOCTYPE of no-quirks mode before an XHTML file,
+// after its byte order mark.
+func TestXHTNoQuirks(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]string{
+		`<html/>`:                         xhtDoctype + `<html/>`,
+		"\xef\xbb\xbf<!DOCTYPE x><html/>": "\xef\xbb\xbf" + xhtDoctype + `<!DOCTYPE x><html/>`,
+	} {
+		if got := string(xhtNoQuirks([]byte(in))); got != want {
+			t.Errorf("xhtNoQuirks(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

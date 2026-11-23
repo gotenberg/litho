@@ -103,6 +103,28 @@ func stripSections(text []byte) ([]byte, bool) {
 	}
 }
 
+// xhtDoctype is the DOCTYPE an XHTML file is converted under. An XML
+// parser leaves a document in no-quirks mode whatever its DOCTYPE (DOM
+// Standard, 4.5), where an HTML parser takes the mode from the DOCTYPE
+// (HTML Standard, 13.2.6.4.1): XHTML 1.0 Transitional sets limited-quirks
+// mode, and a file without a DOCTYPE quirks mode. The parser takes the
+// first DOCTYPE and drops a later one (13.2.6.4.2), so this one set before
+// the file's keeps the HTML parse in no-quirks mode.
+const xhtDoctype = "<!DOCTYPE html>"
+
+// xhtNoQuirks returns the XHTML file src with [xhtDoctype] before it, after
+// the UTF-8 byte order mark that opens it, if any.
+func xhtNoQuirks(src []byte) []byte {
+	bom := []byte("\xef\xbb\xbf")
+	body, hadBOM := bytes.CutPrefix(src, bom)
+	out := make([]byte, 0, len(src)+len(xhtDoctype))
+	if hadBOM {
+		out = append(out, bom...)
+	}
+	out = append(out, xhtDoctype...)
+	return append(out, body...)
+}
+
 // The departures of an HTML parse from an XML parse that xhtDeparture
 // finds, each the reason a file is kept out.
 const (

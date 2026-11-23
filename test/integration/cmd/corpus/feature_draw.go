@@ -187,7 +187,9 @@ func (f *drawFeature) Run(ctx context.Context, _, fixtureID string) ([]byte, err
 	f.mu.RLock()
 	ua, resources, fonts, reportDir := f.ua, f.resources, f.fontDirs, f.reportDir
 	f.mu.RUnlock()
-	src := "<style>\n" + ua + "</style>\n" + fx.HTML
+	// WeasyPrint lays every document out in no-quirks mode: the DOCTYPE
+	// keeps litho there too (HTML Standard, 13.2.6.4.1).
+	src := "<!DOCTYPE html>\n<style>\n" + ua + "</style>\n" + fx.HTML
 	data, err := f.convert(ctx, []byte(src), htmlSettings{
 		Media:     "print",
 		Top:       0,
