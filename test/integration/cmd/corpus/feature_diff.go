@@ -563,8 +563,24 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	lctx, cancel := context.WithTimeout(ctx, perFileTimeout)
 	defer cancel()
 	src, settings, err := sourceSettings(srcPath, office, fonts)
+	var ref *pdf.Reader
+	defer func() {
+		if ref != nil {
+			_ = ref.Close()
+		}
+	}()
 	var data []byte
 	if err == nil {
+		if settings.Office != nil && settings.Office.Options.Date == "" {
+			// An Office source that states no date converts at its
+			// reference's.
+			if ref, err = openReference(g.pdf); err != nil {
+				return nil, err
+			}
+			if day, ok := referenceDay(lctx, ref); ok {
+				settings.Extra = append(settings.Extra, pdf.WithDate(day))
+			}
+		}
 		data, err = f.convert(lctx, src, settings)
 	}
 	var doc diffLithoDoc
@@ -580,11 +596,11 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	borrowed := f.borrowed[fixtureID]
 	f.mu.RUnlock()
-	ref, err := openReference(g.pdf)
-	if err != nil {
-		return nil, err
+	if ref == nil {
+		if ref, err = openReference(g.pdf); err != nil {
+			return nil, err
+		}
 	}
-	defer ref.Close()
 	rctx, cancelRef := context.WithTimeout(ctx, referenceDrawTimeout(g.text.NumPages))
 	defer cancelRef()
 	draw := func(page int) (image.Image, error) { return drawDiffPage(rctx, ref, page, office) }
@@ -759,6 +775,23 @@ func openReference(path string) (*pdf.Reader, error) {
 		return nil, fmt.Errorf("open the reference: %w", err)
 	}
 	return r, nil
+}
+
+// referenceDay returns the moment the reference ref was built, in UTC,
+// read from its creation date: an Office source that states no date
+// converts at it, so that a field showing the current date or time shows
+// what the reference's shows, which is the day it was built and no
+// property of the source.
+func referenceDay(ctx context.Context, ref *pdf.Reader) (time.Time, bool) {
+	meta, err := ref.Metadata(ctx)
+	if err != nil {
+		return time.Time{}, false
+	}
+	t, ok := parsePDFDate(meta["CreationDate"])
+	if !ok {
+		return time.Time{}, false
+	}
+	return t.UTC(), true
 }
 
 // scoreDiff scores litho's pages against the goldens. outlineByPage
