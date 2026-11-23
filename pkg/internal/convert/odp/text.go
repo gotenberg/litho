@@ -310,10 +310,15 @@ func (r *reader) fontFamily(name, family string) string {
 // which ODF 1.3, Part 3, 20.190 lets a common style give relative to its
 // parent, leaves the size below as it is, as Impress reads one in any
 // graphic, paragraph or text style; a bullet's percentage is read apart
-// ([reader.bullet]).
+// ([reader.bullet]). A run's fo:background-color paints its text box
+// behind its glyphs, as Impress highlights it.
 //
 // # Corpus evidence
 //
+//   - libreoffice/odp: sd/tdf128096.odp prints its runs of
+//     fo:background-color #ffff00 on yellow.
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, a span of
+//     fo:background-color #ffff00 prints a yellow box behind its word.
 //   - probe, odp: through gotenberg/gotenberg:9.4.1, "abc 漢字 עברית" in a
 //     text box of a common graphic style setting 50% in all three
 //     scripts under one of 20pt prints at 20 points, as under an
@@ -405,8 +410,12 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 	if p.Get("style:text-outline") == "true" {
 		r.warn("text-outline", warn.ContentUnsupported, warn.Approximated, "outlined text is drawn filled")
 	}
-	if v := p.Get("fo:background-color"); v != "" && v != "transparent" {
-		r.warn("text-highlight", warn.ContentUnsupported, warn.Approximated, "a text background colour is not drawn")
+	if v, ok := p.Lookup("fo:background-color"); ok {
+		// transparent clears a highlight inherited.
+		rs.style.Highlight = css.Color{}
+		if c, ok := odf.ParseColor(v); ok {
+			rs.style.Highlight = cssColor(c)
+		}
 	}
 }
 
@@ -730,7 +739,7 @@ func sameStyle(a, b slides.RunStyle) bool {
 	return slices.Equal(a.Families, b.Families) && a.Size == b.Size && a.Bold == b.Bold && a.Italic == b.Italic &&
 		a.Underline == b.Underline && a.UnderlineStyle == b.UnderlineStyle && a.UnderlineHeavy == b.UnderlineHeavy &&
 		a.Strike == b.Strike && a.DoubleStrike == b.DoubleStrike && a.Color == b.Color && a.Spacing == b.Spacing &&
-		a.Script == b.Script && a.Rise == b.Rise && a.Caps == b.Caps && a.Lang == b.Lang
+		a.Script == b.Script && a.Rise == b.Rise && a.Caps == b.Caps && a.Lang == b.Lang && a.Highlight == b.Highlight
 }
 
 // maxInlineDepth bounds the nesting of spans and links read in one

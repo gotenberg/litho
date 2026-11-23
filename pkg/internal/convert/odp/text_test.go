@@ -331,3 +331,21 @@ func TestRead_ParagraphDirection(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_Highlight paints a run's fo:background-color behind its text,
+// as Impress prints a highlighted run, and a transparent one clears it.
+func TestRead_Highlight(t *testing.T) {
+	f := flat{body: page(`<draw:frame svg:width="5cm" svg:height="2cm"><draw:text-box><text:p><text:span text:style-name="hl">a</text:span><text:span text:style-name="hl"><text:span text:style-name="clear">b</text:span></text:span></text:p></draw:text-box></draw:frame>`)}
+	f.auto = `<style:style style:name="hl" style:family="text"><style:text-properties fo:background-color="#ffff00"/></style:style>` +
+		`<style:style style:name="clear" style:family="text"><style:text-properties fo:background-color="transparent"/></style:style>`
+	runs := firstShape(t, f).Text.Paragraphs[0].Runs
+	if len(runs) != 2 {
+		t.Fatalf("runs = %+v", runs)
+	}
+	if got, want := runs[0].Style.Highlight, (css.Color{R: 1, G: 1, A: 1}); got != want {
+		t.Errorf("highlight = %v, want %v", got, want)
+	}
+	if got := runs[1].Style.Highlight; got.A != 0 {
+		t.Errorf("cleared highlight = %v, want none", got)
+	}
+}
