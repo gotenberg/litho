@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T17:38:38Z",
+  "captured_at": "2026-11-23T20:03:19Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9330,8 +9330,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 245,
-          "mismatched": 38,
+          "matched": 247,
+          "mismatched": 36,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9410,7 +9410,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.3727
+              "text_f1": 0.4294
             },
             "layout/tdf109077.docx": {
               "layout": 0.9905,
@@ -9453,7 +9453,7 @@
               "text_f1": 1
             },
             "layout/tdf117188.docx": {
-              "layout": 0.8493,
+              "layout": 0.9321,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9605,12 +9605,12 @@
               "text_f1": 1
             },
             "layout/tdf137025.docx": {
-              "layout": 0.9947,
+              "layout": 0.9951,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/tdf138782.docx": {
               "layout": 0.9963,
@@ -10245,7 +10245,7 @@
               "text_f1": 1
             },
             "ooxmlexport/customxml-two-data-stores.docx": {
-              "layout": 0.5074,
+              "layout": 0.6445,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11365,7 +11365,7 @@
               "text_f1": 1
             },
             "ooxmlimport/linked-picture.docx": {
-              "layout": 0.8389,
+              "layout": 0.9588,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11437,7 +11437,7 @@
               "text_f1": 1
             },
             "ooxmlimport/n780645.docx": {
-              "layout": 0.6561,
+              "layout": 0.7339,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11509,7 +11509,7 @@
               "text_f1": 0
             },
             "ooxmlimport/tdf104167.docx": {
-              "layout": 0.5953,
+              "layout": 0.9606,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11557,7 +11557,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108350.docx": {
-              "layout": 0.8199,
+              "layout": 0.9629,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11573,15 +11573,15 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108714.docx": {
-              "layout": 0.6158,
+              "layout": 0.5481,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9423
+              "text_f1": 0.9286
             },
             "ooxmlimport/tdf108806.docx": {
-              "layout": 0.7945,
+              "layout": 0.9604,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11589,7 +11589,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108849.docx": {
-              "layout": 0.8141,
+              "layout": 0.9689,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -46004,8 +46004,8 @@
     "libreoffice/xlsx": {
       "features": {
         "diff": {
-          "matched": 198,
-          "mismatched": 30,
+          "matched": 202,
+          "mismatched": 26,
           "skipped": 24,
           "metrics": {
             "convert_error": 0,
@@ -46023,12 +46023,12 @@
               "text_f1": 0.9211
             },
             "chart2/SimpleHistogram.xlsx": {
-              "layout": 0.8766,
+              "layout": 0.8684,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.2917
+              "text_f1": 1
             },
             "chart2/add_series_secondary_axis.xlsx": {
               "layout": 0.921,
@@ -46143,20 +46143,20 @@
               "text_f1": 1
             },
             "chart2/box-whisker-gapwidth.xlsx": {
-              "layout": 0.8761,
+              "layout": 0.8823,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7492
+              "text_f1": 0.8214
             },
             "chart2/boxWhisker.xlsx": {
-              "layout": 0.8847,
+              "layout": 0.9073,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9118
+              "text_f1": 1
             },
             "chart2/bubble_chart_simple.xlsx": {
               "layout": 0.6128,
@@ -46239,20 +46239,20 @@
               "text_f1": 1
             },
             "chart2/clusteredColumn.xlsx": {
-              "layout": 0.8772,
+              "layout": 0.8862,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3329
+              "text_f1": 0.9118
             },
             "chart2/color_funnel.xlsx": {
-              "layout": 0,
+              "layout": 0.8797,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2667
+              "strict": 1,
+              "text_f1": 1
             },
             "chart2/column-style.xlsx": {
               "layout": 0.7947,
@@ -46375,12 +46375,12 @@
               "text_f1": 0.8636
             },
             "chart2/funnel1.xlsx": {
-              "layout": 0,
+              "layout": 0.8886,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2308
+              "strict": 1,
+              "text_f1": 1
             },
             "chart2/gapWidth.xlsx": {
               "layout": 0.9501,
@@ -46615,7 +46615,7 @@
               "text_f1": 1
             },
             "sc/ceiling-floor.xlsx": {
-              "layout": 0.9522,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46695,7 +46695,7 @@
               "text_f1": 1
             },
             "sc/complex_icon_set.xlsx": {
-              "layout": 0.8036,
+              "layout": 0.897,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54508,8 +54508,8 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 152,
-          "mismatched": 11,
+          "matched": 153,
+          "mismatched": 10,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -55559,11 +55559,11 @@
               "text_f1": 1
             },
             "sections-page-borders": {
-              "layout": 0.5901,
+              "layout": 0.9205,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6,
+              "strict": 1,
               "text_f1": 1
             },
             "sections-page-numbers": {
@@ -74298,8 +74298,8 @@
     "litho/pptx": {
       "features": {
         "diff": {
-          "matched": 118,
-          "mismatched": 8,
+          "matched": 119,
+          "mismatched": 7,
           "skipped": 14,
           "metrics": {
             "convert_error": 0,
@@ -74701,7 +74701,7 @@
               "text_f1": 0.9921
             },
             "ink": {
-              "layout": 0.5298,
+              "layout": 0.9216,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -75517,8 +75517,8 @@
           }
         },
         "targets": {
-          "matched": 124,
-          "mismatched": 21,
+          "matched": 125,
+          "mismatched": 20,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -75526,17 +75526,17 @@
             "pass_a1a": 145,
             "pass_a1b": 145,
             "pass_a2a": 145,
-            "pass_a2a+ua1": 124,
+            "pass_a2a+ua1": 125,
             "pass_a2b": 145,
             "pass_a2u": 145,
             "pass_a3a": 145,
             "pass_a3b": 145,
             "pass_a3u": 145,
             "pass_a4": 145,
-            "pass_a4+ua2": 124,
+            "pass_a4+ua2": 125,
             "pass_a4e": 145,
-            "pass_ua1": 124,
-            "pass_ua2": 124,
+            "pass_ua1": 125,
+            "pass_ua2": 125,
             "pass_v1.4": 145,
             "pass_v1.5": 145,
             "pass_v1.6": 145,
@@ -76710,17 +76710,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -78710,12 +78710,12 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 149,
-          "mismatched": 8,
+          "matched": 151,
+          "mismatched": 6,
           "skipped": 11,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 156,
+            "pages_equal": 157,
             "reference_fonts_missing": 11,
             "reference_undrawn": 0
           },
@@ -78777,7 +78777,7 @@
               "text_f1": 1
             },
             "cf_icon_sets": {
-              "layout": 0.8583,
+              "layout": 0.9333,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -78793,11 +78793,11 @@
               "text_f1": 1
             },
             "chart_sheet": {
-              "layout": 0.7515,
+              "layout": 0.907,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 0.6667,
               "text_f1": 1
             },
             "chartex_region_map": {
@@ -78825,12 +78825,12 @@
               "text_f1": 1
             },
             "charts_chartex": {
-              "layout": 0.4859,
+              "layout": 0.8118,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.6976
+              "text_f1": 0.9685
             },
             "charts_combo_secondary": {
               "layout": 0.7928,
@@ -78977,7 +78977,7 @@
               "text_f1": 1
             },
             "fonts": {
-              "layout": 0.928,
+              "layout": 0.9337,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -79761,12 +79761,12 @@
               "text_f1": 1
             },
             "paper_sizes": {
-              "layout": 0.7222,
+              "layout": 0.9028,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5833,
-              "strict": 0.5833,
-              "text_f1": 0.847
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "pictures": {
               "layout": 0.9576,
@@ -79817,7 +79817,7 @@
               "text_f1": 1
             },
             "real_dashboard": {
-              "layout": 0.942,
+              "layout": 0.9421,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -83839,8 +83839,8 @@
     "openxmlsdk/docx": {
       "features": {
         "diff": {
-          "matched": 171,
-          "mismatched": 28,
+          "matched": 179,
+          "mismatched": 20,
           "skipped": 50,
           "metrics": {
             "convert_error": 0,
@@ -83914,7 +83914,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/bottom-Bottom_Border-val-holly.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -83922,7 +83922,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/bottom-Bottom_Border-val-zigZagStitch.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84050,7 +84050,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/left-Left_Border-val-gems.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84058,7 +84058,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/left-Left_Border-val-weavingAngles.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84146,7 +84146,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/right-Right_Border-val-cakeSlice.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84154,7 +84154,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/right-Right_Border-val-peopleHats.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84234,7 +84234,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/top-Top_Border-val-handmade2.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84242,7 +84242,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/top-Top_Border-val-whiteFlowers.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -95799,8 +95799,8 @@
     "openxmlsdk/xlsx": {
       "features": {
         "diff": {
-          "matched": 39,
-          "mismatched": 10,
+          "matched": 40,
+          "mismatched": 9,
           "skipped": 5,
           "metrics": {
             "convert_error": 0,
@@ -95834,12 +95834,12 @@
               "text_f1": 0.9741
             },
             "O14ISOStrict/Excel/xl8galry.xlsx": {
-              "layout": 0.7012,
+              "layout": 0.8646,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.2,
-              "text_f1": 0.8916
+              "strict": 0.6,
+              "text_f1": 0.8886
             },
             "O14ISOStrict/Graphics/3DRotation-O12-XL-OartTextEffects.xlsx": {
               "layout": 0,
@@ -95954,7 +95954,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/ChartSheet.xlsx": {
-              "layout": 0,
+              "layout": 0.1047,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -95962,7 +95962,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/Connection.xlsx": {
-              "layout": 0.9499,
+              "layout": 0.9596,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -95978,7 +95978,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/FilterByColor.xlsx": {
-              "layout": 0.9395,
+              "layout": 0.9465,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96042,11 +96042,11 @@
               "text_f1": 0.9156
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProductCompetitiveAnalysis_TP10186503.xltx": {
-              "layout": 0.7642,
+              "layout": 0.7702,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 0.6,
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProjectBaselineChangeReport_TP10193587.xltx": {
@@ -96074,7 +96074,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/O12_templates/VendorScorecardReport_TP10194032.xltx": {
-              "layout": 0.8783,
+              "layout": 0.8784,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96090,7 +96090,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/Pivot2.xlsx": {
-              "layout": 0.9349,
+              "layout": 0.9381,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96098,7 +96098,7 @@
               "text_f1": 0.9993
             },
             "v2FxTestFiles/spreadsheet/Pivot3.xlsx": {
-              "layout": 0.9275,
+              "layout": 0.9294,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96122,7 +96122,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/RelationalPivotA1.xlsx": {
-              "layout": 0.9182,
+              "layout": 0.9191,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -100325,8 +100325,8 @@
     "poi/docx": {
       "features": {
         "diff": {
-          "matched": 92,
-          "mismatched": 11,
+          "matched": 93,
+          "mismatched": 10,
           "skipped": 15,
           "metrics": {
             "convert_error": 0,
@@ -100512,7 +100512,7 @@
               "text_f1": 1
             },
             "document/Bug60341.docx": {
-              "layout": 0.8396,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -100536,7 +100536,7 @@
               "text_f1": 1
             },
             "document/Bug66263-paragraph.docx": {
-              "layout": 0.5435,
+              "layout": 0.9586,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -100544,7 +100544,7 @@
               "text_f1": 1
             },
             "document/Bug66263-table.docx": {
-              "layout": 0.4215,
+              "layout": 0.272,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -100768,7 +100768,7 @@
               "text_f1": 1
             },
             "document/bib-chernigovka.netdo.ru_download_docs_17459.docx": {
-              "layout": 0.5589,
+              "layout": 0.5775,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -101088,7 +101088,7 @@
               "text_f1": 1
             },
             "openxml4j/TestCreatePackageOUTPUT.docx": {
-              "layout": 0.8017,
+              "layout": 0.9585,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -101104,7 +101104,7 @@
               "text_f1": 1
             },
             "openxml4j/TestOpenPackageOUTPUT.docx": {
-              "layout": 0.8017,
+              "layout": 0.9585,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -113364,8 +113364,8 @@
     "poi/xlsx": {
       "features": {
         "diff": {
-          "matched": 148,
-          "mismatched": 11,
+          "matched": 150,
+          "mismatched": 9,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -113671,7 +113671,7 @@
               "text_f1": 1
             },
             "spreadsheet/52348.xlsx": {
-              "layout": 0.4686,
+              "layout": 0.4781,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -113927,7 +113927,7 @@
               "text_f1": 1
             },
             "spreadsheet/56557.xlsx": {
-              "layout": 0.2912,
+              "layout": 0.6458,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -114247,12 +114247,12 @@
               "text_f1": 1
             },
             "spreadsheet/60255_extra_drawingparts.xlsx": {
-              "layout": 0.4829,
+              "layout": 0.9667,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.94
+              "strict": 1,
+              "text_f1": 1
             },
             "spreadsheet/60384.xlsx": {
               "layout": 0.8745,
@@ -114583,7 +114583,7 @@
               "text_f1": 1
             },
             "spreadsheet/NewStyleConditionalFormattings.xlsx": {
-              "layout": 0.8782,
+              "layout": 0.941,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -114639,12 +114639,12 @@
               "text_f1": 1
             },
             "spreadsheet/SimpleScatterChart.xlsx": {
-              "layout": 0.5891,
+              "layout": 0.9716,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9706
+              "text_f1": 1
             }
           },
           "score_tolerance": 0.02
