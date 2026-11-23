@@ -522,3 +522,37 @@ func TestSourceSums_LeaveTheCommentsOut(t *testing.T) {
 		t.Error("a source that sets comments owns no reference")
 	}
 }
+
+// TestSourceSums_LeaveAnOfficeExpectedTextOut pins that an Office source
+// naming an expected text keeps the digests, and so the reference, it had
+// without the key and its file, and owns its reference.
+func TestSourceSums_LeaveAnOfficeExpectedTextOut(t *testing.T) {
+	t.Parallel()
+
+	fx := planSources(t, map[string]map[string]string{
+		"deck":       {"deck.fodp": "<x/>"},
+		"deck-text":  {"deck.fodp": "<x/>", "expected-text.txt": "Hello!", "options.json": `{"expectedText": "expected-text.txt"}`},
+		"deck-pages": {"deck.fodp": "<x/>", "expected-text.txt": "Hello!", "options.json": `{"expectedText": "expected-text.txt", "nativePages": "1"}`},
+	})
+	sums := map[string][2]string{}
+	for _, f := range fx {
+		src, opt, err := sourceSums(engineLibreOffice, f.PDFPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sums[f.ID] = [2]string{src, opt}
+	}
+	if sums["deck-text"] != sums["deck"] || sums["deck"][1] != "" {
+		t.Errorf("an expected text moved the digests: %v against %v", sums["deck-text"], sums["deck"])
+	}
+	if sums["deck-pages"][0] != sums["deck"][0] || sums["deck-pages"][1] == "" {
+		t.Errorf("an options file with a route field: %v against %v", sums["deck-pages"], sums["deck"])
+	}
+	p, err := planReferences(fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ownsNoReference("deck-text") {
+		t.Error("a source that names an expected text owns no reference")
+	}
+}

@@ -170,7 +170,7 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 	// that derives descriptions, the one that writes comments and the
 	// locale: the last five are no fields of the pinned route's.
 	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName, ExpectedTextName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -438,5 +438,98 @@ func TestLocale_ConvertsWithTheOptionAndBuildsTheReferenceUnderIt(t *testing.T) 
 	write(t, dir, OptionsFile, `{"locale": "de-DE"}`)
 	if ref, err := LoadReference(dir); err != nil || ref.Locale != "de-DE" || ref.Unreferenced() {
 		t.Errorf("LoadReference = %+v, %v", ref, err)
+	}
+}
+
+// TestLoadOffice_ReadsTheExpectedText pins the expectedText key of an Office
+// source as Load reads it for an HTML one: the file it names sits beside the
+// document and is read whole; the key is no route field, no litho option
+// and no reason to borrow or lack a reference; a name that is no text file
+// of the directory, a missing or blank file, and any other file beside the
+// document fail.
+func TestLoadOffice_ReadsTheExpectedText(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, dir, "deck.pptx", "pk")
+	write(t, dir, "expected-text.txt", "Vertical it should be!\n")
+	write(t, dir, OptionsFile, `{"expectedText": "expected-text.txt"}`)
+	o, err := LoadOffice(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Document != filepath.Join(dir, "deck.pptx") || o.Options.ExpectedText != "expected-text.txt" || o.ExpectedText != "Vertical it should be!\n" {
+		t.Errorf("document %q, expected text %q from %q", o.Document, o.ExpectedText, o.Options.ExpectedText)
+	}
+	if keys := o.LithoOptions(); len(keys) != 0 {
+		t.Errorf("litho options %q, want none", keys)
+	}
+	if n := optionCount(o); n != optionCount(&Office{Format: FormatPPTX}) {
+		t.Errorf("%d conversion options, want those of a source without options", n)
+	}
+	ref, err := LoadReference(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref.Unreferenced() || ref.Of != "" {
+		t.Errorf("reference %+v, want the source's own", ref)
+	}
+
+	for name, files := range map[string]map[string]string{
+		"outside":  {OptionsFile: `{"expectedText": "../text.txt"}`},
+		"options":  {OptionsFile: `{"expectedText": "options.json"}`},
+		"document": {OptionsFile: `{"expectedText": "other.docx"}`, "other.docx": "pk"},
+		"absent":   {OptionsFile: `{"expectedText": "absent.txt"}`},
+		"blank":    {OptionsFile: `{"expectedText": "blank.txt"}`, "blank.txt": " \n"},
+		"unnamed":  {"stray.txt": "text"},
+	} {
+		d := t.TempDir()
+		write(t, d, "memo.docx", "pk")
+		for n, c := range files {
+			write(t, d, n, c)
+		}
+		if _, err := LoadOffice(d); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+}
+
+// TestLoadImportedOffice_ReadsTheExpectedTextAlone pins the options a
+// corpus keeps for a fetched document: they name its expected text and
+// nothing else, so the document converts as its reference engine prints
+// it, and the directory holds those two files alone.
+func TestLoadImportedOffice_ReadsTheExpectedTextAlone(t *testing.T) {
+	t.Parallel()
+
+	docs := t.TempDir()
+	write(t, docs, "tdf1.pptx", "pk")
+	doc := filepath.Join(docs, "tdf1.pptx")
+	opts := t.TempDir()
+	write(t, opts, OptionsFile, `{"expectedText": "expected-text.txt"}`)
+	write(t, opts, "expected-text.txt", "Hello!\n")
+	o, err := LoadImportedOffice(doc, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Document != doc || o.Format != FormatPPTX || o.ExpectedText != "Hello!\n" || optionCount(o) != optionCount(&Office{Format: FormatPPTX}) {
+		t.Errorf("document %q, format %s, expected text %q, %d options", o.Document, o.Format, o.ExpectedText, optionCount(o))
+	}
+	for name, files := range map[string]map[string]string{
+		"route field":  {OptionsFile: `{"expectedText": "t.txt", "landscape": true}`, "t.txt": "x"},
+		"litho option": {OptionsFile: `{"expectedText": "t.txt", "date": "2026-01-01T00:00:00Z"}`, "t.txt": "x"},
+		"stray file":   {OptionsFile: `{"expectedText": "t.txt"}`, "t.txt": "x", "notes.md": "x"},
+		"no options":   {"t.txt": "x"},
+		"blank":        {OptionsFile: `{"expectedText": "t.txt"}`, "t.txt": ""},
+	} {
+		d := t.TempDir()
+		for n, c := range files {
+			write(t, d, n, c)
+		}
+		if _, err := LoadImportedOffice(doc, d); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+	if _, err := LoadImportedOffice(docs, opts); err == nil {
+		t.Error("a source directory loaded as an imported document")
 	}
 }

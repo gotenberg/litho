@@ -86,7 +86,11 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 // goldens made from it, 1 on layout and strict (both sides are the same
 // PDF drawn by the same renderer), and clears the text bar but for the
 // references below, where litho's reading of the PDF parts from PDF.js's. The list is exact, so a reference that comes
-// to clear the bars, or one that drops under them, fails the test. The
+// to clear the bars, or one that drops under them, fails the test. A
+// source that names an expected text is scored against it, not against
+// the reference's text, and carries one because its reference does not hold
+// the page's text: its reference must stay under the text bar, else the
+// expected text is not needed. The
 // libreoffice corpora are left to a corpus run: drawing all of them takes a
 // minute.
 //
@@ -145,14 +149,19 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				var judged diffOutput
+				if err := json.Unmarshal(out, &judged); err != nil {
+					t.Fatal(err)
+				}
 				v := f.Compare(fx.ID, out)
 				s := v.Scores
 				if s[scorePages] != 1 || s[scoreLinks] != 1 || s[scoreOutline] != 1 || s[scoreLayout] != 1 || s[scoreStrict] != 1 {
 					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
 				}
+				under := underBars[format][fx.ID] || judged.ExpectedText
 				clears := s[scoreText] >= diffTextBar && s[scoreLayout] >= diffLayoutBar
-				if clears == underBars[format][fx.ID] {
-					t.Errorf("%s %s: text %.3f, layout %.3f; listed under the bars: %v", corpus, fx.ID, s[scoreText], s[scoreLayout], underBars[format][fx.ID])
+				if clears == under {
+					t.Errorf("%s %s: text %.3f, layout %.3f; listed under the bars: %v, expected text: %v", corpus, fx.ID, s[scoreText], s[scoreLayout], underBars[format][fx.ID], judged.ExpectedText)
 				}
 			}
 			if len(fixtures) == 0 {

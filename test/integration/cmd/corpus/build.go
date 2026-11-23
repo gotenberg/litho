@@ -273,14 +273,19 @@ func buildOffice(ctx context.Context, m *Manifest) error {
 		if err := writeBuilt(out, name, format, data); err != nil {
 			return err
 		}
-		options, err := os.ReadFile(filepath.Join(src, fixture.OptionsFile)) //nolint:gosec // a committed corpus source
-		switch {
-		case err == nil:
-			if err := os.WriteFile(filepath.Join(out, name, fixture.OptionsFile), options, 0o644); err != nil { //nolint:gosec // testdata is world-readable
+		for _, file := range []string{fixture.OptionsFile, partsExpectedText(src)} {
+			if file == "" {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(src, file)) //nolint:gosec // a committed corpus source
+			switch {
+			case err == nil:
+				if err := os.WriteFile(filepath.Join(out, name, file), data, 0o644); err != nil { //nolint:gosec // testdata is world-readable
+					return err
+				}
+			case !errors.Is(err, fs.ErrNotExist):
 				return err
 			}
-		case !errors.Is(err, fs.ErrNotExist):
-			return err
 		}
 	}
 	base, err := readParts(filepath.Join(partsDir, hostileBase))
@@ -318,9 +323,11 @@ func writeBuilt(out, name, format string, data []byte) error {
 }
 
 // readParts reads an unpacked document: every file under dir by its slash
-// path, but the options.json at its top and what [junkFile] names.
+// path, but the options.json at its top, the expected text file it names
+// and what [junkFile] names.
 func readParts(dir string) (map[string][]byte, error) {
 	parts := map[string][]byte{}
+	expected := partsExpectedText(dir)
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -339,7 +346,7 @@ func readParts(dir string) (map[string][]byte, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if rel == fixture.OptionsFile {
+		if rel == fixture.OptionsFile || rel == expected {
 			return nil
 		}
 		data, err := os.ReadFile(p) //nolint:gosec // a committed corpus source
@@ -356,6 +363,22 @@ func readParts(dir string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("no part under %s", dir)
 	}
 	return parts, nil
+}
+
+// partsExpectedText returns the expected text file the options.json of the
+// parts directory dir names ([fixture.ExpectedTextName]): the build copies
+// it beside the document instead of zipping it into it. It is "" when the
+// options name none, or do not parse, which the source's load reports.
+func partsExpectedText(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, fixture.OptionsFile)) //nolint:gosec // a committed corpus source
+	if err != nil {
+		return ""
+	}
+	opts, err := fixture.ParseOfficeOptions(data)
+	if err != nil {
+		return ""
+	}
+	return opts.ExpectedText
 }
 
 // zipParts zips the unpacked document under dir (see [zipPackage]).

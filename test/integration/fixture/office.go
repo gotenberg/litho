@@ -116,6 +116,12 @@ type OfficeOptions struct {
 	// web takes no locale, so in a format Microsoft's references judge the
 	// key counts as litho's own ([Office.LithoOptions]).
 	Locale string `json:"locale,omitempty"`
+	// ExpectedText names a text file of the source directory holding the
+	// text of the pages in reading order, written from the source, for a
+	// reference whose text the diff feature cannot read right (see
+	// [Options.ExpectedText]). It is no route field and no litho option:
+	// no reference depends on it. Default none.
+	ExpectedText string `json:"expectedText,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -202,6 +208,9 @@ type Office struct {
 	// Options are the options read from options.json, zero when there is
 	// none.
 	Options OfficeOptions
+	// ExpectedText is the content of the file Options.ExpectedText names,
+	// "" when it names none.
+	ExpectedText string
 }
 
 // ErrNoOfficeDocument reports a source directory that does not hold exactly
@@ -210,9 +219,11 @@ type Office struct {
 var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .dotx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp, .doc, .xls, .ppt) or image file (.png, .jpg, .gif, .webp, .bmp, .tif, .jp2, .j2k, .ico, .svg)")
 
 // LoadOffice reads an Office source: path is a source directory, holding
-// one document and an optional options file and nothing else, or a document
-// itself, which converts at the defaults. An options file that names an
-// unknown field or a value the route refuses fails the load.
+// one document, an optional options file and the expected text file it
+// names, and nothing else, or a document itself, which converts at the
+// defaults. An options file that names an unknown field or a value the
+// route refuses fails the load, and so does an expected text file that is
+// missing or holds no text.
 func LoadOffice(path string) (*Office, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -225,16 +236,20 @@ func LoadOffice(path string) (*Office, error) {
 		}
 		return &Office{Document: path, Format: format}, nil
 	}
+	o := &Office{}
+	options := filepath.Join(path, OptionsFile)
+	if isFile(options) {
+		if o.Options, err = readOfficeOptions(options); err != nil {
+			return nil, err
+		}
+	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil, fmt.Errorf("listing %s: %w", path, err)
 	}
-	o := &Office{}
-	hasOptions := false
 	for _, e := range entries {
 		name := e.Name()
-		if name == OptionsFile {
-			hasOptions = true
+		if name == OptionsFile || name == o.Options.ExpectedText {
 			continue
 		}
 		format, ok := officeFormats[strings.ToLower(filepath.Ext(name))]
@@ -246,17 +261,81 @@ func LoadOffice(path string) (*Office, error) {
 	if o.Document == "" {
 		return nil, fmt.Errorf("%s: %w", path, ErrNoOfficeDocument)
 	}
-	if !hasOptions {
-		return o, nil
+	if o.ExpectedText, err = readExpectedText(path, o.Options.ExpectedText); err != nil {
+		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(path, OptionsFile)) //nolint:gosec // committed corpus source
+	return o, nil
+}
+
+// LoadImportedOffice reads a document of an imported corpus, one a corpus
+// fetches and never commits, with the options the corpus keeps for it in
+// the directory dir: an options file and the expected text file it names,
+// and nothing else. Such options name the expected text alone
+// ([ImportedOptionNames]): the document is converted at the defaults, as
+// its reference engine prints it, so no option may change what litho
+// prints.
+func LoadImportedOffice(path, dir string) (*Office, error) {
+	o, err := LoadOffice(path)
+	if err != nil {
+		return nil, err
+	}
+	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		return nil, fmt.Errorf("%s: want a document, not a source directory", path)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, OptionsFile)) //nolint:gosec // committed corpus options
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", OptionsFile, err)
 	}
-	if o.Options, err = ParseOfficeOptions(data); err != nil {
-		return nil, fmt.Errorf("%s: %w", filepath.Join(path, OptionsFile), err)
+	if err := decodeStrict(data, ImportedOptionNames, &o.Options); err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Join(dir, OptionsFile), err)
+	}
+	if err := o.Options.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Join(dir, OptionsFile), err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("listing %s: %w", dir, err)
+	}
+	for _, e := range entries {
+		if e.Name() != OptionsFile && e.Name() != o.Options.ExpectedText {
+			return nil, fmt.Errorf("%s: %s is no file its options name", dir, e.Name())
+		}
+	}
+	if o.ExpectedText, err = readExpectedText(dir, o.Options.ExpectedText); err != nil {
+		return nil, err
 	}
 	return o, nil
+}
+
+// ImportedOptionNames are the keys the options of an imported document may
+// name ([LoadImportedOffice]).
+var ImportedOptionNames = []string{ExpectedTextName}
+
+// readOfficeOptions reads the Office options file at path.
+func readOfficeOptions(path string) (OfficeOptions, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // committed corpus source
+	if err != nil {
+		return OfficeOptions{}, fmt.Errorf("reading %s: %w", OptionsFile, err)
+	}
+	o, err := ParseOfficeOptions(data)
+	if err != nil {
+		return OfficeOptions{}, fmt.Errorf("%s: %w", path, err)
+	}
+	return o, nil
+}
+
+// readExpectedText reads the expected text file name of the directory dir,
+// "" when name is "". A file that holds no text fails: it would judge every
+// conversion wrong.
+func readExpectedText(dir, name string) (string, error) {
+	text, err := readTemplate(dir, name)
+	if err != nil {
+		return "", err
+	}
+	if name != "" && strings.TrimSpace(text) == "" {
+		return "", fmt.Errorf("%s %s: the file holds no text", ExpectedTextName, name)
+	}
+	return text, nil
 }
 
 // ParseOfficeOptions decodes an Office options file strictly: an unknown
@@ -264,7 +343,7 @@ func LoadOffice(path string) (*Office, error) {
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
 	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName, ExpectedTextName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -303,6 +382,10 @@ func (o OfficeOptions) validate() error {
 		if _, err := time.Parse(time.RFC3339, o.Date); err != nil {
 			return fmt.Errorf("date %q: want an RFC 3339 time", o.Date)
 		}
+	}
+	if name := o.ExpectedText; name != "" && (name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || name == "." || name == ".." ||
+		name == OptionsFile || officeFormats[strings.ToLower(filepath.Ext(name))] != "") {
+		return fmt.Errorf("%s %q: want a text file of the source directory", ExpectedTextName, name)
 	}
 	return validateInstalledFonts(o.InstalledFonts)
 }

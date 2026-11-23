@@ -137,7 +137,7 @@ func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSe
 		if fonts, err = withInstalledFonts(fonts, source.Options.InstalledFonts); err != nil {
 			return nil, htmlSettings{}, err
 		}
-		return src, htmlSettings{FontDirs: fonts, Format: source.Format, Office: source}, nil
+		return src, htmlSettings{FontDirs: fonts, Format: source.Format, Office: source, ExpectedText: source.ExpectedText}, nil
 	}
 	dir := srcPath
 	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {

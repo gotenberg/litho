@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -161,5 +162,40 @@ func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) {
 	}
 	if msg := err.Error(); !strings.Contains(msg, "HTTP 401") || !strings.Contains(msg, "0 of 1 references built") {
 		t.Errorf("error %q, want the status and the count of references built", msg)
+	}
+}
+
+// TestMSGraphConvert_AsksForASourceThatNamesAnExpectedText pins that an
+// options file naming only an expected text asks Office for the web for
+// the reference as if the source had none, where a route field gets none.
+func TestMSGraphConvert_AsksForASourceThatNamesAnExpectedText(t *testing.T) {
+	t.Parallel()
+
+	var uploads atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			uploads.Add(1)
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	g := &msGraph{client: &http.Client{Transport: stubGraph{srv}}, static: true, token: msGraphToken{AccessToken: "token"}}
+	for name, tc := range map[string]struct {
+		options string
+		asked   bool
+	}{
+		"expected text": {`{"expectedText": "expected-text.txt"}`, true},
+		"route field":   {`{"expectedText": "expected-text.txt", "landscape": true}`, false},
+	} {
+		dir := t.TempDir()
+		writeFiles(t, dir, map[string]string{"deck.pptx": "PK", "expected-text.txt": "Hello!", "options.json": tc.options})
+		before := uploads.Load()
+		status, body, err := g.convert(t.Context(), engineMicrosoft, referenceJob{name: "deck", path: dir, options: filepath.Join(dir, "options.json")})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if asked := uploads.Load() > before; asked != tc.asked {
+			t.Errorf("%s: asked Office %v, want %v (status %d, %s)", name, asked, tc.asked, status, body)
+		}
 	}
 }

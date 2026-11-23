@@ -67,3 +67,30 @@ func TestReadPartsKeepsRelsAndSkipsJunk(t *testing.T) {
 		t.Errorf("parts %v, want %v", got, want)
 	}
 }
+
+// TestReadParts_LeavesTheExpectedTextOut pins that the expected text file a
+// parts directory's options name is no part: the build copies it beside
+// the document, where fixture.LoadOffice reads it.
+func TestReadParts_LeavesTheExpectedTextOut(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		contentTypesPart:    "x",
+		"word/document.xml": "x",
+		"expected-text.txt": "Text",
+		"notes.txt":         "x",
+		"options.json":      `{"expectedText": "expected-text.txt"}`,
+	})
+	parts, err := readParts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := slices.Sorted(maps.Keys(parts))
+	if want := []string{contentTypesPart, "notes.txt", "word/document.xml"}; !slices.Equal(got, want) {
+		t.Errorf("parts %v, want %v", got, want)
+	}
+	if got := partsExpectedText(dir); got != "expected-text.txt" {
+		t.Errorf("expected text %q", got)
+	}
+}
