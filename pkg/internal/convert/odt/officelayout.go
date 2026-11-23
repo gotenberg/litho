@@ -49,12 +49,22 @@ func applyWritingMode(st *css.Style, mode string) {
 
 // frameWraps maps the values of style:wrap (ODF 1.3 Part 3, 20.393) onto
 // [css.FrameWrap]; a missing or unknown value lets the text run through,
-// the zero value.
+// the zero value. Writer sets the text of a parallel wrap on both sides of
+// the frame, the side before it filled first: a line beside it breaks
+// into a piece on each side.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 3 cm wide
+//     page-anchored frame of parallel wrap 1 cm inside a paragraph's
+//     indented start prints one word of each line beside it on its left,
+//     the rest on its right; a paragraph-anchored one alike, and two
+//     words on the left of one 3 cm inside.
 var frameWraps = map[string]css.FrameWrap{
 	"none":        css.FrameWrapNone,
 	"left":        css.FrameWrapLeft,
 	"right":       css.FrameWrapRight,
-	"parallel":    css.FrameWrapParallel,
+	"parallel":    css.FrameWrapBoth,
 	"dynamic":     css.FrameWrapDynamic,
 	"biggest":     css.FrameWrapLargest,
 	"run-through": css.FrameWrapThrough,

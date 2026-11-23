@@ -474,7 +474,7 @@ func TestConvert_LongWordBreaks(t *testing.T) {
 func TestApplyFrameWrap_PageAnchoredFrames(t *testing.T) {
 	t.Parallel()
 	for wrap, want := range map[string]css.FrameWrap{
-		"none": css.FrameWrapNone, "left": css.FrameWrapLeft, "right": css.FrameWrapRight, "parallel": css.FrameWrapParallel,
+		"none": css.FrameWrapNone, "left": css.FrameWrapLeft, "right": css.FrameWrapRight, "parallel": css.FrameWrapBoth,
 		"dynamic": css.FrameWrapDynamic, "biggest": css.FrameWrapLargest, "run-through": css.FrameWrapThrough, "": css.FrameWrapThrough, "contour": css.FrameWrapThrough,
 	} {
 		st := css.Initial()
@@ -497,6 +497,38 @@ func TestApplyFrameWrap_PageAnchoredFrames(t *testing.T) {
 	})
 	if !found {
 		t.Fatal("no page-anchored frame")
+	}
+}
+
+// TestConvert_ParallelWrapBothSides sets the lines beside a page-anchored
+// frame of parallel wrap on both its sides, the left filled first, as
+// LibreOffice prints the same document (probe through the pinned image:
+// one word left of the frame, the rest of the line right of it).
+func TestConvert_ParallelWrapBothSides(t *testing.T) {
+	auto := `<style:style style:name="fr1" style:family="graphic"><style:graphic-properties fo:margin="0cm" fo:padding="0cm" fo:border="none" style:wrap="parallel" style:horizontal-pos="from-left" style:horizontal-rel="page" style:vertical-pos="from-top" style:vertical-rel="page"/></style:style>` +
+		`<style:style style:name="PA" style:family="paragraph"><style:paragraph-properties fo:margin-top="1cm" fo:margin-left="2cm" fo:margin-right="1cm"/></style:style>`
+	var words strings.Builder
+	for i := 10; i < 100; i++ {
+		words.WriteString(" w" + strconv.Itoa(i) + "x")
+	}
+	body := `<draw:frame draw:style-name="fr1" text:anchor-type="page" svg:x="5cm" svg:y="4cm" svg:width="3cm" svg:height="2cm"><draw:text-box><text:p>FRAME</text:p></draw:text-box></draw:frame>` +
+		`<text:p>Before</text:p><text:p text:style-name="PA">` + words.String() + `</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	// The frame spans 141.7 to 226.8 points across, 113.4 to 170.1 down.
+	var left, right bool
+	for _, r := range runs(res.Pages[0]) {
+		if r.y < 120 || r.y > 165 || !strings.HasPrefix(strings.TrimSpace(r.text), "w") {
+			continue
+		}
+		switch {
+		case r.x < 141:
+			left = true
+		case r.x >= 226:
+			right = true
+		}
+	}
+	if !left || !right {
+		t.Errorf("text left of the frame %v, right of it %v, want both", left, right)
 	}
 }
 
