@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T06:20:02Z",
+  "captured_at": "2026-11-23T06:58:30Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -23986,8 +23986,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 216,
-          "mismatched": 40,
+          "matched": 227,
+          "mismatched": 29,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -24069,11 +24069,11 @@
               "text_f1": 1
             },
             "chart2/error_bar_properties.ods": {
-              "layout": 0.7968,
+              "layout": 0.9941,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "chart2/error_bar_range.ods": {
@@ -24109,7 +24109,7 @@
               "text_f1": 1
             },
             "chart2/moving-type.ods": {
-              "layout": 0.6558,
+              "layout": 0.7092,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24165,7 +24165,7 @@
               "text_f1": 1
             },
             "chart2/stepped_lines.ods": {
-              "layout": 0.901,
+              "layout": 0.8988,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24181,7 +24181,7 @@
               "text_f1": 0.9941
             },
             "chart2/tdf107097.ods": {
-              "layout": 0.5844,
+              "layout": 0.8348,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24197,12 +24197,12 @@
               "text_f1": 0.9479
             },
             "chart2/tdf120348.ods": {
-              "layout": 0.9856,
+              "layout": 0.9874,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9431
+              "text_f1": 0.9401
             },
             "chart2/tdf123774.ods": {
               "layout": 0.9897,
@@ -24269,12 +24269,12 @@
               "text_f1": 1
             },
             "chart2/tdf146066.ods": {
-              "layout": 0.7369,
+              "layout": 0.952,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6874
+              "text_f1": 0.8214
             },
             "chart2/tdf146463.ods": {
               "layout": 0.6655,
@@ -24282,7 +24282,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.3861
+              "text_f1": 0.4236
             },
             "chart2/tdf148142.ods": {
               "layout": 0.892,
@@ -24293,12 +24293,12 @@
               "text_f1": 1
             },
             "chart2/tdf151091.ods": {
-              "layout": 0.4426,
+              "layout": 0.8726,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 0.986
+              "strict": 0.6667,
+              "text_f1": 0.9722
             },
             "chart2/tdf153706_XY_scatter_chart.ods": {
               "layout": 0.9785,
@@ -24341,7 +24341,7 @@
               "text_f1": 1
             },
             "sc/LargeAnchorOffset.ods": {
-              "layout": 0,
+              "layout": 0.9441,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24421,7 +24421,7 @@
               "text_f1": 1
             },
             "sc/basic-cell-content.ods": {
-              "layout": 0.9933,
+              "layout": 0.9978,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24429,7 +24429,7 @@
               "text_f1": 1
             },
             "sc/border.ods": {
-              "layout": 0.9129,
+              "layout": 0.9732,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24453,12 +24453,12 @@
               "text_f1": 0.8889
             },
             "sc/cachedValue.ods": {
-              "layout": 0.7881,
+              "layout": 0.9622,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6334
+              "text_f1": 0.958
             },
             "sc/caseinsensitive-duplicate-fields.ods": {
               "layout": 0.9949,
@@ -24549,12 +24549,12 @@
               "text_f1": 1
             },
             "sc/copy-merged-number-formats.ods": {
-              "layout": 0.9791,
+              "layout": 0.9803,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7899
+              "text_f1": 1
             },
             "sc/custom-numfmt-hybrid-cell.ods": {
               "layout": 0.995,
@@ -24629,12 +24629,12 @@
               "text_f1": 1
             },
             "sc/dependencyTree.ods": {
-              "layout": 0.9553,
+              "layout": 0.9968,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.75
+              "text_f1": 1
             },
             "sc/different-column-width.ods": {
               "layout": 0.998,
@@ -24733,7 +24733,7 @@
               "text_f1": 1
             },
             "sc/formats.ods": {
-              "layout": 0.9894,
+              "layout": 0.9896,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24741,15 +24741,15 @@
               "text_f1": 1
             },
             "sc/formula-across-sheets.ods": {
-              "layout": 0.9284,
+              "layout": 0.9556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9683
+              "text_f1": 1
             },
             "sc/formula-delete-contents.ods": {
-              "layout": 0.963,
+              "layout": 0.9715,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24893,15 +24893,15 @@
               "text_f1": 1
             },
             "sc/matrix.ods": {
-              "layout": 0.9615,
+              "layout": 0.9933,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9669
+              "text_f1": 0.9944
             },
             "sc/measurelineHideColSave.ods": {
-              "layout": 0.3255,
+              "layout": 0.7281,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24989,12 +24989,12 @@
               "text_f1": 1
             },
             "sc/numgroup_example.ods": {
-              "layout": 0.7772,
+              "layout": 0.9961,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.7857
+              "strict": 1,
+              "text_f1": 1
             },
             "sc/offsetIllegalParam.ods": {
               "layout": 1,
@@ -25375,11 +25375,11 @@
               "text_f1": 1
             },
             "sc/tdf115655_HideDetail.ods": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sc/tdf117948_CollapseBeforeShape.ods": {
@@ -25592,12 +25592,12 @@
               "text_f1": 1
             },
             "sc/tdf126116.fods": {
-              "layout": 0.9803,
+              "layout": 0.9975,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8
+              "text_f1": 1
             },
             "sc/tdf126305.ods": {
               "layout": 0.9973,
@@ -25672,12 +25672,12 @@
               "text_f1": 1
             },
             "sc/tdf130556.ods": {
-              "layout": 0.9564,
+              "layout": 0.9566,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.972
+              "text_f1": 0.9907
             },
             "sc/tdf130583.ods": {
               "layout": 0.9973,
@@ -25792,11 +25792,11 @@
               "text_f1": 1
             },
             "sc/tdf137044_CoverHiddenRows.ods": {
-              "layout": 0.0138,
+              "layout": 0.9999,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sc/tdf137081_RTL_page_anchored.ods": {
@@ -25808,19 +25808,19 @@
               "text_f1": 0.5
             },
             "sc/tdf137082_LTR_arrow_image.ods": {
-              "layout": 0,
+              "layout": 0.9891,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sc/tdf137082_RTL_cell_anchored.ods": {
-              "layout": 0,
+              "layout": 0.4415,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 0.5
             },
             "sc/tdf137205_AutofillDatesInMergedCells.ods": {
@@ -25968,12 +25968,12 @@
               "text_f1": 1
             },
             "sc/tdf141914.ods": {
-              "layout": 0.5712,
+              "layout": 0.885,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.2857,
-              "text_f1": 0.9073
+              "strict": 0.7143,
+              "text_f1": 0.9911
             },
             "sc/tdf142231.ods": {
               "layout": 0.9977,
@@ -46004,12 +46004,12 @@
     "libreoffice/xlsx": {
       "features": {
         "diff": {
-          "matched": 192,
-          "mismatched": 36,
+          "matched": 193,
+          "mismatched": 35,
           "skipped": 24,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 224,
+            "pages_equal": 225,
             "reference_fonts_missing": 24,
             "reference_undrawn": 0
           },
@@ -46103,7 +46103,7 @@
               "text_f1": 1
             },
             "chart2/barOfPieChart.xlsx": {
-              "layout": 0.4986,
+              "layout": 0.8294,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46111,7 +46111,7 @@
               "text_f1": 0.7
             },
             "chart2/barOfPieChart2.xlsx": {
-              "layout": 0.5132,
+              "layout": 0.8413,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46647,12 +46647,12 @@
               "text_f1": 1
             },
             "sc/cell-value.xlsx": {
-              "layout": 0.6157,
+              "layout": 0.9035,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.7273,
-              "strict": 0.7273,
-              "text_f1": 0.6837
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9295
             },
             "sc/change-tracking.xlsx": {
               "layout": 0.95,
@@ -68920,7 +68920,7 @@
               "text_f1": 1
             },
             "hidden-sheets": {
-              "layout": 0.9776,
+              "layout": 0.9724,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68928,7 +68928,7 @@
               "text_f1": 1
             },
             "hidden-sheets-ref": {
-              "layout": 0.9776,
+              "layout": 0.9724,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69544,7 +69544,7 @@
               "text_f1": 1
             },
             "sheet-selection": {
-              "layout": 0.9727,
+              "layout": 0.9662,
               "link_recall": 0.6667,
               "outline_recall": 1,
               "pages": 1,
@@ -69552,7 +69552,7 @@
               "text_f1": 1
             },
             "sheets-by-name": {
-              "layout": 0.9494,
+              "layout": 0.9359,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69560,7 +69560,7 @@
               "text_f1": 0.9717
             },
             "sheets-by-name-ref": {
-              "layout": 0.9494,
+              "layout": 0.9359,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -78659,8 +78659,8 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 147,
-          "mismatched": 10,
+          "matched": 148,
+          "mismatched": 9,
           "skipped": 11,
           "metrics": {
             "convert_error": 0,
@@ -78806,15 +78806,15 @@
               "text_f1": 0.978
             },
             "charts_pie_doughnut": {
-              "layout": 0.6301,
+              "layout": 0.7773,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9935
+              "text_f1": 1
             },
             "charts_radar_stock_surface": {
-              "layout": 0.5148,
+              "layout": 0.5788,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -113317,12 +113317,12 @@
     "poi/xlsx": {
       "features": {
         "diff": {
-          "matched": 143,
-          "mismatched": 16,
+          "matched": 144,
+          "mismatched": 15,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 156,
+            "pages_equal": 157,
             "reference_fonts_missing": 26,
             "reference_undrawn": 0
           },
@@ -114376,12 +114376,12 @@
               "text_f1": 1
             },
             "spreadsheet/AverageTaxRates.xlsx": {
-              "layout": 0.3744,
+              "layout": 0.9123,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.75,
-              "strict": 0.25,
-              "text_f1": 0.3934
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.995
             },
             "spreadsheet/Booleans.xlsx": {
               "layout": 0.9589,
