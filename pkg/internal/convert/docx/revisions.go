@@ -69,7 +69,7 @@ func sectionMark(p *ooxml.Element) bool {
 func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 	merged := false
 	for i, k := range kids {
-		if markDeleted(k) && !sectionMark(k) && i+1 < len(kids) && kids[i+1].Is(w, "p") && !sectionMark(kids[i+1]) {
+		if j := nextParagraph(kids, i); markDeleted(k) && !sectionMark(k) && j > 0 && !sectionMark(kids[j]) {
 			merged = true
 			break
 		}
@@ -85,8 +85,12 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 			// whole: the next paragraph keeps its own properties.
 			continue
 		}
-		for markDeleted(p) && !sectionMark(p) && i+1 < len(kids) && kids[i+1].Is(w, "p") && !sectionMark(kids[i+1]) {
-			next := kids[i+1]
+		for markDeleted(p) && !sectionMark(p) {
+			j := nextParagraph(kids, i)
+			if j < 0 || sectionMark(kids[j]) {
+				break
+			}
+			next := kids[j]
 			joined := &ooxml.Element{Space: next.Space, Local: next.Local, Attrs: next.Attrs}
 			if ppr := next.Child(w, "pPr"); ppr != nil {
 				joined.Children = append(joined.Children, ppr)
@@ -96,17 +100,45 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 					joined.Children = append(joined.Children, c)
 				}
 			}
+			// The range marks between the two paragraphs fall between
+			// their contents.
+			joined.Children = append(joined.Children, kids[i+1:j]...)
 			for _, c := range next.Children {
 				if !c.Is(w, "pPr") {
 					joined.Children = append(joined.Children, c)
 				}
 			}
 			p = joined
-			i++
+			i = j
 		}
 		out = append(out, p)
 	}
 	return out
+}
+
+// nextParagraph returns the index of the w:p after kids[i] when only the
+// starts and ends of ranges lie between them (bookmarks, comments,
+// moves, permissions: 17.13.4, 17.13.5.24 to 17.13.5.27, 17.13.6), -1
+// for none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf104797.docx: a paragraph whose mark is
+//     moved away, followed by the w:moveFromRangeEnd of its moved text,
+//     joins the next paragraph in Word's print.
+func nextParagraph(kids []*ooxml.Element, i int) int {
+	for j := i + 1; j < len(kids); j++ {
+		k := kids[j]
+		switch {
+		case k.Is(w, "p"):
+			return j
+		case k.Space == w && (strings.HasSuffix(k.Local, "RangeStart") || strings.HasSuffix(k.Local, "RangeEnd") ||
+			k.Local == "bookmarkStart" || k.Local == "bookmarkEnd" || k.Local == "permStart" || k.Local == "permEnd"):
+		default:
+			return -1
+		}
+	}
+	return -1
 }
 
 // revisions rewrites the revisions of a part into the view

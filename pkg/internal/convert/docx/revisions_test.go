@@ -29,6 +29,7 @@ func TestRevisions_JoinedParagraphs(t *testing.T) {
 		{"hidden mark", p(`<w:jc w:val="center"/>`+vanish, r("abc")) + p(``, r("def")), []string{"abcdef"}, css.AlignStart},
 		{"hidden paragraph", p(`<w:jc w:val="center"/>`+vanish, hidden("abc")) + p(``, r("def")), []string{"def"}, css.AlignStart},
 		{"last paragraph", p(``, r("x")) + p(del, r("y")), []string{"x", "y"}, css.AlignStart},
+		{"range marks between", p(`<w:rPr><w:moveFrom w:id="1" w:author="a"/></w:rPr>`, r("abc")) + `<w:moveFromRangeEnd w:id="2"/><w:bookmarkEnd w:id="3"/>` + p(``, r("def")), []string{"abcdef"}, css.AlignStart},
 	} {
 		b := build(t, tc.body, nil)
 		var got []string
