@@ -192,7 +192,7 @@ func readJPEGFile(ctx context.Context, data []byte, o *Options, fn func(*Picture
 	if err != nil {
 		return Info{}, malformed("JPEG", err)
 	}
-	pic := &Picture{Source: src, Width: cfg.Width, Height: cfg.Height, XDPI: m.jfifX, YDPI: m.jfifY, Orientation: m.exif.Orientation}
+	pic := &Picture{Source: src, Width: cfg.Width, Height: cfg.Height, XDPI: m.jfifX, YDPI: m.jfifY, Orientation: m.exif.Orientation, Title: m.exif.Title}
 	if pic.XDPI == 0 {
 		pic.XDPI, pic.YDPI = m.exif.XDPI, m.exif.YDPI
 	}

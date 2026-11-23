@@ -31,7 +31,14 @@ func (c *converter) raster(ctx context.Context, p *imagefile.Picture) error {
 		dw, dh = h, w
 	}
 	pw, ph, r := c.pageFor(dw, dh)
-	fig := &typeset.StructElem{Role: "Figure", Alt: p.Description}
+	// A picture its file does not describe is described by its title, as
+	// an SVG file's picture, an HTML image and an Office drawing are: the
+	// file's own words for it, which a Figure needs (ISO 14289-1, 7.3).
+	alt := p.Description
+	if alt == "" {
+		alt = p.Title
+	}
+	fig := &typeset.StructElem{Role: "Figure", Alt: alt}
 	var frag typeset.Fragment
 	if p.Orientation <= 1 {
 		frag = &typeset.Image{Rect: r, Source: p.Source, Parent: fig}

@@ -49,7 +49,7 @@ A source is read as an Office source is (`fixture.LoadOffice`): its format is to
 | `svg-text`               | Shapes and text in Liberation Sans and Serif, a title and a description: vector, its text in the fonts given                                      |
 | `svg-viewbox`            | A view box alone, an XML declaration: a page of 300 by 300 CSS pixels                                                                             |
 
-The sources that state no description fail the PDF/UA targets on their figure (ISO 14289-1, 7.3), as any undescribed picture does: `png-described` and `svg-text` pass them.
+The sources that state neither a description nor a title fail the PDF/UA targets on their figure (ISO 14289-1, 7.3), as any undescribed picture does: `png-described`, `svg-text`, `jpeg-progressive` and `webp-icc-exif` pass them.
 
 ## Hostile files
 

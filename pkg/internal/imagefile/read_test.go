@@ -125,7 +125,7 @@ func TestRead_TellsResolutionOrientationAndText(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := pics[0]
-	if p.XDPI < 299.9 || p.XDPI > 300.1 || p.Orientation != 6 || p.Description != "A ramp of colours" || info.Title != "Café" {
+	if p.XDPI < 299.9 || p.XDPI > 300.1 || p.Orientation != 6 || p.Description != "A ramp of colours" || info.Title != "Café" || p.Title != "Café" {
 		t.Errorf("png: %+v, title %q", p, info.Title)
 	}
 	jfif := imagetest.JPEG(ramp(8, 6), imagetest.JPEGOptions{Components: 3, JFIFDPI: 150, EXIF: exif})
@@ -133,7 +133,7 @@ func TestRead_TellsResolutionOrientationAndText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := pics[0]; p.XDPI != 150 || p.Orientation != 6 || info.Title != "A title" {
+	if p := pics[0]; p.XDPI != 150 || p.Orientation != 6 || info.Title != "A title" || p.Title != "A title" {
 		t.Errorf("jpeg with JFIF: %+v, title %q", p, info.Title)
 	}
 	if p := readOne(t, imagetest.JPEG(ramp(8, 6), imagetest.JPEGOptions{Components: 1, EXIF: exif}), Options{}); p.XDPI != 200 {
@@ -146,13 +146,20 @@ func TestRead_TellsResolutionOrientationAndText(t *testing.T) {
 	if p := readOne(t, imagetest.BMP(ramp(8, 6), 24, 72), Options{}); p.XDPI < 71.9 || p.XDPI > 72.1 {
 		t.Errorf("bmp: %+v", p)
 	}
-	tiff := imagetest.TIFF([]imagetest.TIFFPage{{Image: ramp(8, 6), Compression: imagetest.TIFFNone, DPI: 600, Orientation: 3, Description: "Scan"}}, nil)
+	tiff := imagetest.TIFF([]imagetest.TIFFPage{
+		{Image: ramp(8, 6), Compression: imagetest.TIFFNone, DPI: 600, Orientation: 3, Description: "Scan"},
+		{Image: ramp(8, 6), Compression: imagetest.TIFFNone, Description: "Back"},
+		{Image: ramp(8, 6), Compression: imagetest.TIFFNone},
+	}, nil)
 	pics, info, err = readAll(t, tiff, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := pics[0]; p.XDPI != 600 || p.Orientation != 3 || info.Title != "Scan" {
+	if p := pics[0]; p.XDPI != 600 || p.Orientation != 3 || info.Title != "Scan" || p.Title != "Scan" {
 		t.Errorf("tiff: %+v, title %q", p, info.Title)
+	}
+	if len(pics) != 3 || pics[1].Title != "Back" || pics[2].Title != "" {
+		t.Errorf("tiff: %d pages, each page's own title wanted", len(pics))
 	}
 }
 

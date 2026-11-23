@@ -70,6 +70,12 @@ type Picture struct {
 	// picture, "" for none: a PNG text chunk of keyword Description (PNG
 	// 3rd edition, 11.3.3.2).
 	Description string
+	// Title is what the format defines as the title of the picture, ""
+	// for none: a PNG text chunk of keyword Title (PNG 3rd edition,
+	// 11.3.3.2), the EXIF ImageDescription of a JPEG or a WebP file, a
+	// TIFF page's ImageDescription (EXIF 2.32, 4.6.5; TIFF 6.0, section
+	// 8).
+	Title string
 }
 
 // Info is what a file states of itself as a whole.

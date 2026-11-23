@@ -73,7 +73,7 @@ type Options struct {
 // scaled down to fit, as a side under 3 points is grown to it with the
 // picture centred, each with a warning. The structure tree
 // holds a Document element with a Figure a page, described by what the
-// format defines as the picture's description.
+// format defines as the picture's description, else by its title.
 //
 // It returns an error wrapping office.ErrMalformed for a source that is no
 // image file of a format litho reads, its message naming what the bytes

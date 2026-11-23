@@ -157,7 +157,7 @@ func readPNGFile(ctx context.Context, data []byte, o *Options, fn func(*Picture)
 	if err != nil {
 		return Info{}, err
 	}
-	pic.Description = m.desc
+	pic.Description, pic.Title = m.desc, m.title
 	return Info{Title: m.title}, fn(pic)
 }
 

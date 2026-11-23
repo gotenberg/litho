@@ -6,6 +6,8 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"image/png"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/internal/imagetest"
@@ -96,6 +98,50 @@ func TestConvert_ClassifiesItsErrors(t *testing.T) {
 	doc, err := convert(pages, Options{})
 	if err != nil || len(doc.Pages) != 2 || len(doc.Structure.Kids) != 2 || doc.Structure.Kids[1].Role != "Figure" {
 		t.Errorf("two pages: %v", err)
+	}
+}
+
+// TestConvert_DescribesTheFigure locks the description of each page's
+// Figure: what the file defines as the picture's description, else its
+// title, as an SVG file's title describes its picture (ISO 14289-1, 7.3);
+// a picture its file says nothing of has none.
+//
+// # Corpus evidence
+//
+//   - litho/image jpeg-progressive and webp-icc-exif: an EXIF
+//     ImageDescription, the picture's title, and no other description;
+//     their Figures without one failed PDF/UA-1 and PDF/UA-2.
+func TestConvert_DescribesTheFigure(t *testing.T) {
+	t.Parallel()
+	img := image.NewGray(image.Rect(0, 0, 4, 4))
+	var plain bytes.Buffer
+	if err := png.Encode(&plain, img); err != nil {
+		t.Fatal(err)
+	}
+	exif := imagetest.EXIF(imagetest.EXIFOptions{Title: "A title"})
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want []string
+	}{
+		{"jpeg titled", imagetest.JPEG(img, imagetest.JPEGOptions{Components: 1, EXIF: exif}), []string{"A title"}},
+		{"png described and titled", imagetest.WithPNGChunks(plain.Bytes(),
+			imagetest.PNGChunk{Type: "tEXt", Data: []byte("Title\x00T")},
+			imagetest.PNGChunk{Type: "tEXt", Data: []byte("Description\x00D")}), []string{"D"}},
+		{"png", plain.Bytes(), []string{""}},
+		{"tiff pages", imagetest.TIFF([]imagetest.TIFFPage{{Image: img, Compression: imagetest.TIFFNone, Description: "One"}, {Image: img, Compression: imagetest.TIFFNone}}, nil), []string{"One", ""}},
+	} {
+		doc, err := convert(tc.data, Options{})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		var got []string
+		for _, k := range doc.Structure.Kids {
+			got = append(got, k.Alt)
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: descriptions %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

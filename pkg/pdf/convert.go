@@ -498,11 +498,13 @@ func presentationConfig(opts []PresentationOption) convertConfig {
 // The structure tree holds a Document element with a Figure a page. The
 // figure's description is what the format defines as one: a PNG text
 // chunk of keyword Description (PNG 3rd edition, 11.3.3.2), an SVG
-// root's title, else its desc (SVG 2, 5.9). The document's title is what
-// the format defines as a title: a PNG text chunk of keyword Title, the
-// EXIF ImageDescription of a JPEG, a TIFF or a WebP file (EXIF 2.32,
-// 4.6.5), an SVG root's title. A figure without a description fails a
-// PDF/UA remediation unless [WithFigureAltText] gives it one.
+// root's title, else its desc (SVG 2, 5.9); else the picture's title: a
+// PNG text chunk of keyword Title, the EXIF ImageDescription of a JPEG or
+// a WebP file, a TIFF page's own ImageDescription. The document's title
+// is what the format defines as a title: a PNG text chunk of keyword
+// Title, the EXIF ImageDescription of a JPEG, a TIFF or a WebP file (EXIF
+// 2.32, 4.6.5), an SVG root's title. A figure without a description
+// fails a PDF/UA remediation unless [WithFigureAltText] gives it one.
 //
 // # Not supported
 //

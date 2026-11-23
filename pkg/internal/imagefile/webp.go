@@ -143,7 +143,7 @@ func readWebP(ctx context.Context, data []byte, o *Options, fn func(*Picture) er
 	if err != nil {
 		return Info{}, err
 	}
-	pic.Orientation = exif.Orientation
+	pic.Orientation, pic.Title = exif.Orientation, exif.Title
 	return Info{Title: exif.Title}, fn(pic)
 }
 

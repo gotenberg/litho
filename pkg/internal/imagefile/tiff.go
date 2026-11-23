@@ -95,6 +95,9 @@ func readTIFF(ctx context.Context, data []byte, o *Options, fn func(*Picture) er
 		if err != nil {
 			return info, fmt.Errorf("page %d: %w", pages, err)
 		}
+		if e, ok := find(entries, tagImageDescription); ok {
+			pic.Title = t.text(e)
+		}
 		if err := fn(pic); err != nil {
 			return info, err
 		}
