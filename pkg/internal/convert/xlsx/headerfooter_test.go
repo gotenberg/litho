@@ -198,8 +198,14 @@ func TestRead_HeaderFooter(t *testing.T) {
 	doc, _ := readBytes(t, oneSheet(t, `<sheetData/><headerFooter differentFirst="1" differentOddEven="1" scaleWithDoc="1">`+
 		`<oddHeader>&amp;CO</oddHeader><oddFooter>&amp;RPage &amp;P</oddFooter><evenHeader>E</evenHeader><firstFooter>F</firstFooter></headerFooter>`))
 	hf := doc.Sheets[0].HeaderFooter
-	if !hf.DifferentFirst || !hf.DifferentOddEven || hf.ScaleWithDoc {
+	if !hf.DifferentFirst || !hf.DifferentOddEven || !hf.ScaleWithDoc {
 		t.Errorf("flags %+v", hf)
+	}
+	for xml, want := range map[string]bool{`<headerFooter/>`: true, `<headerFooter scaleWithDoc="0"/>`: false} {
+		doc, _ := readBytes(t, oneSheet(t, `<sheetData/>`+xml))
+		if got := doc.Sheets[0].HeaderFooter.ScaleWithDoc; got != want {
+			t.Errorf("%s: scaleWithDoc %t, want %t", xml, got, want)
+		}
 	}
 	if len(hf.Odd.Header[1]) != 1 || hf.Odd.Header[1][0].Text != "O" || len(hf.Odd.Footer[2]) != 2 {
 		t.Errorf("odd %+v", hf.Odd)

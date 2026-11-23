@@ -746,9 +746,9 @@ type HeaderFooter struct {
 	// 10 points.
 	Font Font
 	// ScaleWithDoc is a workbook's scaleWithDoc flag (ECMA-376 Part 1,
-	// 18.3.1.46), kept for the record: Calc scales the header and footer
-	// text with the sheet's print scale whatever it says, and so does the
-	// builder.
+	// 18.3.1.46): under Excel's rules the header and footer print at the
+	// sheet's print scale only when it is set; Calc scales them whatever
+	// it says, and an OpenDocument sheet leaves it unset.
 	ScaleWithDoc bool
 }
 

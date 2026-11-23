@@ -192,9 +192,10 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	// Calc prints the header and footer at the sheet's print scale
 	// (ScPrintFunc::PrintHF draws in the zoomed twip map mode): they are
 	// laid out on the page divided by the zoom and drawn multiplied by
-	// it, their distances from the edges kept.
+	// it, their distances from the edges kept. Excel does so when the
+	// sheet's scaleWithDoc says to ([HeaderFooter.ScaleWithDoc]).
 	z := p.sp.zoom
-	if !numeric.Positive(z) {
+	if !numeric.Positive(z) || p.sp.g.doc.ExcelRules && !hf.ScaleWithDoc {
 		z = 1
 	}
 	pageW, pageH := width, height

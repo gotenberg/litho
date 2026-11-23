@@ -624,6 +624,33 @@ func TestConvert_ExcelHeaderFooterInsets(t *testing.T) {
 	}
 }
 
+// TestConvert_ExcelHeaderScale locks the size of a footer on a sheet Excel
+// prints at 50%: half its own when the sheet's scaleWithDoc is set, its
+// own when it is not; Calc scales it whatever the flag says.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 62629_toMerge.xlsx, printed at 63% with scaleWithDoc="0",
+//     prints its footer's 8-point text at 8.04 points.
+func TestConvert_ExcelHeaderScale(t *testing.T) {
+	for _, tc := range []struct {
+		excel, scale bool
+		want         float64
+	}{{true, true, 5.5}, {true, false, 11}, {false, false, 5.5}} {
+		sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+		doc := newDoc(sh)
+		if tc.excel {
+			doc = excelDoc(sh)
+		}
+		sh.Page.Scale = 50
+		sh.HeaderFooter.ScaleWithDoc = tc.scale
+		sh.HeaderFooter.Odd.Footer = [3][]Span{{{Text: "foot", Font: &Font{Families: []string{"Carlito"}, Size: 11}}}}
+		if got := find(t, convert(t, doc, office.Options{}).Pages[0], "foot").size; !near(got, tc.want, 0.01) {
+			t.Errorf("Excel's rules %t, scaleWithDoc %t: footer at %.2f points, want %.2f", tc.excel, tc.scale, got, tc.want)
+		}
+	}
+}
+
 // TestConvert_ExcelHeaderPictures locks where a header and footer part's
 // picture prints: a header's top at the header margin, a footer's bottom
 // at the footer margin, the left part's at the left margin, the centre

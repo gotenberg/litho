@@ -29,7 +29,8 @@ const maxHeaderRunes = 4096
 // the odd, even and first page texts, each parsed into its left, centre
 // and right parts. As LibreOffice imports it, differentOddEven and
 // differentFirst give the even and first pages their own texts even when
-// those are empty, which then print nothing; scaleWithDoc is not read.
+// those are empty, which then print nothing; scaleWithDoc, true when
+// absent, says whether they print at the sheet's scale.
 // A picture a text places (&G) is the shape of the sheet's
 // legacyDrawingHF part its part names (pics, [sheetReader.headerPictures]);
 // a picture code without one is reported. However tall the text, the cells keep
@@ -67,7 +68,8 @@ func (r *reader) headerFooter(e *ooxml.Element, printed bool, pics map[string]*s
 	margins := func(header, footer, variant string) sheet.Margins {
 		return sheet.Margins{Header: parse(header, "H", variant), Footer: parse(footer, "F", variant)}
 	}
-	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter", "")}
+	v, has := e.Attr("scaleWithDoc")
+	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter", ""), ScaleWithDoc: ooxml.OnOff(v, has)}
 	if boolAttr(e, "differentOddEven") {
 		hf.DifferentOddEven = true
 		hf.Even = margins("evenHeader", "evenFooter", "EVEN")
