@@ -445,16 +445,25 @@ var tabTypes = map[string]css.TabAlign{"left": css.TabLeft, "center": css.TabCen
 
 // tabStops reads a style:tab-stops element (ODF 1.3, Part 3, 17.8) of a
 // paragraph whose start indent is indent: the stops in increasing
-// position, measured from the containing block's content box. Writer
-// counts the positions from the paragraph's indent when the document sets
+// position, measured from the start of the paragraph's content box, its
+// indent, which the layout measures them from. Writer counts the
+// positions from the paragraph's indent when the document sets
 // TabsRelativeToIndent, its default, and from the page area's edge
-// otherwise. The slice is never nil: a paragraph lays its tabs out the
-// Office way, its custom stops first, then the multiples of TabSize.
+// otherwise, a stop before the indent then left out. The slice is never
+// nil: a paragraph lays its tabs out the Office way, its custom stops
+// first, then the multiples of TabSize.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/tdf117187.odt: the text after the tabs of
+//     its paragraphs indented by 2.09 cm prints where LibreOffice prints
+//     it once the stops count from the indent once.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, the text after a
+//     tab to a left stop at 3 cm in a paragraph indented by 2 cm prints
+//     5 cm from the page area's edge.
 func (b *builder) tabStops(ts *odf.Element, indent float64) []css.TabStop {
 	out := []css.TabStop{}
 	if b.tabsRelative {
-		indent = max(indent, 0)
-	} else {
 		indent = 0
 	}
 	for _, t := range ts.All(odf.NSStyle, "tab-stop") {
@@ -462,7 +471,10 @@ func (b *builder) tabStops(ts *odf.Element, indent float64) []css.TabStop {
 		if !ok || pos < 0 || len(out) >= maxTabStops {
 			continue
 		}
-		stop := css.TabStop{Pos: pos + indent, Align: tabTypes[t.A(odf.NSStyle, "type")]}
+		if pos < indent {
+			continue
+		}
+		stop := css.TabStop{Pos: pos - indent, Align: tabTypes[t.A(odf.NSStyle, "type")]}
 		switch t.A(odf.NSStyle, "leader-text") {
 		case ".", "…":
 			stop.Leader = css.TabLeaderDots
