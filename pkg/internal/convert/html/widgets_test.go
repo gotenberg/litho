@@ -193,3 +193,16 @@ func TestPrepare_PlaceholderStyles(t *testing.T) {
 		t.Errorf("d: children %+v, want the empty line of a field without its placeholder", d.Children)
 	}
 }
+
+// TestPrepare_PasswordPlaceholder shows the placeholder of an empty
+// password field, as of any text field (HTML Standard, 4.10.5.3.10), and
+// a password's dots otherwise.
+func TestPrepare_PasswordPlaceholder(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<!DOCTYPE html><input id=e type=password placeholder=Secret><input id=v type=password value=abc placeholder=Secret>`, Options{})
+	for id, want := range map[string]string{"e": "Secret", "v": "•••"} {
+		if got := treeText(byID(t, p.root, id)); got != want {
+			t.Errorf("%s: text %q, want %q", id, got, want)
+		}
+	}
+}

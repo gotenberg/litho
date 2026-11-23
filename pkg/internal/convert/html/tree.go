@@ -1295,7 +1295,9 @@ func (b *builder) listRowStyle(r selectRow, st *css.Style) *css.Style {
 	return &c
 }
 
-// inputText returns the text an <input> shows.
+// inputText returns the text an <input> shows: its value, a password's
+// as dots, or its placeholder when its value is empty (HTML Standard,
+// 4.10.5.3.10), a password field's included.
 func inputText(n *dom.Node) string {
 	typ, _ := attr(n, "type")
 	value, hasValue := attr(n, "value")
@@ -1303,7 +1305,9 @@ func inputText(n *dom.Node) string {
 	case "checkbox", "radio", "file", "range", "color", "image", "hidden":
 		return ""
 	case "password":
-		return strings.Repeat("•", min(utf8.RuneCountInString(value), maxPasswordDots))
+		if value != "" {
+			return strings.Repeat("•", min(utf8.RuneCountInString(value), maxPasswordDots))
+		}
 	case "submit":
 		if !hasValue {
 			return "Submit"
