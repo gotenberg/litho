@@ -364,11 +364,12 @@ func LegacyAngles(p *Package) bool {
 
 // AbsoluteStartEnd reports a package whose fo:text-align start and end
 // mean left and right whatever the paragraph's writing mode: one that
-// LibreOffice or OpenOffice.org wrote, as its meta:generator says, which
-// LibreOffice reads so since those programs wrote left and right as
-// start and end. Any other producer's start and end follow the writing
-// mode (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9): start is the right
-// edge of a right-to-left paragraph.
+// LibreOffice before 26.2 or OpenOffice.org wrote, as its meta:generator
+// says, which LibreOffice reads so since those programs wrote left and
+// right as start and end. Any other producer's start and end, LibreOffice
+// 26.2's and later's included, follow the writing mode (ODF 1.3, Part 3,
+// 20.216; XSL 1.0, 7.16.9): start is the right edge of a right-to-left
+// paragraph. Writer and Impress read them alike.
 //
 // # Corpus evidence
 //
@@ -381,9 +382,28 @@ func LegacyAngles(p *Package) bool {
 //   - libreoffice/odt: odfexport/tdf131812.odt, written by LibreOfficeDev
 //     7.0, prints its right-to-left paragraph aligned end at the right
 //     margin.
+//   - probe, odt and odp: through gotenberg/gotenberg:9.4.1, right-to-left
+//     paragraphs aligned start print at the left under the generators
+//     LibreOffice 7.4 to 25.8 and at the right under LibreOffice 26.2 and
+//     26.8, in a text document and in a presentation's frame alike.
+//   - libreoffice/odp: sd/para-align-start-end.fodp, written by
+//     LibreOfficeDev 26.8, prints its right-to-left paragraph aligned start
+//     at the right; sd/tdf128985.odp, by LibreOfficeDev 7.2, at the left.
 func AbsoluteStartEnd(p *Package) bool {
 	gen := strings.TrimSpace(Section(p.Meta, "meta").Child(NSMeta, "generator").TextContent())
-	return strings.HasPrefix(gen, "LibreOffice") || strings.HasPrefix(gen, "OpenOffice.org")
+	if strings.HasPrefix(gen, "OpenOffice.org") {
+		return true
+	}
+	for _, pre := range []string{"LibreOffice/", "LibreOfficeDev/"} {
+		if v, ok := strings.CutPrefix(gen, pre); ok {
+			major, rest, _ := strings.Cut(v, ".")
+			mj, err1 := intconv.Atoi(major)
+			mn, err2 := intconv.Atoi(leadingDigits(rest))
+			// A version that does not read is taken for an older one.
+			return err1 != nil || err2 != nil || mj < 26 || mj == 26 && mn < 2
+		}
+	}
+	return strings.HasPrefix(gen, "LibreOffice")
 }
 
 // maxViewBox bounds a number of an svg:viewBox read: 1e12. Anti-DoS

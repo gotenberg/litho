@@ -57,3 +57,29 @@ func TestLegacyShapeColours(t *testing.T) {
 		t.Errorf("stated fill: fill %q, stroke %q", props.Get("draw:fill-color"), props.Get("svg:stroke-color"))
 	}
 }
+
+// TestAbsoluteStartEnd locks which producers' start and end read as left
+// and right (see [AbsoluteStartEnd], which holds the measurements).
+func TestAbsoluteStartEnd(t *testing.T) {
+	for _, tc := range []struct {
+		generator string
+		want      bool
+	}{
+		{"OpenOffice.org/3.3$Unix OpenOffice.org_project/330m20$Build-9567", true},
+		{"LibreOfficeDev/7.2.0.0.alpha1$Linux_X86_64 LibreOffice_project/4d52", true},
+		{"LibreOffice/25.8.1.1$Linux_X86_64 LibreOffice_project/abc", true},
+		{"LibreOffice/26.2.0.3$Linux_X86_64 LibreOffice_project/abc", false},
+		{"LibreOfficeDev/26.8.0.0.alpha0$Linux_X86_64 LibreOffice_project/2642", false},
+		{"OpenOffice/4.1.7$Win32 OpenOffice.org_project/417m1$Build-9800", false},
+		{"", false},
+	} {
+		doc := `<office:document ` + drawNS + `><office:meta><meta:generator>` + tc.generator + `</meta:generator></office:meta></office:document>`
+		p, err := Open(context.Background(), []byte(doc), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := AbsoluteStartEnd(p); got != tc.want {
+			t.Errorf("%q: %v, want %v", tc.generator, got, tc.want)
+		}
+	}
+}
