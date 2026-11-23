@@ -64,6 +64,8 @@ func TestShadow_FlatTree(t *testing.T) {
 		{"invalid custom name", `<xcard><template shadowrootmode="open">[1]</template>A</xcard>`, "A"},
 		{"nested roots", `<div><template shadowrootmode="open">[<span><template shadowrootmode="open">(<slot></slot>)</template><slot></slot></span>]</template>A</div>`, "[(A)]"},
 		{"plain slot element", `<slot>A</slot>`, "A"},
+		{"a light slot unassigned", `<div><template shadowrootmode="open">[<slot></slot>]</template><slot slot="q">L</slot></div>`, "[]"},
+		{"a light slot is a plain slottable", `<div><template shadowrootmode="open">[<slot></slot>]</template><slot>L</slot></div>`, "[L]"},
 		{"slot in its own fallback", `<div><template shadowrootmode="open">[<slot name="a"><slot name="a">F</slot></slot>]</template>A</div>`, "[F]"},
 	}
 	for _, tt := range tests {
