@@ -441,6 +441,11 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 			}
 			p.p.SetAdvance(i, wi)
 			w[i] = wi
+			if office && p.tabs[i].past {
+				// The text after a tab taken past the line's end runs on
+				// unbroken.
+				avail = math.Inf(1)
+			}
 			if brk && i > start {
 				// The tab and the word after it move to the next line
 				// together, as Writer moves a tab portion.

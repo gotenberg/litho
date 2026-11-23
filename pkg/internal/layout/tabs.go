@@ -22,6 +22,9 @@ func officeTabs(st *css.Style) bool { return st != nil && st.TabStops != nil }
 // leader.
 type tabChoice struct {
 	leader css.TabLeader
+	// past marks a tab taken to a stop past the line's end under
+	// css.Office.TabOverMargin.
+	past bool
 }
 
 // officeStep returns the default tab interval of the Office container of
@@ -72,7 +75,8 @@ func (e *engine) nextStop(root *box, at float64) (css.TabStop, bool) {
 // paragraph's end, without the spaces that hang there. A decimal stop
 // aligns the first decimal separator of the paragraph's language in it,
 // else its end. A stop past the line's end makes the tab fill the rest of
-// the line, as Writer cuts it at the right margin.
+// the line, as Writer cuts it at the right margin, unless root's
+// css.Office.TabOverMargin takes the tab to it.
 func (e *engine) officeTab(root *box, p *ifcPara, w []float64, i int, at, lineEnd float64) (float64, bool) {
 	ts, ok := e.nextStop(root, at)
 	if !ok {
@@ -114,6 +118,10 @@ func (e *engine) officeTab(root *box, p *ifcPara, w []float64, i int, at, lineEn
 	}
 	tw = max(tw, 0)
 	if ts.Pos > lineEnd+eps {
+		if root.st.TabOverMargin {
+			p.tabs[i] = tabChoice{leader: ts.Leader, past: true}
+			return tw, false
+		}
 		return max(min(tw, lineEnd-at), 0), false
 	}
 	word := 0.0

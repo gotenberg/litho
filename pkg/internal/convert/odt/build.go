@@ -122,6 +122,9 @@ type builder struct {
 	// tabsRelative is settings.xml's TabsRelativeToIndent: tab positions
 	// count from the paragraph's indent, Writer's default.
 	tabsRelative bool
+	// tabOverMargin is settings.xml's TabOverMargin: a tab goes to its
+	// stop past the paragraph's end ([css.Office.TabOverMargin]).
+	tabOverMargin bool
 	// absoluteAlign reads fo:text-align start and end as left and right
 	// in every writing mode ([odf.AbsoluteStartEnd]).
 	absoluteAlign bool

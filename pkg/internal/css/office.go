@@ -280,6 +280,14 @@ type Office struct {
 	// container's content box. It applies to a block container whose
 	// lines no float without those fields narrows.
 	WriterIndents bool
+	// TabOverMargin takes the tabs of a block container of
+	// [Style.TabStops] to their stops past the line's end, where a stop
+	// past the line's end otherwise makes the tab fill the rest of the
+	// line, and runs the text after such a tab on along the line unbroken,
+	// past the line's end, as Writer lays a tab out under its
+	// TabOverMargin compatibility setting. It applies to the lines of a
+	// block container.
+	TabOverMargin bool
 	// HangPunctuation lets an ideographic comma or full stop, or their
 	// fullwidth forms, that ends a line and does not fit on it hang past
 	// the line's end, drawn but neither fitted nor aligned, as Writer

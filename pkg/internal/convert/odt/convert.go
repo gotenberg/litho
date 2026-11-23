@@ -66,6 +66,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), shared: css.NewStyles(), fonts: fonts, symbols: office.NewSymbolCodes(),
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
 		tabsRelative:  configBool(pkg.Settings, "TabsRelativeToIndent", true),
+		tabOverMargin: configBool(pkg.Settings, "TabOverMargin", false),
 		absoluteAlign: odf.AbsoluteStartEnd(pkg),
 	}
 	marks, err := resolveChanges(ctx, body, opts.TrackedChanges, b.rowTracked, b.warn)

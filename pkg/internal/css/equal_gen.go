@@ -2282,6 +2282,9 @@ func equalOffice(a, b *Office) bool {
 	if a.WriterIndents != b.WriterIndents {
 		return false
 	}
+	if a.TabOverMargin != b.TabOverMargin {
+		return false
+	}
 	if a.HangPunctuation != b.HangPunctuation {
 		return false
 	}
@@ -2323,6 +2326,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.ExactHeight)
 	h = mixBool(h, x.WriterLines)
 	h = mixBool(h, x.WriterIndents)
+	h = mixBool(h, x.TabOverMargin)
 	h = mixBool(h, x.HangPunctuation)
 	h = mixBool(h, x.KeepHangul)
 	h = mixBool(h, x.OfficeEmoji)

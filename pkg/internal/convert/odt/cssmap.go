@@ -349,6 +349,7 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 	st.Border = p.border
 	strokeBorders(st)
 	st.WriterIndents = true
+	st.TabOverMargin = b.tabOverMargin
 	st.TextIndent = css.Pts(p.indent)
 	if a, ok := textAligns[p.align]; ok {
 		st.TextAlign = a

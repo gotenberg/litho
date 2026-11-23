@@ -90,6 +90,12 @@ func stop(pos float64, a css.TabAlign, l css.TabLeader) css.TabStop {
 //     where it advances to 0.5in; a stop with a word too wide after it
 //     leaving a line holding the tab alone; "1234,5" on a French decimal
 //     stop.
+//   - libreoffice/odt: layout/tab-over-margin.odt, under Writer's
+//     TabOverMargin setting, ends its text on a right stop 2 cm past the
+//     paragraph's end; repacked with that stop left-aligned, at 3.5 in or
+//     4.2 in (past the page area's edge), right-aligned at 4.2 in, or with
+//     a sentence after the tab, LibreOffice prints the text from or to the
+//     stop on the tab's line, unbroken, past the margin.
 func TestTabs_Office(t *testing.T) {
 	L, C, R, D := css.TabLeft, css.TabCenter, css.TabRight, css.TabDecimal
 	none := css.TabLeaderNone
@@ -146,6 +152,20 @@ func TestTabs_Office(t *testing.T) {
 			"a stop past the line's end fills the line",
 			[]css.TabStop{stop(150, L, none)},
 			"a\tb\tc", 100, nil, "", "a@0,8 b@0,18 c@0,28",
+		},
+		{
+			"a stop past the line's end taken over the margin",
+			[]css.TabStop{stop(150, L, none)},
+			"a\tb c", 100,
+			[]func(*css.Style){func(s *css.Style) { s.TabOverMargin = true }},
+			"", "a@0,8 b@150,8 c@170,8",
+		},
+		{
+			"a right stop past the line's end taken over the margin",
+			[]css.TabStop{stop(150, R, none)},
+			"a\tbb cc", 100,
+			[]func(*css.Style){func(s *css.Style) { s.TabOverMargin = true }},
+			"", "a@0,8 b@100,8 b@110,8 c@130,8 c@140,8",
 		},
 		{
 			"the default stop at the line's end moves the tab", nil,
