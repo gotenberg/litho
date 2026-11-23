@@ -2,6 +2,7 @@ package xlsx
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -78,13 +79,20 @@ func (r *reader) shapeTextOf(tb, style *ooxml.Element) *shapeText {
 			base.Families = r.themeFont("+mj-lt")
 		}
 	}
+	lst := tb.Child(ooxml.NSA, "lstStyle")
 	n := 0
 paras:
 	for _, p := range tb.Kids() {
 		if !p.Is(ooxml.NSA, "p") {
 			continue
 		}
-		para := shapePara{align: attr(p.Child(ooxml.NSA, "pPr"), "algn"), size: base.Size}
+		pPr := p.Child(ooxml.NSA, "pPr")
+		level := levelStyle(lst, attr(pPr, "lvl"))
+		para := shapePara{align: attr(pPr, "algn"), size: base.Size}
+		if para.align == "" {
+			para.align = attr(level, "algn")
+		}
+		base := r.runStyle(level.Child(ooxml.NSA, "defRPr"), base)
 		endStyle := r.runStyle(p.Child(ooxml.NSA, "endParaRPr"), base)
 		para.size = endStyle.Size
 		for _, k := range p.Kids() {
@@ -108,6 +116,24 @@ paras:
 		st.paras = append(st.paras, para)
 	}
 	return st
+}
+
+// levelStyle returns the paragraph properties the text body's list style
+// lst gives a paragraph of level lvl (ECMA-376 Part 1, 21.1.2.4, lstStyle
+// and lvl1pPr to lvl9pPr; 21.1.2.2.7, pPr lvl, 0 to 8, 0 when absent): their alignment and their defRPr run properties stand under
+// the paragraph's own. nil when the list style sets none.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 57826.xlsx prints the text "test ok" of a text box whose
+//     list style's lvl1pPr is centred with a defRPr in Arial centred in
+//     the box, in Arial.
+func levelStyle(lst *ooxml.Element, lvl string) *ooxml.Element {
+	n, err := intconv.Atoi(strings.TrimSpace(lvl))
+	if err != nil || n < 0 || n > 8 {
+		n = 0
+	}
+	return lst.Child(ooxml.NSA, "lvl"+strconv.Itoa(n+1)+"pPr")
 }
 
 // themeFont returns the face a DrawingML typeface names: the theme's

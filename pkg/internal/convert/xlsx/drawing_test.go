@@ -102,12 +102,27 @@ func TestRead_Drawings(t *testing.T) {
 }
 
 // TestRead_ShapeText checks a text box's paragraphs drawn over its shape:
-// aligned, anchored and in its runs' sizes and colours.
+// aligned, anchored and in its runs' sizes and colours, set by the
+// paragraph and its runs or by the text body's list style (see
+// [levelStyle]).
 func TestRead_ShapeText(t *testing.T) {
 	t.Parallel()
+	red := `<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`
+	for _, body := range []string{
+		`<a:p><a:pPr algn="r"/><a:r><a:rPr sz="2000" b="1">` + red + `</a:rPr><a:t>Hi</a:t></a:r></a:p>`,
+		`<a:lstStyle><a:lvl1pPr algn="r"><a:defRPr sz="2000" b="1">` + red + `</a:defRPr></a:lvl1pPr></a:lstStyle><a:p><a:r><a:rPr/><a:t>Hi</a:t></a:r></a:p>`,
+	} {
+		shapeTextCase(t, body)
+	}
+}
+
+// shapeTextCase checks that the text body body draws "Hi" in 20-point red
+// text, right-aligned at the bottom of its 200 by 100 point box.
+func shapeTextCase(t *testing.T, body string) {
+	t.Helper()
 	drawing := `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="2540000" cy="1270000"/>` +
 		`<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Box"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/><a:noFill/></xdr:spPr>` +
-		`<xdr:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"/><a:p><a:pPr algn="r"/><a:r><a:rPr sz="2000" b="1"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:rPr><a:t>Hi</a:t></a:r></a:p></xdr:txBody></xdr:sp>` +
+		`<xdr:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"/>` + body + `</xdr:txBody></xdr:sp>` +
 		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
 	files := workbookFiles([]testSheet{{
 		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
@@ -138,7 +153,7 @@ func TestRead_ShapeText(t *testing.T) {
 	}
 	tx := texts[0]
 	if tx.Size != 20 || tx.Color != (typeset.Color{R: 1, A: 1}) || tx.Origin.X != 180 || tx.Origin.Y <= 80 || tx.Origin.Y >= 100 {
-		t.Errorf("run at %+v size %v colour %+v, want 20-point red text right-aligned at the bottom", tx.Origin, tx.Size, tx.Color)
+		t.Errorf("%s: run at %+v size %v colour %+v, want 20-point red text right-aligned at the bottom", body, tx.Origin, tx.Size, tx.Color)
 	}
 }
 
