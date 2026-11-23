@@ -70,6 +70,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		formerWrap:    configBool(pkg.Settings, "UseFormerTextWrapping", false),
 		absoluteAlign: odf.AbsoluteStartEnd(pkg),
 	}
+	b.styles.SetDefaultGraphicColours(odf.LegacyShapeColours(pkg))
 	marks, err := resolveChanges(ctx, body, opts.TrackedChanges, b.rowTracked, b.warn)
 	if err != nil {
 		return nil, err
