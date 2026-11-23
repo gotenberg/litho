@@ -45,6 +45,31 @@ func TestGrid_TrackLists(t *testing.T) {
 	}
 }
 
+// TestGrid_MixedCalcTracks reads a calc() mixing lengths and
+// percentages as a track breadth, a minmax() bound, a fit-content()
+// argument and an implicit track size (CSS Values 4, 10.8; CSS Grid 1,
+// 7.2.1), held for the layout to resolve against the content box.
+func TestGrid_MixedCalcTracks(t *testing.T) {
+	t.Parallel()
+	calc := TrackBreadth{Kind: TrackCalc, Calc: Dimension{Kind: Calc, Value: -7.5, Fraction: 0.5}}
+	for _, tc := range []struct {
+		decl string
+		get  func(*Style) []TrackSize
+		want TrackSize
+	}{
+		{"grid-template-columns: calc(50% - 10px) 1fr", func(s *Style) []TrackSize { return s.GridTemplateColumns.Sizes }, TrackSize{Min: calc, Max: calc}},
+		{"grid-template-rows: minmax(calc(50% - 10px), 1fr)", func(s *Style) []TrackSize { return s.GridTemplateRows.Sizes }, TrackSize{Min: calc, Max: TrackBreadth{Kind: TrackFlex, Value: 1}}},
+		{"grid-template-columns: fit-content(calc(50% - 10px))", func(s *Style) []TrackSize { return s.GridTemplateColumns.Sizes }, TrackSize{Max: calc, FitContent: true}},
+		{"grid-auto-rows: calc(50% - 10px)", func(s *Style) []TrackSize { return s.GridAutoRows }, TrackSize{Min: calc, Max: calc}},
+		{"grid-template: calc(50% - 10px) / 1fr", func(s *Style) []TrackSize { return s.GridTemplateRows.Sizes }, TrackSize{Min: calc, Max: calc}},
+	} {
+		got := tc.get(styleOf(t, tc.decl))
+		if len(got) == 0 || !reflect.DeepEqual(got[0], tc.want) {
+			t.Errorf("%s: tracks %+v, want %+v first", tc.decl, got, tc.want)
+		}
+	}
+}
+
 func TestGrid_InvalidValues(t *testing.T) {
 	t.Parallel()
 	for _, decl := range []string{

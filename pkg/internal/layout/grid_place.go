@@ -126,15 +126,20 @@ func repeatCount(l css.TrackList, avail float64, def bool, minSize, maxSize, gap
 	return k
 }
 
-// fixedBreadth reports a length or percentage breadth.
+// fixedBreadth reports a length or percentage breadth, a calc() mixing
+// the two included.
 func fixedBreadth(b css.TrackBreadth) bool {
-	return b.Kind == css.TrackLength || b.Kind == css.TrackPercent
+	return b.Kind == css.TrackLength || b.Kind == css.TrackPercent || b.Kind == css.TrackCalc
 }
 
-// breadthOf returns a fixed breadth's size against ref.
+// breadthOf returns a fixed breadth's size against ref, a calculation
+// that comes out negative clamped to 0 (CSS Values 4, 10.12).
 func breadthOf(b css.TrackBreadth, ref float64) float64 {
-	if b.Kind == css.TrackPercent {
+	switch b.Kind { //nolint:exhaustive // a length holds its size
+	case css.TrackPercent:
 		return max(b.Value*ref, 0)
+	case css.TrackCalc:
+		return max(b.Calc.Resolve(ref), 0)
 	}
 	return max(b.Value, 0)
 }

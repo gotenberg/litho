@@ -71,17 +71,17 @@ func (t *gtrack) maxContentMax() bool {
 func newTrack(s css.TrackSize, ref float64, def bool) *gtrack {
 	t := &gtrack{min: s.Min, max: s.Max, fit: s.FitContent}
 	pct := func(b css.TrackBreadth) css.TrackBreadth {
-		if b.Kind != css.TrackPercent {
+		if b.Kind != css.TrackPercent && b.Kind != css.TrackCalc {
 			return b
 		}
 		if !def {
 			return css.TrackBreadth{Kind: css.TrackAuto}
 		}
-		return css.TrackBreadth{Kind: css.TrackLength, Value: b.Value * ref}
+		return css.TrackBreadth{Kind: css.TrackLength, Value: breadthOf(b, ref)}
 	}
 	t.min = pct(t.min)
 	if t.fit {
-		if fixedBreadth(t.max) && (t.max.Kind != css.TrackPercent || def) {
+		if fixedBreadth(t.max) && (t.max.Kind == css.TrackLength || def) {
 			t.fitArg = breadthOf(t.max, ref)
 		} else {
 			// fit-content() of a percentage of an indefinite size is

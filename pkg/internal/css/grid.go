@@ -31,12 +31,19 @@ const (
 	// max-content keywords.
 	TrackMinContent
 	TrackMaxContent
+	// TrackCalc is a calc() mixing lengths and a percentage of the grid
+	// container's content box size in the track's axis, held in Calc
+	// (CSS Values 4, 10.8).
+	TrackCalc
 )
 
 // TrackBreadth is a track sizing function (CSS Grid 1, 7.2.1).
 type TrackBreadth struct {
 	Kind  TrackKind
 	Value float64
+	// Calc is the calculation of a TrackCalc, a [Dimension] of kind
+	// [Calc] resolved against the content box size.
+	Calc Dimension
 }
 
 // TrackSize is a <track-size> (CSS Grid 1, 7.2.1): its minimum and maximum
@@ -258,14 +265,23 @@ func parseBreadth(t token, flex bool) (breadthSpec, bool) {
 		}
 		return breadthSpec{kind: TrackFlex, fr: min(t.num, maxFlexFactor)}, true
 	}
-	l, ok := parseLength(t, allowPct|nonNeg)
+	l, ok := parseLength(t, allowPct|nonNeg|allowMixed)
 	if !ok {
 		return breadthSpec{}, false
 	}
-	if l.hasPct && !l.hasLen {
-		return breadthSpec{kind: TrackPercent, l: l}, true
+	return breadthSpec{kind: lengthTrack(l), l: l}, true
+}
+
+// lengthTrack is the kind of breadth the length or percentage l is: a
+// percentage, a calc() mixing lengths and percentages, or a length.
+func lengthTrack(l length) TrackKind {
+	switch {
+	case l.hasPct && !l.hasLen && l.expr == nil:
+		return TrackPercent
+	case l.hasPct:
+		return TrackCalc
 	}
-	return breadthSpec{kind: TrackLength, l: l}, true
+	return TrackLength
 }
 
 // parseTrackSize parses a <track-size> (CSS Grid 1, 7.2.1).
@@ -290,14 +306,11 @@ func parseTrackSize(t token) (trackSpec, bool) {
 			if len(args) != 1 || len(args[0]) != 1 {
 				return trackSpec{}, false
 			}
-			l, ok := parseLength(args[0][0], allowPct|nonNeg)
+			l, ok := parseLength(args[0][0], allowPct|nonNeg|allowMixed)
 			if !ok {
 				return trackSpec{}, false
 			}
-			b := breadthSpec{kind: TrackLength, l: l}
-			if l.hasPct && !l.hasLen {
-				b.kind = TrackPercent
-			}
+			b := breadthSpec{kind: lengthTrack(l), l: l}
 			return trackSpec{min: breadthSpec{kind: TrackAuto}, max: b, fit: true}, true
 		}
 	}
@@ -315,7 +328,9 @@ func parseTrackSize(t token) (trackSpec, bool) {
 // length or percentage), a minmax() with a fixed minimum, or one with a
 // fixed maximum and an inflexible minimum.
 func (s trackSpec) fixed() bool {
-	fixedB := func(b breadthSpec) bool { return b.kind == TrackLength || b.kind == TrackPercent }
+	fixedB := func(b breadthSpec) bool {
+		return b.kind == TrackLength || b.kind == TrackPercent || b.kind == TrackCalc
+	}
 	if s.fit {
 		return false
 	}
@@ -516,6 +531,8 @@ func (s *styler) computeBreadth(b breadthSpec) TrackBreadth {
 		return TrackBreadth{Kind: TrackLength, Value: max(b.l.points(s.lc), 0)}
 	case TrackPercent:
 		return TrackBreadth{Kind: TrackPercent, Value: max(clampLen(b.l.pct/100), 0)}
+	case TrackCalc:
+		return TrackBreadth{Kind: TrackCalc, Calc: b.l.dim(s.lc, true)}
 	case TrackFlex:
 		return TrackBreadth{Kind: TrackFlex, Value: b.fr}
 	}

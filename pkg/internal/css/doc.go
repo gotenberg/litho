@@ -40,8 +40,9 @@
 // namespace; :has(), :dir() and the form state pseudo-classes other than
 // :checked, :disabled and :enabled make a selector invalid. min(), max() and clamp() comparing a length with a
 // percentage make a value invalid, and so does a calc() mixing lengths and
-// percentages outside the box sizes, margins, paddings, insets, gaps and
-// flex-basis, which hold it as a [Calc]. Cascade layers are flattened into
+// percentages outside the box sizes, margins, paddings, insets, gaps,
+// flex-basis, positions, background and mask sizes and grid track sizes,
+// which hold it as a [Calc]. Cascade layers are flattened into
 // source order. Logical properties map onto the physical ones of a
 // horizontal left-to-right box. The input is UTF-8.
 // The flexible box layout properties and the box alignment properties that

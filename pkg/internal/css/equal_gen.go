@@ -2448,6 +2448,9 @@ func equalTrackBreadth(a, b *TrackBreadth) bool {
 	if math.Float64bits(a.Value) != math.Float64bits(b.Value) {
 		return false
 	}
+	if !equalDimension(&a.Calc, &b.Calc) {
+		return false
+	}
 	return true
 }
 
@@ -2455,6 +2458,7 @@ func equalTrackBreadth(a, b *TrackBreadth) bool {
 func hashTrackBreadth(h uint64, x *TrackBreadth) uint64 {
 	h = mix(h, uint64(x.Kind))
 	h = mix(h, math.Float64bits(x.Value))
+	h = hashDimension(h, &x.Calc)
 	return h
 }
 

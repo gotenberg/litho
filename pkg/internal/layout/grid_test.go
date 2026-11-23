@@ -32,6 +32,12 @@ func tpct(v float64) css.TrackSize {
 	return css.TrackSize{Min: b, Max: b}
 }
 
+// tcalc is a track of calc(v px + frac of the width).
+func tcalc(v, frac float64) css.TrackSize {
+	b := css.TrackBreadth{Kind: css.TrackCalc, Calc: css.Dimension{Kind: css.Calc, Value: px(v), Fraction: frac}}
+	return css.TrackSize{Min: b, Max: b}
+}
+
 func tminmax(lo, hi css.TrackBreadth) css.TrackSize { return css.TrackSize{Min: lo, Max: hi} }
 
 func tracks(sizes ...css.TrackSize) css.TrackList {
@@ -92,6 +98,12 @@ func TestGrid_TrackSizing(t *testing.T) {
 			[]func(*css.Style){cols(tpct(0.25), tpct(0.5)), rowsT(tpx(10))},
 			[]*Node{cell(), cell()},
 			[][4]float64{{0, 0, 25, 10}, {25, 0, 50, 10}},
+		},
+		{
+			"calc() columns mix a length and a percentage of the width",
+			[]func(*css.Style){cols(tcalc(-10, 0.5), tfr(1), tminmax(css.TrackBreadth{Kind: css.TrackCalc, Calc: css.Dimension{Kind: css.Calc, Value: px(5), Fraction: 0.1}}, css.TrackBreadth{Kind: css.TrackLength, Value: px(5)})), rowsT(tpx(10))},
+			[]*Node{cell(), cell(), cell()},
+			[][4]float64{{0, 0, 40, 10}, {40, 0, 45, 10}, {85, 0, 15, 10}},
 		},
 		{
 			"auto columns stretch over the free space",
