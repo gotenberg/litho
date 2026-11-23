@@ -58,10 +58,108 @@ func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	// whatever program wrote it: every formula is kept for the builder
 	// to compute (ODF 1.3 Part 3, 19.643 table:formula), under
 	// models.RecalculateAsNeeded and models.RecalculateAlways alike.
-	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen && r.keepFormulas {
-		c.Formula = f
+	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen {
+		if r.keepFormulas {
+			c.Formula = f
+		}
+		if href, ok := hyperlinkFormula(f); ok && c.Href == "" {
+			c.Href = href
+		} else if c.Href == "" && c.Value.Kind == sheet.Text && soleHyperlinkArgument(f) {
+			// HYPERLINK of one argument shows its URI: the cell's text.
+			c.Href = strings.TrimSpace(c.Value.Text)
+		}
 	}
 	return c, c.Value.Kind != sheet.Empty || visible(c.Style) || c.Formula != ""
+}
+
+// soleHyperlinkArgument reports a formula that is a call of HYPERLINK
+// with one argument, an expression (ODF 1.3 Part 2, 6.9.2): Calc shows the
+// URI it computes as the cell's text and links the cell to it, the cached
+// text standing for the URI.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/functions.ods links the cell of
+//     of:=HYPERLINK([.O10]), which shows http://www.example.org, to
+//     http://www.example.org/.
+func soleHyperlinkArgument(f string) bool {
+	f = strings.TrimSpace(f)
+	if i := strings.Index(f, ":="); i >= 0 && i < 8 {
+		f = f[i+1:]
+	}
+	f = strings.TrimSpace(strings.TrimPrefix(f, "="))
+	const name = "HYPERLINK("
+	if len(f) < len(name) || !strings.EqualFold(f[:len(name)], name) || !strings.HasSuffix(f, ")") {
+		return false
+	}
+	depth, quoted := 0, false
+	for _, r := range f[len(name) : len(f)-1] {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case quoted:
+		case r == '(' || r == '[':
+			depth++
+		case r == ')' || r == ']':
+			if depth--; depth < 0 {
+				return false
+			}
+		case r == ';' && depth == 0:
+			return false
+		}
+	}
+	return depth == 0 && !quoted
+}
+
+// hyperlinkFormula returns the target of a formula that is a call of
+// HYPERLINK whose first argument, the URI, is a string literal (ODF 1.3
+// Part 2, 6.9.2 HYPERLINK; its strings 5.4, a doubled quotation mark
+// standing for one; the "of:" namespace prefix of 19.643 table:formula):
+// the cell links to it, as Calc prints it. A target computed by an
+// expression links nowhere.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/functions.ods links the cell of
+//     of:=HYPERLINK("http://www.example.com"; "Hyperlink") to
+//     http://www.example.com/ in LibreOffice's PDF.
+func hyperlinkFormula(f string) (string, bool) {
+	f = strings.TrimSpace(f)
+	if i := strings.Index(f, ":="); i >= 0 && i < 8 {
+		f = f[i+1:]
+	}
+	f = strings.TrimSpace(strings.TrimPrefix(f, "="))
+	const name = "HYPERLINK("
+	if len(f) < len(name) || !strings.EqualFold(f[:len(name)], name) {
+		return "", false
+	}
+	rest := strings.TrimLeft(f[len(name):], " ")
+	if !strings.HasPrefix(rest, `"`) {
+		return "", false
+	}
+	var b strings.Builder
+	i := 1
+	for ; i < len(rest); i++ {
+		if rest[i] != '"' {
+			b.WriteByte(rest[i])
+			continue
+		}
+		if i+1 < len(rest) && rest[i+1] == '"' {
+			b.WriteByte('"')
+			i++
+			continue
+		}
+		break
+	}
+	if i >= len(rest) {
+		return "", false
+	}
+	after := strings.TrimSpace(rest[i+1:])
+	if !strings.HasPrefix(after, ";") && after != ")" {
+		return "", false
+	}
+	target := strings.TrimSpace(b.String())
+	return target, target != ""
 }
 
 // maxFormulaLen caps the formula text kept for a cell. Anti-DoS guard,
