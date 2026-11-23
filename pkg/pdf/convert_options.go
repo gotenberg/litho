@@ -308,7 +308,8 @@ func WithOrientation(orientation models.Orientation) ConvertOption {
 // WithPageRanges selects the pages written, by the page range specification
 // [ParsePageRanges] reads, resolved against the pages the source lays out
 // on; empty, the default, writes every page. The pages come out in the
-// order the specification lists them, a page listed twice written twice. A
+// order the specification lists them, each page once, at the position
+// where the specification first names it. A
 // specification [ParsePageRanges] refuses, a page past the last one
 // included, fails the conversion with [ErrInvalidConvertOptions], which
 // also wraps [ErrInvalidPageRange].

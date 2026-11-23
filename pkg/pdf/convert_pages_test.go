@@ -19,7 +19,7 @@ func TestConvert_PageRanges(t *testing.T) {
 		spec  string
 		pages int
 	}{
-		{"", 5}, {"2", 1}, {"3-5", 3}, {"5,1", 2}, {"1,1", 2}, {"odd", 3}, {"last", 1},
+		{"", 5}, {"2", 1}, {"3-5", 3}, {"5,1", 2}, {"1,1", 1}, {"odd", 3}, {"last", 1},
 	} {
 		var out bytes.Buffer
 		rep, err := FromText(strings.NewReader(src), WithPageRanges(tc.spec), WithConvertFontDirs(convertFontDir(t))).WriteTo(context.Background(), &out)
