@@ -548,11 +548,7 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		}
 		m = mul(page, mul(m, local))
 	}
-	pts := make([][2]float64, 0, 4)
-	for _, c := range [][2]float64{{0, 0}, {w, 0}, {0, h}, {w, h}} {
-		px, py := apply(m, c[0], c[1])
-		pts = append(pts, [2]float64{px, py})
-	}
+	pts := outlinePoints(g, m, w, h)
 	pad := 0.0
 	if s != nil {
 		pad = s.line.Width / 2
@@ -582,6 +578,52 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		},
 		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	}, true
+}
+
+// outlinePoints returns the points of the outline of g in a box w by h,
+// through m: the box's corners for no geometry, else the ends and control
+// points of its paths. Their bounds are the box Calc gives the shape on
+// the sheet (its bound rectangle), which it mirrors on a right-to-left
+// sheet ([sheet.Drawing.Painted]): a turned polyline's own extent, not
+// that of the turned box its points are fitted to.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137081_RTL_page_anchored.ods prints its
+//     turned polyline with the left edge of its points where its turned
+//     box's left edge lies, where the polyline of the same sheet left to
+//     right ends at its box's right edge.
+//   - probe, ods: that polyline, and a rectangle of its box and turn, on
+//     a sheet left to right and right to left with a value in A1: the
+//     right-to-left polyline lies 19 points left of where mirroring its
+//     turned box puts it; the rectangles lie where litho puts them.
+func outlinePoints(g *shape.Geometry, m typeset.Matrix, w, h float64) [][2]float64 {
+	var pts [][2]float64
+	if g != nil {
+		for _, path := range shape.Paths(g, typeset.Rect{Width: w, Height: h}) {
+			for _, op := range path.Ops {
+				n := 0
+				switch op.Kind {
+				case typeset.MoveTo, typeset.LineTo:
+					n = 1
+				case typeset.CurveTo:
+					n = 3
+				case typeset.ClosePath:
+				}
+				for _, p := range op.P[:n] {
+					px, py := apply(m, p.X, p.Y)
+					pts = append(pts, [2]float64{px, py})
+				}
+			}
+		}
+	}
+	if len(pts) == 0 {
+		for _, c := range [][2]float64{{0, 0}, {w, 0}, {0, h}, {w, h}} {
+			px, py := apply(m, c[0], c[1])
+			pts = append(pts, [2]float64{px, py})
+		}
+	}
+	return pts
 }
 
 // adjustUnit is the unit of a preset geometry's adjust value: 100,000 for

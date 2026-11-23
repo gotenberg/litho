@@ -269,3 +269,25 @@ func TestRead_StandardRowsUnderATallDefault(t *testing.T) {
 		t.Errorf("rows %+v, want row 0 at %v", sh.Rows, defaultRowHeight)
 	}
 }
+
+// TestRead_ShapeBoxIsItsOutline locks the box a shape takes on the sheet:
+// that of its outline's points, not of the turned box they are fitted to
+// (see [outlinePoints]). A polyline of three points turned by -2.4939
+// radians covers 44.9 mm across, its box 51.74 mm.
+func TestRead_ShapeBoxIsItsOutline(t *testing.T) {
+	f := flat{
+		body: `<table:table table:name="S"><table:shapes>` +
+			`<draw:polyline draw:name="P" svg:width="50.42mm" svg:height="19.11mm" draw:transform="rotate (-2.4939009681747) translate (145mm 25mm)" svg:viewBox="0 0 5043 1912" draw:points="0,0 5043,0 4184,1912"/>` +
+			`</table:shapes><table:table-row><table:table-cell/></table:table-row></table:table>`,
+	}
+	doc, _ := read(t, f.bytes())
+	d := doc.Sheets[0].Drawings
+	if len(d) != 1 {
+		t.Fatalf("%d drawings, want 1", len(d))
+	}
+	// Within a point: the box grows by half the line's width.
+	mm := 72 / 25.4
+	if math.Abs(d[0].Width-44.9*mm) > 1 || math.Abs(d[0].X-100.1*mm) > 1 {
+		t.Errorf("box from x %.2f, %.2f wide; want %.2f, %.2f", d[0].X, d[0].Width, 100.1*mm, 44.9*mm)
+	}
+}
