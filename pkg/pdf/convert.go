@@ -785,6 +785,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		Scale:                 o.scale,
 		SinglePage:            o.singlePage,
 		FittedLimit:           typeset.FittedPageLimit(version),
+		Version:               version,
 		OmitBackgrounds:       o.omitCanvasBackground,
 		OmitOutline:           o.omitOutline,
 		NoShrinkToFit:         o.noShrinkToFit,

@@ -2,7 +2,9 @@ package imagefile
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"image"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -62,4 +64,32 @@ func (p *profile) forSpace(n int) []byte {
 		return nil
 	}
 	return p.data
+}
+
+// Profile returns the ICC profile the PNG or JPEG file data embeds, as
+// the file stores it once inflated or joined: a PNG's iCCP chunk (PNG 3rd
+// edition, 11.3.2.3), a JPEG's ICC_PROFILE APP2 segments (ICC.1:2022,
+// Annex B.4); nil for none and for another format. Its size is bounded as
+// [Read] bounds it.
+func Profile(data []byte, f Format) []byte {
+	switch f { //nolint:exhaustive // the other formats carry no profile this package reads
+	case PNG:
+		return readPNGMeta(data).icc
+	case JPEG:
+		return readJPEGMeta(data, len(data)).icc
+	}
+	return nil
+}
+
+// EncodeProfiled writes img losslessly as [Read] writes a decoded picture,
+// its colours read through the ICC profile icc as an ICCBased colour space
+// (ISO 32000-1, 8.6.5.5) when [Read] would keep it: a profile it refuses,
+// one of a major version past 2 under pdf14 among them, or one of another
+// colour space than img's, leaves the colours in the device space of their
+// count, and reason says why. pdf14 also writes 16-bit samples at 8 bits.
+// The caller owns img; EncodeProfiled does not release it.
+func EncodeProfiled(ctx context.Context, img image.Image, icc []byte, pdf14 bool) (_ *typeset.ImageSource, reason string, err error) {
+	p, reason := readProfile(icc, pdf14)
+	src, err := encode(ctx, img, encodeOptions{no16: pdf14, icc: p})
+	return src, reason, err
 }

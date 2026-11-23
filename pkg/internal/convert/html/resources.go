@@ -121,6 +121,9 @@ type resources struct {
 	// stop ends the conversion at a required resource that does not load
 	// ([Options.stop]), nil when resources are not required.
 	stop context.CancelCauseFunc
+	// pdf14 writes pictures for PDF 1.4, which reads no ICC profile of a
+	// major version past 2 (ISO 32000-1, Table 67).
+	pdf14 bool
 }
 
 // resourceAccount counts and caches what a document and the documents of
@@ -153,7 +156,7 @@ func newResources(fsys fs.FS) *resources {
 // frames read within the bounds of the conversion, with SVG pictures and
 // formulas of their own.
 func (r *resources) forFrame() *resources {
-	return &resources{fsys: r.fsys, client: r.client, resourceAccount: r.resourceAccount, stop: r.stop}
+	return &resources{fsys: r.fsys, client: r.client, resourceAccount: r.resourceAccount, stop: r.stop, pdf14: r.pdf14}
 }
 
 // fetch returns the bytes u names: a data: URL's payload (RFC 2397), an
@@ -334,6 +337,26 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		// Orientations 5 to 8 turn the picture a quarter.
 		pic.Width, pic.Height = pic.Height, pic.Width
 	}
+	var icc []byte
+	switch format {
+	case "jpeg":
+		icc = imagefile.Profile(data, imagefile.JPEG)
+	case "png":
+		icc = imagefile.Profile(data, imagefile.PNG)
+	}
+	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) && icc != nil {
+		// A JPEG that embeds a colour profile is kept as its bytes, its
+		// colours read through the profile, as the image file import
+		// reads it.
+		_, err := imagefile.Read(ctx, data, imagefile.JPEG, imagefile.Options{PDF14: r.pdf14}, func(p *imagefile.Picture) error {
+			pic.Source = p.Source
+			return nil
+		})
+		if err != nil {
+			return nil, pictureDataError{fmt.Errorf("reading the JPEG image: %w", err)}
+		}
+		return pic, nil
+	}
 	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
 		src, err := typeset.JPEGImage(ctx, data)
 		if err != nil {
@@ -363,7 +386,17 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		mem.Release(charged)
 		return nil, err
 	}
-	src, err := typeset.EncodeImage(ctx, oriented)
+	var src *typeset.ImageSource
+	if icc != nil {
+		// A picture that embeds a colour profile keeps it as the stream of
+		// an ICCBased colour space (ISO 32000-1, 8.6.5.5; PNG 3rd edition,
+		// 11.3.2.3), bounded and checked as the image file import keeps
+		// it: a profile it refuses leaves the colours as sRGB.
+		src, _, err = imagefile.EncodeProfiled(ctx, oriented, icc, r.pdf14)
+		typeset.ReleaseImage(ctx, oriented)
+	} else {
+		src, err = typeset.EncodeImage(ctx, oriented)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("encoding the %s image: %w", format, err)
 	}

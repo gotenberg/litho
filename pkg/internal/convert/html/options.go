@@ -100,6 +100,10 @@ type Options struct {
 	// [typeset.FittedPageLimit] of the version the file is written at.
 	// Zero takes that of PDF 1.7.
 	FittedLimit float64
+	// Version is the PDF version written: under PDF 1.5 a picture's ICC
+	// profile of a major version past 2 is left out (ISO 32000-1, Table
+	// 67). The zero value writes for PDF 1.5 and later.
+	Version typeset.Version
 	// OmitBackgrounds drops the background colours and images of the html
 	// and body elements, which paint the canvas (CSS 2.1, 14.2), and keeps
 	// every other element's and the page box's: the page comes out white

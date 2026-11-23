@@ -318,6 +318,9 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
 	res.stop = o.stop
+	if o.frame == nil {
+		res.pdf14 = o.Version == typeset.Version14
+	}
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
 	if scan.math {
