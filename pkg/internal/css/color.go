@@ -1459,12 +1459,16 @@ func relativeLuminance(c Color) float64 {
 // systemColors maps the system colours of CSS Color 4, 6.2 and the
 // deprecated ones of its Appendix A to the RGBA values Chromium prints,
 // alpha 0 to 255. The specification leaves their values to the user
-// agent and the platform.
+// agent and the platform. -webkit-link and -webkit-activelink, which no
+// specification defines, are Chromium's names of LinkText and ActiveText.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium 156 in the pinned image computes and prints
 //     each of these values; Highlight is the one translucent colour.
+//   - probe, html: Chromium 156 paints a background of -webkit-link 0 0
+//     238, 158 158 255 under color-scheme: dark, and of
+//     -webkit-activelink 255 0 0.
 var systemColors = map[string][4]uint8{
 	"accentcolor": {0, 117, 255, 255}, "accentcolortext": {255, 255, 255, 255},
 	"activetext": {255, 0, 0, 255}, "buttonborder": {0, 0, 0, 255},
@@ -1476,6 +1480,7 @@ var systemColors = map[string][4]uint8{
 	"mark": {255, 255, 0, 255}, "marktext": {0, 0, 0, 255},
 	"selecteditem": {25, 103, 210, 255}, "selecteditemtext": {255, 255, 255, 255},
 	"visitedtext":  {85, 26, 139, 255},
+	"-webkit-link": {0, 0, 238, 255}, "-webkit-activelink": {255, 0, 0, 255},
 	"activeborder": {0, 0, 0, 255}, "activecaption": {255, 255, 255, 255},
 	"appworkspace": {255, 255, 255, 255}, "background": {255, 255, 255, 255},
 	"buttonhighlight": {239, 239, 239, 255}, "buttonshadow": {239, 239, 239, 255},
@@ -1505,6 +1510,6 @@ var darkSystemColors = map[string][4]uint8{
 	"buttonborder": {255, 255, 255, 255}, "buttonface": {107, 107, 107, 255}, "buttontext": {255, 255, 255, 255},
 	"canvas": {18, 18, 18, 255}, "canvastext": {255, 255, 255, 255},
 	"field": {59, 59, 59, 255}, "fieldtext": {255, 255, 255, 255},
-	"linktext": {158, 158, 255, 255}, "visitedtext": {208, 173, 240, 255},
+	"linktext": {158, 158, 255, 255}, "visitedtext": {208, 173, 240, 255}, "-webkit-link": {158, 158, 255, 255},
 	"selecteditem": {153, 200, 255, 255}, "selecteditemtext": {59, 59, 59, 255},
 }

@@ -254,3 +254,17 @@ func TestFixHues_LongerBetweenEqualHuesTurnsUpward(t *testing.T) {
 		}
 	}
 }
+
+// TestColor_WebkitLinkNames checks Chromium's -webkit-link and
+// -webkit-activelink, which it reads as LinkText and ActiveText, under a
+// light and a dark colour scheme.
+func TestColor_WebkitLinkNames(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><p id=l></p><p id=d></p><p id=a></p></body>`,
+		`#l { color: -webkit-link } #d { color-scheme: dark; color: -WebKit-Link } #a { color: -webkit-activelink }`)
+	for id, want := range map[string]Color{"l": rgb(0, 0, 238), "d": rgb(158, 158, 255), "a": rgb(255, 0, 0)} {
+		if got := c.of(id).Color; got != want {
+			t.Errorf("#%s: color %v, want %v", id, got, want)
+		}
+	}
+}
