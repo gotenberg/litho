@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -46,5 +47,44 @@ func TestDrawing_ReadsAFormula(t *testing.T) {
 	}
 	if glyphs != 3 {
 		t.Errorf("the formula draws %d runs, want 3", glyphs)
+	}
+}
+
+// TestRead_CachedErrorResults locks the error a formula's cached result
+// shows as its text: Calc reads it as that error, in the formula's cell
+// and in the cells of an array formula's range, whatever number the cell
+// stores; a plain number keeps its value.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/cachedValue.ods prints Err:502 and #N/A for
+//     =SQRT(-1) and =NA() saved as 0, in cells and array ranges.
+func TestRead_CachedErrorResults(t *testing.T) {
+	body := table("S", `<table:table-row>`+
+		`<table:table-cell table:number-matrix-columns-spanned="2" table:number-matrix-rows-spanned="1" table:formula="of:=SQRT(-1)" office:value-type="float" office:value="0"><text:p>Err:502</text:p></table:table-cell>`+
+		`<table:table-cell office:value-type="float" office:value="0"><text:p>Err:502</text:p></table:table-cell>`+
+		`<table:table-cell table:formula="of:=NA()" office:value-type="float" office:value="0"><text:p>#N/A</text:p></table:table-cell>`+
+		`<table:table-cell office:value-type="float" office:value="0"><text:p>#N/A</text:p></table:table-cell>`+
+		`<table:table-cell table:formula="of:=1" office:value-type="float" office:value="1"><text:p>Err:5x</text:p></table:table-cell>`+
+		`</table:table-row>`)
+	doc, _ := read(t, flat{body: body}.bytes())
+	sh := doc.Sheets[0]
+	for col, want := range []string{"Err:502", "Err:502", "#N/A", ""} {
+		c := cellAt(sh, 0, col)
+		if c == nil {
+			t.Fatalf("no cell at column %d", col)
+		}
+		if want == "" {
+			if c.Value.Kind != sheet.Number {
+				t.Errorf("column %d = %+v, want the number", col, c.Value)
+			}
+			continue
+		}
+		if c.Value.Kind != sheet.Error || c.Value.Text != want {
+			t.Errorf("column %d = %+v, want the error %s", col, c.Value, want)
+		}
+	}
+	if c := cellAt(sh, 0, 4); c == nil || c.Value.Kind != sheet.Number {
+		t.Errorf("column 4 = %+v, want the number", c)
 	}
 }

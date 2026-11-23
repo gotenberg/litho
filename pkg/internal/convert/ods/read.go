@@ -370,6 +370,9 @@ type tableState struct {
 	// rowStyle is the default cell style of the row being read, nil for
 	// none.
 	rowStyle *sheet.Style
+	// matrices are the ranges of the array formulas read, whose cells
+	// hold the array's result.
+	matrices []sheet.Range
 }
 
 // pendingRows is n copies of row, without cells, from row.Index.
@@ -936,6 +939,47 @@ func (r *reader) flushPending(ts *tableState, next int) {
 	ts.pending = rest
 }
 
+// maxMatrices bounds the array formula ranges a sheet remembers.
+// Anti-DoS guard, not spec-mandated: a sheet holds a few array formulas.
+const maxMatrices = 1024
+
+// inMatrix reports a cell inside the range of an array formula read.
+func (ts *tableState) inMatrix(r, c int) bool {
+	for _, m := range ts.matrices {
+		if r >= m.FirstRow && r <= m.LastRow && c >= m.FirstColumn && c <= m.LastColumn {
+			return true
+		}
+	}
+	return false
+}
+
+// calcError reports the text Calc shows for an error value: #NULL!,
+// #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, or Err: and its code
+// (ScGlobal::GetErrorString, ScCompiler::GetErrorConstant).
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/cachedValue.ods saves =SQRT(-1) and =NA(), in
+//     cells and in array formulas, as the number 0 with the text Err:502
+//     and #N/A, and Calc prints Err:502 and #N/A in every cell of them and
+//     of the formulas that refer to them.
+func calcError(s string) bool {
+	switch s {
+	case "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A":
+		return true
+	}
+	code, ok := strings.CutPrefix(s, "Err:")
+	if !ok || code == "" || len(code) > 3 {
+		return false
+	}
+	for _, d := range code {
+		if d < '0' || d > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // frameAt is a frame of a cell, with the cell it sits in.
 type frameAt struct {
 	el *odf.Element
@@ -965,6 +1009,15 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 			continue
 		}
 		cell, ok := r.cell(c)
+		if mc, mr := repeat(c, "number-matrix-columns-spanned", maxColumns-col), repeat(c, "number-matrix-rows-spanned", maxRows-ts.row); (mc > 1 || mr > 1) && len(ts.matrices) < maxMatrices {
+			ts.matrices = append(ts.matrices, sheet.Range{FirstRow: ts.row, FirstColumn: col, LastRow: ts.row + mr - 1, LastColumn: col + mc - 1})
+		}
+		if cell.Value.Kind == sheet.Number && calcError(cell.Value.Text) && (c.A(odf.NSTable, "formula") != "" || ts.inMatrix(ts.row, col)) {
+			// Calc reads the cached result of a formula, or of a cell of
+			// an array formula's range, whose text is an error as that
+			// error, whatever number the cell stores.
+			cell.Value = sheet.Value{Kind: sheet.Error, Text: cell.Value.Text}
+		}
 		name := c.A(odf.NSTable, "style-name")
 		named := name != ""
 		if named && cell.Style == nil {
