@@ -1276,7 +1276,11 @@ func (b *builder) section(c *odf.Element, ctx blockCtx) []*layout.Node {
 	}
 	b.columns(st, props.Child("style:columns"), b.currentAreaWidth()-st.Margin[css.Left].Value-st.Margin[css.Right].Value)
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Sect", ID: c.A(odf.NSText, "name")})
+	collected := b.sectionNotes(c.A(odf.NSText, "style-name"))
 	n.Children = b.wrapLists(b.blocks(c, ctx), 0)
+	if collected != nil {
+		n.Children = append(n.Children, collected()...)
+	}
 	return []*layout.Node{n}
 }
 
