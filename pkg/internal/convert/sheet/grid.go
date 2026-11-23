@@ -370,9 +370,10 @@ func lined(st *Style) bool {
 // column without one counting its first row as that value
 // (ScTable::GetPrintArea, ScAttrArray::GetLastVisibleAttr), and stops at
 // a run of columns formatted alike ([grid.attrColumns]), and a merge
-// only when its first cell holds a value. Excel counts every cell with a
-// visible style, every merge, and a cell whose file stores an empty
-// string as a cell with a value ([Cell.EmptyText]).
+// when its first cell holds a value or lies in the range of the cells and
+// drawings, empty or not. Excel counts every cell with a visible style,
+// every merge, and a cell whose file stores an empty string as a cell
+// with a value ([Cell.EmptyText]).
 //
 // # Corpus evidence
 //
@@ -390,6 +391,8 @@ func lined(st *Style) bool {
 //     of empty strings right of each table; 61034.xlsx prints a blank page
 //     for its Sheet1, which holds two merges of empty cells and nothing
 //     else.
+//   - probe, ods: an empty merge A1:I1 over 30 mm columns, five a page,
+//     and A2 holding a value print two pages.
 func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
@@ -434,15 +437,19 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 	if attrLast > dataLast {
 		u.LastColumn = max(u.LastColumn, g.attrColumns(dataLast, attrLast))
 	}
-	for _, m := range g.merges {
-		if excel || hasContent(g.cell(m.FirstRow, m.FirstColumn)) {
-			add(m.LastRow, m.LastColumn)
-		}
-	}
 	for i := range g.sh.Drawings {
 		if r, ok := g.drawingCells(&g.sh.Drawings[i]); ok {
 			add(r.FirstRow, r.FirstColumn)
 			add(r.LastRow, r.LastColumn)
+		}
+	}
+	// Calc extends the range over the merges whose first cell lies in it
+	// (ScPrintFunc::AdjustPrintArea, ScDocument::ExtendMerge), its first
+	// row and column being 0.
+	lastRow, lastColumn := u.LastRow, u.LastColumn
+	for _, m := range g.merges {
+		if excel || hasContent(g.cell(m.FirstRow, m.FirstColumn)) || m.FirstRow <= lastRow && m.FirstColumn <= lastColumn {
+			add(m.LastRow, m.LastColumn)
 		}
 	}
 	if u.LastRow < 0 {

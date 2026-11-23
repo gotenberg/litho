@@ -304,6 +304,10 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 	vis = false
 	from = a.FirstRow
 	firstBandOnly := g.mirrored() && !g.holdsValue()
+	var crossing [][]Range
+	if !g.doc.ExcelRules {
+		crossing = g.mergesCrossing(cols)
+	}
 	flush := func(last int) {
 		b := band{from, last}
 		if sp.firstRows == nil {
@@ -322,7 +326,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 				h[i] = sp.g.empty(Range{FirstRow: b.first, LastRow: b.last, FirstColumn: cb.first, LastColumn: cb.last})
 				// A page that text overflows into from the left prints,
 				// unless the page left of it does not (ScDocument::IsPrintEmpty).
-				if h[i] && !leftEmpty && cb.first > 0 && sp.g.extendPrint(cb.first-1, b.first, b.last) >= cb.first {
+				if h[i] && !leftEmpty && cb.first > 0 && (sp.g.extendPrint(cb.first-1, b.first, b.last) >= cb.first || mergeInRows(crossing[i], b)) {
 					h[i] = false
 				}
 				if i > 0 && firstBandOnly {
@@ -353,6 +357,49 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		flush(a.LastRow)
 	}
 	return cols, rows, hidden, nil
+}
+
+// mergesCrossing returns, for each band of cols, the merges that reach
+// into it from the band on its left. Calc prints such a page as it prints
+// one that text overflows into, when the page on its left prints, whatever
+// the merge holds; a merge reaching into the band of rows below prints no
+// page of its own. No clause of ODF states which pages print; the rule is
+// Calc's, measured.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf136551.ods prints, right of the page of its
+//     sheet TTH Rec, a page holding only the end of the filled merged
+//     cell A1:I1 of its title.
+//   - probe, ods: A1:I1 merged over columns of 30 mm, five a page, with A2
+//     holding a value, prints two pages whether the merge holds text or
+//     nothing, filled or not; A1 holding text, merged down over 80 rows of
+//     the default height, prints one page.
+func (g *grid) mergesCrossing(cols []band) [][]Range {
+	out := make([][]Range, len(cols))
+	// bandOf is the band holding column c, or the last band before it.
+	bandOf := func(c int) int {
+		return sort.Search(len(cols), func(i int) bool { return cols[i].first > c }) - 1
+	}
+	for _, m := range g.merges {
+		if m.LastColumn == m.FirstColumn {
+			continue
+		}
+		for i := max(bandOf(m.FirstColumn)+1, 1); i <= bandOf(m.LastColumn) && i < len(cols); i++ {
+			out[i] = append(out[i], m)
+		}
+	}
+	return out
+}
+
+// mergeInRows reports a merge of ms that reaches into the band of rows b.
+func mergeInRows(ms []Range, b band) bool {
+	for _, m := range ms {
+		if m.FirstRow <= b.last && m.LastRow >= b.first {
+			return true
+		}
+	}
+	return false
 }
 
 // holdsValue reports a sheet with a cell that holds a value.

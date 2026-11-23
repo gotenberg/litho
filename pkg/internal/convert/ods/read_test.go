@@ -828,3 +828,14 @@ func TestRead_HeaderWhiteSpace(t *testing.T) {
 		t.Errorf("header %q, footer %q; want %q and %q", head.String(), foot.String(), "<sheet>", "a b  ")
 	}
 }
+
+// TestRead_EmptyMerges locks that the merge of an empty cell, on a row
+// that lists no cell, is read: Calc prints the pages it reaches.
+func TestRead_EmptyMerges(t *testing.T) {
+	f := flat{body: `<table:table table:name="S"><table:table-row><table:table-cell table:number-columns-spanned="9" table:number-rows-spanned="1"/><table:covered-table-cell table:number-columns-repeated="8"/></table:table-row>` +
+		`<table:table-row><table:table-cell office:value-type="string"><text:p>A2</text:p></table:table-cell></table:table-row></table:table>`}
+	doc, _ := read(t, f.bytes())
+	if ms := doc.Sheets[0].Merges; len(ms) != 1 || ms[0] != (sheet.Range{FirstRow: 0, FirstColumn: 0, LastRow: 0, LastColumn: 8}) {
+		t.Errorf("merges %+v, want A1:I1", ms)
+	}
+}

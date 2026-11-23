@@ -118,7 +118,8 @@ func TestUsedRange_PaintedDrawing(t *testing.T) {
 
 // TestUsedRange_EmptyMerges locks a merge of empty cells: Excel counts it
 // in the used range, so a sheet holding nothing else prints a blank page;
-// Calc counts a merge only when its first cell holds a value.
+// Calc counts it only when its first cell lies in the range of the cells
+// and drawings, which a sheet of merges alone has none of.
 //
 // # Corpus evidence
 //

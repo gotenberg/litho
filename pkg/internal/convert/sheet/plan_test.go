@@ -646,3 +646,31 @@ func TestPlan_ExcelFitIgnoresManualBreaks(t *testing.T) {
 		t.Errorf("with a break: %d pages at %v, want 1 at %v", len(broken.pages), broken.zoom, plain.zoom)
 	}
 }
+
+// TestPlan_CalcPrintsMergedPages locks the pages Calc prints of a merged
+// cell that crosses a page's edge (see [grid.mergesCrossing]): the page a
+// merge reaches into from the left prints, whatever the merge holds; the
+// page below a merge reaching down does not.
+func TestPlan_CalcPrintsMergedPages(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		merge Range
+		value bool
+		want  int
+	}{
+		{"across, holding text", Range{FirstRow: 0, LastRow: 0, FirstColumn: 0, LastColumn: 8}, true, 2},
+		{"across, empty", Range{FirstRow: 0, LastRow: 0, FirstColumn: 0, LastColumn: 8}, false, 2},
+		{"down, holding text", Range{FirstRow: 0, LastRow: 79, FirstColumn: 0, LastColumn: 0}, true, 1},
+	} {
+		sh := &Sheet{Name: "S", Page: a4(), DefaultColumnWidth: 85, Merges: []Range{tc.merge}, Rows: []Row{{Index: 1, Cells: []Cell{textCell(0, "A2", nil)}}}}
+		if tc.value {
+			sh.Rows = append([]Row{{Index: 0, Cells: []Cell{textCell(0, "Title", nil)}}}, sh.Rows...)
+		}
+		if tc.merge.LastRow > 1 {
+			sh.Rows = []Row{{Index: 0, Cells: []Cell{textCell(0, "Tall", nil)}}}
+		}
+		if n := len(convert(t, newDoc(sh), office.Options{}).Pages); n != tc.want {
+			t.Errorf("%s: %d pages, want %d", tc.name, n, tc.want)
+		}
+	}
+}

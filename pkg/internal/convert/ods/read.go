@@ -695,6 +695,11 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 			row.Index = start
 			ts.standard = append(ts.standard, pendingRows{row: row, n: n})
 		}
+		// A merge of empty cells is kept: Calc prints the pages it
+		// reaches ([sheet.Sheet.Merges]).
+		for i := 0; i < n && len(merges) > 0; i++ {
+			r.addMerges(ts, start+i, merges)
+		}
 		ts.row = start + n
 		ts.rowY += float64(float64(n) * height)
 		return
@@ -719,16 +724,22 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		r.cells += len(cells)
 		r.rows++
 		ts.sh.Rows = append(ts.sh.Rows, row)
-		for _, m := range merges {
-			if r.merges >= maxMerges {
-				break
-			}
-			r.merges++
-			ts.sh.Merges = append(ts.sh.Merges, sheet.Range{FirstRow: idx, FirstColumn: m.FirstColumn, LastRow: min(idx+m.LastRow, maxRows-1), LastColumn: m.LastColumn})
-		}
+		r.addMerges(ts, idx, merges)
 	}
 	ts.row = start + n
 	ts.rowY += float64(float64(n) * height)
+}
+
+// addMerges adds the merges of the row idx, each row offset from it, up to
+// [maxMerges] in the document.
+func (r *reader) addMerges(ts *tableState, idx int, merges []sheet.Range) {
+	for _, m := range merges {
+		if r.merges >= maxMerges {
+			return
+		}
+		r.merges++
+		ts.sh.Merges = append(ts.sh.Merges, sheet.Range{FirstRow: idx, FirstColumn: m.FirstColumn, LastRow: min(idx+m.LastRow, maxRows-1), LastColumn: m.LastColumn})
+	}
 }
 
 // visAttrStop is the run of rows with equal attributes and no content
