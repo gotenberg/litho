@@ -164,14 +164,16 @@ func TestRead_Lists(t *testing.T) {
 		{0, 0, &slides.Bullet{Kind: slides.BulletNumber, Format: "arabicPeriod", Scale: 0.45}},
 		// A list style's StarBats bullet is recoded on reading.
 		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
-		{0, 0, nil},
+		// A list header starts where its level's item text does, with no
+		// label.
+		{cm(3), 0, nil},
 	}
 	if len(ps) != len(wants) {
 		t.Fatalf("paragraphs = %q", texts(ps))
 	}
 	for i, w := range wants {
 		p := ps[i]
-		if i < len(wants)-1 && (!near(p.MarginLeft, w.margin) || !near(p.Indent, w.indent)) {
+		if !near(p.MarginLeft, w.margin) || !near(p.Indent, w.indent) {
 			t.Errorf("%d: margin %v indent %v, want %v %v", i, p.MarginLeft, p.Indent, w.margin, w.indent)
 		}
 		switch {

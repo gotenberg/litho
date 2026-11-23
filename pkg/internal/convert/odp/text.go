@@ -565,6 +565,12 @@ func isDark(c css.Color) bool {
 // paragraph reads one text:p or text:h with the layers its shape, its
 // outline level and its paragraph style give it, its bullet when it
 // opens a list item, and its runs.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf149311.odp prints the text of a list header
+//     1.2 cm inside its frame, the 0.3 cm space before and 0.9 cm label
+//     width of its level, with no bullet.
 func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Paragraph {
 	lv := 0
 	if lc.inList {
@@ -588,6 +594,13 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 		LineSpacing: ps.spacing, LineSpacingPoints: ps.spacingPts, LineSpacingAtLeast: ps.atLeast,
 		DefaultTab:  ps.defaultTab,
 		SpaceBefore: ps.before, SpaceAfter: ps.after, RightToLeft: ps.rtl,
+	}
+	if lc.inList && lc.header {
+		// A list header takes its level's indent and no label, its first
+		// line starting where an item's text does (ODF 1.3, Part 3,
+		// 5.3.3 text:list-header).
+		out.MarginLeft, _ = r.listIndents(lc.style, lv)
+		out.Indent = 0
 	}
 	if lc.inList && !lc.header {
 		out.MarginLeft, out.Indent = r.listIndents(lc.style, lv)
