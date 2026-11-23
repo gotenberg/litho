@@ -583,19 +583,34 @@ func (b *builder) frameRead(c *odf.Element) {
 // place positions an anchored frame n: run-through and page-anchored
 // frames are positioned boxes at their offsets, the others float to the
 // side style:wrap leaves them, or stand in the flow when no text wraps.
-// Writer numbers a first page of left usage 2, a left page being even, so
-// a frame anchored to page n of such a document lands on the n-1th page
-// printed.
+// Writer wraps no text of a header or a footer around a frame anchored
+// in it, whatever its style:wrap (ODF 1.3 Part 3, 20.393), unless
+// settings.xml sets LibreOffice's UseFormerTextWrapping: such a frame
+// runs through. Writer numbers a first page of left usage 2, a left page
+// being even, so a frame anchored to page n of such a document lands on
+// the n-1th page printed.
 //
 // # Corpus evidence
 //
 //   - libreoffice/odt: layout/stable-at-page-anchored-fly-position.odt
 //     anchors frames to the pages of a document whose first page is a
 //     left one.
+//   - libreoffice/odt: odfexport/tdf104254_noHeaderWrapping.odt prints its
+//     header line whole over a picture of dynamic wrap anchored to a
+//     character of that line; odfexport/tdf143793_noBodyWrapping.odt,
+//     which sets UseFormerTextWrapping, wraps its header line beside its
+//     header's picture.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 a 3 by 2 cm frame anchored
+//     to a header paragraph, to the paragraph or to a character, of
+//     dynamic or parallel wrap, 0.3 cm, 0 or -0.2 cm from the paragraph's
+//     top, leaves the header's lines full width with UseFormerTextWrapping
+//     false or absent; tdf143793_noBodyWrapping.odt with it set to false
+//     prints its header line whole, and tdf104254_noHeaderWrapping.odt
+//     with its picture moved 0.173 cm above the paragraph still does.
 func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	st := *n.Style
 	n.Style = &st
-	if page || g.wrap == "run-through" {
+	if page || g.wrap == "run-through" || b.hf != nil && !b.formerWrap {
 		st.Position = css.Absolute
 		// An absolutely positioned box is block-level (CSS 2.1, 9.7): the
 		// engine lays an inline-level one out in the line.

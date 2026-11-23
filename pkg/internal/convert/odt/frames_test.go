@@ -91,3 +91,35 @@ func TestFrameAtParagraphTop(t *testing.T) {
 		}
 	}
 }
+
+// TestHeaderFrameWrapsNothing locks that a frame anchored in a header
+// leaves the header's lines full width, whatever its wrap, unless
+// settings.xml sets UseFormerTextWrapping (see [builder.place], which
+// holds the measurements).
+func TestHeaderFrameWrapsNothing(t *testing.T) {
+	words := strings.Repeat("word ", 30)
+	for _, wrap := range []string{"dynamic", "parallel", "former"} {
+		former := wrap == "former"
+		if former {
+			wrap = "dynamic"
+		}
+		auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="` + wrap + `" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>` +
+			`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/><style:header-style><style:header-footer-properties fo:min-height="0cm"/></style:header-style></style:page-layout>`
+		masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"><style:header><text:p><draw:frame draw:style-name="fr" text:anchor-type="char" svg:x="5cm" svg:y="0.3cm" svg:width="3cm" svg:height="2cm"><draw:text-box><text:p>FRAME</text:p></draw:text-box></draw:frame>` + words + `</text:p></style:header></style:master-page>`
+		data := doc{autoStyles: auto, masters: masters, body: `<text:p>Body</text:p>`}.flat()
+		if former {
+			data = []byte(strings.Replace(string(data), "<office:font-face-decls>", `<office:settings xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"><config:config-item-set config:name="ooo:configuration-settings">`+
+				`<config:config-item config:name="UseFormerTextWrapping" config:type="boolean">true</config:config-item></config:config-item-set></office:settings><office:font-face-decls>`, 1))
+		}
+		pg := convertDoc(t, data, office.Options{}).Pages[0]
+		wrapped := false
+		for _, l := range lines(pg) {
+			if strings.HasPrefix(l.text, "word") && !near(l.x, 56.69, 0.1) {
+				wrapped = true
+			}
+		}
+		if wrapped != former {
+			t.Errorf("%s, former wrapping %v: header lines wrapped %v", wrap, former, wrapped)
+		}
+	}
+}

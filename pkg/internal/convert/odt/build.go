@@ -125,6 +125,10 @@ type builder struct {
 	// tabOverMargin is settings.xml's TabOverMargin: a tab goes to its
 	// stop past the paragraph's end ([css.Office.TabOverMargin]).
 	tabOverMargin bool
+	// formerWrap is settings.xml's UseFormerTextWrapping: the text of a
+	// header or a footer wraps around the frames anchored in it
+	// ([builder.place]).
+	formerWrap bool
 	// absoluteAlign reads fo:text-align start and end as left and right
 	// in every writing mode ([odf.AbsoluteStartEnd]).
 	absoluteAlign bool
