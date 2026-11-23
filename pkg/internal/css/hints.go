@@ -27,7 +27,8 @@ import (
 //     on the table sections, rows and cells.
 //   - bgcolor on table, thead, tbody, tfoot, tr, td, th and marquee.
 //   - table: border (widths and outset style; the cells' 1px inset
-//     borders come from the user agent stylesheet), frame, rules (the
+//     borders come from the user agent stylesheet), bordercolor (the
+//     colour of its border and its cells', drawn solid), frame, rules (the
 //     table's collapsed hidden border, and the borders of its cells, row
 //     groups, column groups and rows), cellspacing, and cellpadding
 //     applied to its cells.
@@ -122,9 +123,14 @@ func HTMLHints(n *html.Node) []Declaration {
 			}
 			if px > 0 {
 				h.add("border-width", fmt.Sprintf("%dpx", px))
-				h.add("border-style", "outset")
+				if hasBorderColor(n) {
+					h.add("border-style", "solid")
+				} else {
+					h.add("border-style", "outset")
+				}
 			}
 		}
+		h.color(n, "bordercolor", "border-color")
 		if v, ok := attr(n, "frame"); ok {
 			if sides, ok := frameSides[lower(strings.TrimSpace(v))]; ok {
 				px := 1
@@ -178,6 +184,14 @@ func HTMLHints(n *html.Node) []Declaration {
 				if v, ok := attr(t, "cellpadding"); ok {
 					if px, ok := nonNegativeInt(v); ok {
 						h.add("padding", fmt.Sprintf("%dpx", px))
+					}
+				}
+			}
+			if t := cellTable(n); t != nil && hasBorderColor(t) {
+				h.add("border-color", "inherit")
+				if v, ok := attr(t, "border"); ok && tableRules(t) == "" {
+					if px, ok := nonNegativeInt(v); !ok || px > 0 {
+						h.add("border-style", "solid")
 					}
 				}
 			}
@@ -340,6 +354,26 @@ func BackgroundAttributeHint(n *html.Node, base string) (Declaration, bool) {
 	d := c.declare("background-image", []token{{typ: tURL, value: v}}, false)
 	d.warns = c.warns
 	return d, d.declares()
+}
+
+// hasBorderColor reports a table whose bordercolor attribute holds a
+// legacy colour. Chromium colours the table's border and its cells' with
+// it, and draws them solid where the border attribute makes the table's
+// outset and the cells' inset.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws table bordercolor=red border=8 as an
+//     8px solid red border around 1px solid red cell borders, a table of
+//     bordercolor="#0c0" rules=all border=2 with green rules and border,
+//     and one of bordercolor=blue alone with no border.
+func hasBorderColor(table *html.Node) bool {
+	v, ok := attr(table, "bordercolor")
+	if !ok {
+		return false
+	}
+	_, ok = legacyColor(v)
+	return ok
 }
 
 // htmlInteger parses an integer by the HTML Standard's rules for parsing

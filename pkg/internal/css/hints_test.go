@@ -391,3 +391,38 @@ func TestHTMLHints_FramesetEdges(t *testing.T) {
 		t.Errorf("2 pixel border: shadows %+v, want none", got)
 	}
 }
+
+// TestHTMLHints_TableBorderColor checks the bordercolor attribute of a
+// table, as Chromium draws it: the colour of the table's border and of
+// its cells', solid where the border attribute would draw them outset
+// and inset; with rules, the rules take the colour; alone it draws no
+// border.
+func TestHTMLHints_TableBorderColor(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><table id=t bordercolor=red border=8><tr><td id=c>a</table>
+<table id=r bordercolor="#0c0" rules=all border=2><tr><td id=rc>d</table>
+<table id=a bordercolor=blue><tr><td id=ac>f</table>
+<table id=n border=3><tr><td id=nc>g</table></body>`, ``)
+	red, green := rgb(255, 0, 0), rgb(0, 204, 0)
+	for _, tc := range []struct {
+		id    string
+		style BorderStyle
+		color Color
+		width float64
+	}{
+		{"t", Solid, red, 6}, {"c", Solid, red, 0.75},
+		{"r", Solid, green, 1.5}, {"rc", Solid, green, 0.75},
+		{"n", Outset, rgb(0, 0, 0), 2.25}, {"nc", Inset, rgb(0, 0, 0), 0.75},
+	} {
+		b := c.of(tc.id).Border[Left]
+		if b.Style != tc.style || b.Width != tc.width || tc.id != "n" && tc.id != "nc" && b.Color != tc.color {
+			t.Errorf("#%s: border %+v, want %v %v %v", tc.id, b, tc.width, tc.style, tc.color)
+		}
+	}
+	if b := c.of("a").Border[Left]; b.Style != BorderNone || b.Color != rgb(0, 0, 255) {
+		t.Errorf("#a: border %+v, want none in blue", b)
+	}
+	if b := c.of("ac").Border[Left]; b.Style != BorderNone {
+		t.Errorf("#ac: border %+v, want none", b)
+	}
+}
