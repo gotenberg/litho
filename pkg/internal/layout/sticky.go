@@ -53,7 +53,7 @@ func (e *engine) placeSticky(b, viewport *box) {
 func (e *engine) stickyOffset(b, viewport *box) (float64, float64) {
 	var port [4]float64 // left, top, right, bottom of the scrollport
 	sc := b.parent
-	for sc != nil && (sc.st.Overflow == css.OverflowVisible || sc.kind != kindBlock) {
+	for sc != nil && (!scrollContainer(sc.st) || sc.kind != kindBlock) {
 		sc = sc.parent
 	}
 	if sc == nil || sc == viewport || sc.parent == nil {

@@ -13,7 +13,7 @@ import (
 // the area scrolled with the content. Any other box keeps area. A fixed
 // image is placed by [painter.attachedSlices].
 func (p *painter) localArea(b *box, area, r typeset.Rect, pd [4]float64) typeset.Rect {
-	if b.kind != kindBlock || b.st.Overflow == css.OverflowVisible || b == p.viewport {
+	if b.kind != kindBlock || !scrollContainer(b.st) || b == p.viewport {
 		return area
 	}
 	// Flow coordinates to the painted ones: the relative offset in force.

@@ -79,6 +79,21 @@ func TestSticky_OffsetAtTheInitialScrollPosition(t *testing.T) {
 			 ____`,
 		},
 		{
+			// A box of overflow clip is no scroll container (CSS Overflow
+			// 3, 3.1): the page area is the scrollport, and a top: 1px box
+			// 2px down the page stays where it is laid out.
+			"clip box", doc(el(sty(width(4), height(4), bg(red), func(s *css.Style) {
+				s.SetClipOnly()
+				s.Margin[css.Top] = css.Pts(px(2))
+			}), el(sty(height(8)), el(sty(height(1), bg(blue), sticky(1, auto, auto, auto)))))),
+			`____
+			 ____
+			 BBBB
+			 RRRR
+			 RRRR
+			 RRRR`,
+		},
+		{
 			// The containing block, 3px tall, holds the box back.
 			"containing block", doc(el(sty(width(4), height(6)), el(sty(height(3)),
 				el(sty(height(1), bg(blue), sticky(4, auto, auto, auto)))))),
