@@ -92,7 +92,10 @@ func (k convertKind) name() string {
 //     what the source names.
 //  2. Without it, the source's own size applies: an @page size, each
 //     section of a DOCX or ODT source, each sheet's page setup, the slide
-//     size of a presentation, an image's size.
+//     size of a presentation, an image's size. An XLSX sheet that names a
+//     paper other than Letter, Tabloid, Legal, Statement, Executive, A3,
+//     A4, A5, B4 (JIS) or B5 (JIS), an envelope or a postcard, prints on
+//     the paper of a sheet that names none, as Excel prints it.
 //  3. A source that names none takes [WithDefaultPaper], else [models.PaperA4].
 //
 // [WithOrientation] then turns the pages that are not turned as it asks.

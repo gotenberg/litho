@@ -254,6 +254,17 @@ func TestRead_PageSetup(t *testing.T) {
 		{"printer defaults", `<sheetData/><pageSetup paperSize="1" usePrinterDefaults="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"unknown paper", `<sheetData/><pageSetup paperSize="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"letter", `<sheetData/><pageSetup paperSize="1"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 }},
+		// Excel prints an envelope, a postcard, A2, A6, a rotated paper or a
+		// code past its table on the paper of a sheet that names none.
+		{"envelope DL", `<sheetData/><pageSetup paperSize="27" orientation="landscape"/>`, func(p sheet.PageSetup) bool { return p.Width == 792 && p.Height == 612 }},
+		{"A6", `<sheetData/><pageSetup paperSize="70"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 && p.Height == 792 }},
+		{"statement", `<sheetData/><pageSetup paperSize="6"/>`, func(p sheet.PageSetup) bool { return p.Width == 396 && p.Height == 612 }},
+		{"B4 JIS", `<sheetData/><pageSetup paperSize="12"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-728.5) < 0.1 && math.Abs(p.Height-1031.8) < 0.1 }},
+		{"A4 transverse", `<sheetData/><pageSetup paperSize="55"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
+		{"A2", `<sheetData/><pageSetup paperSize="66"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 && p.Height == 792 }},
+		{"A4 rotated", `<sheetData/><pageSetup paperSize="77"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 && p.Height == 792 }},
+		{"PRC envelope 10 rotated", `<sheetData/><pageSetup paperSize="118"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 && p.Height == 792 }},
+		{"past the codes", `<sheetData/><pageSetup paperSize="119"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"draft", `<sheetData/><pageSetup draft="1"/>`, func(p sheet.PageSetup) bool { return p.Draft }},
 		{"not draft", `<sheetData/><pageSetup draft="0"/>`, func(p sheet.PageSetup) bool { return !p.Draft }},
 		{"errors displayed", `<sheetData/><pageSetup errors="displayed"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsDisplayed }},

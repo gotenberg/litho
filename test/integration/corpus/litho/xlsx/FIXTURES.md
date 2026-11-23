@@ -135,10 +135,6 @@ Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have m
 
 Every picture of a fixture is described (`descr`), so that a fixture fails no PDF/UA target (`targets`, `ua1`, `ua2` and the pairs) for a lack of its own: `charts_untitled` alone fails them, a Figure without a description being what it holds, and its twin `charts_untitled_derived` passes them.
 
-## Accepted disagreements
-
-- `paper_sizes`: Excel's export prints a paper it lacks on Letter, turned as the sheet asks: the envelopes #10 and DL (codes 20 and 27), the Japanese postcard (43) and A6 (70). litho prints the paper the code names (ECMA-376 Part 1, 18.3.1.63). The seven other sheets agree, JIS B5 at code 13 among them.
-
 ## Hostile documents
 
 `corpus build` generates these from `minimal` (`hostile_*.go` in `cmd/corpus`); they are never committed. The `robustness` feature converts them, and every fixture above, in a child process and checks each ends as [`robustness.json`](robustness.json) says: a PDF, the error the document must be refused with, or `any` end but a crash or a panic, always under the memory bound (1 GiB unless the document sets its own), with no network request, no text a document pulls from the machine (`forbid`) and the text it must keep (`require`). No reference is built for them.

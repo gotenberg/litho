@@ -159,11 +159,15 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 	if _, printer := ps.Attr("usePrinterDefaults"); printer {
 		p.Width, p.Height = paperSizes[printerPaper].points()
 	} else {
-		size, ok := paperSizes[intAttr(ps, "paperSize", 1)]
+		code := intAttr(ps, "paperSize", 1)
+		size, ok := paperSizes[code]
 		if !ok {
 			size = paperSizes[printerPaper]
 		}
 		pw, ph := size.points()
+		if code >= 1 && code <= lastPaperCode && !webPapers[code] {
+			pw, ph = w.r.paperW, w.r.paperH
+		}
 		if cw, ok := paperMeasure(attr(ps, "paperWidth")); ok {
 			if chh, ok := paperMeasure(attr(ps, "paperHeight")); ok {
 				pw, ph = cw, chh
@@ -194,10 +198,43 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 	}
 }
 
+// webPapers are the paperSize codes Excel prints on the paper they name
+// (ECMA-376 Part 1, 18.3.1.63): the codes whose paper, as the table gives
+// it, is one of Letter, Tabloid, Legal, Statement, Executive, A3, A4, A5,
+// B4 (JIS) and B5 (JIS), portrait. Excel prints any other code from 1 to
+// lastPaperCode on the paper of a sheet that names none, the conversion's
+// default paper, else Letter, in the orientation the sheet names: the
+// envelopes, the postcards, A2, A6, the rotated papers and the extra
+// sizes among them.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: paper_sizes prints its sheets of codes 1, 3, 5, 8, 9, 11
+//     and 13 on their papers, and those of Envelope #10 (20), Envelope DL
+//     (27), Japanese double postcard (43) and A6 (70) on Letter, in the
+//     orientation they name; options_paper_fit_ref prints Statement (6)
+//     and paper-grid-executive-portrait and -landscape Executive (7).
+//   - probe, xlsx: one portrait sheet a code prints 2, 10, 12, 17, 18, 55
+//     (A4 transverse) and 67 (A3 transverse) on their papers, and 4, 14
+//     to 16, 19, 24 to 26, 28 to 31, 33 to 35, 37, 39 to 42, 44, 47, 50,
+//     52, 60, 63, 66 (A2), 75, 77 (A4 rotated) and 118 on Letter. Codes
+//     54, 61 and 62 (Letter, A5 and B5 transverse) are not measured: they
+//     name a portrait paper of the list, as 55 and 67 do.
+var webPapers = map[int]bool{
+	1: true, 2: true, 3: true, 5: true, 6: true, 7: true, 8: true, 9: true, 10: true,
+	11: true, 12: true, 13: true, 17: true, 18: true, 54: true, 55: true, 61: true,
+	62: true, 67: true,
+}
+
+// lastPaperCode is the highest paperSize code Excel was measured to print
+// on the default paper (118, PRC Envelope #10 rotated); a code past it,
+// or 0, prints on printerPaper.
+const lastPaperCode = 118
+
 // printerPaper is the paper code Excel prints on when a page setup leaves
 // the paper to the printer: a pageSetup with usePrinterDefaults, either
-// value, or a paperSize the table lacks (ECMA-376 Part 1, 18.3.1.63 lists
-// codes from 1). The printer of Office for the web prints on A4, whatever
+// value, or a paperSize of 0 or past lastPaperCode (ECMA-376 Part 1,
+// 18.3.1.63 lists codes from 1). The printer of Office for the web prints on A4, whatever
 // the account's paper.
 //
 // # Corpus evidence
