@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T07:41:08Z",
+  "captured_at": "2026-11-23T08:31:57Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -37181,8 +37181,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 234,
-          "mismatched": 35,
+          "matched": 240,
+          "mismatched": 29,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37744,7 +37744,7 @@
               "text_f1": 1
             },
             "oox/tdf149551_TextRot.pptx": {
-              "layout": 0.5052,
+              "layout": 0.7191,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37752,7 +37752,7 @@
               "text_f1": 1
             },
             "oox/tdf149551_vert270AndTextRot.pptx": {
-              "layout": 0.5642,
+              "layout": 0.7157,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38208,7 +38208,7 @@
               "text_f1": 1
             },
             "sd/fill-color-list.pptx": {
-              "layout": 0.9009,
+              "layout": 0.8552,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38496,7 +38496,7 @@
               "text_f1": 1
             },
             "sd/smartart-accent-process.pptx": {
-              "layout": 0.0611,
+              "layout": 0.8768,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38504,7 +38504,7 @@
               "text_f1": 1
             },
             "sd/smartart-autoTxRot.pptx": {
-              "layout": 0.0345,
+              "layout": 0.0273,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38512,11 +38512,11 @@
               "text_f1": 0.4
             },
             "sd/smartart-autofit-sync.pptx": {
-              "layout": 0.9388,
+              "layout": 0.993,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-background-drawingml-fallback.pptx": {
@@ -38544,19 +38544,19 @@
               "text_f1": 1
             },
             "sd/smartart-center-cycle.pptx": {
-              "layout": 0.2322,
+              "layout": 0.9818,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-chevron.pptx": {
-              "layout": 0,
+              "layout": 0.9809,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-children.pptx": {
@@ -38568,7 +38568,7 @@
               "text_f1": 1
             },
             "sd/smartart-cnt.pptx": {
-              "layout": 0.9881,
+              "layout": 0.9904,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38576,7 +38576,7 @@
               "text_f1": 1
             },
             "sd/smartart-composite-infer-right.pptx": {
-              "layout": 0.9719,
+              "layout": 0.9795,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38592,7 +38592,7 @@
               "text_f1": 1
             },
             "sd/smartart-cycle-matrix.pptx": {
-              "layout": 0.7772,
+              "layout": 0.777,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38600,11 +38600,11 @@
               "text_f1": 0.9091
             },
             "sd/smartart-cycle.pptx": {
-              "layout": 0.7451,
+              "layout": 0.9785,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-data-follow.pptx": {
@@ -38616,7 +38616,7 @@
               "text_f1": 1
             },
             "sd/smartart-dir.pptx": {
-              "layout": 0.931,
+              "layout": 0.9457,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38656,15 +38656,15 @@
               "text_f1": 1
             },
             "sd/smartart-maxdepth.pptx": {
-              "layout": 0.3797,
+              "layout": 0.9832,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-missing-bullet.pptx": {
-              "layout": 0.9804,
+              "layout": 0.9826,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38672,11 +38672,11 @@
               "text_f1": 1
             },
             "sd/smartart-multidirectional.pptx": {
-              "layout": 0.0062,
+              "layout": 0.9714,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/smartart-org-chart.pptx": {
@@ -38736,7 +38736,7 @@
               "text_f1": 1
             },
             "sd/smartart-rotation.pptx": {
-              "layout": 0.0893,
+              "layout": 0.1058,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38752,7 +38752,7 @@
               "text_f1": 1
             },
             "sd/smartart-snake-rows.pptx": {
-              "layout": 0.8862,
+              "layout": 0.8991,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38768,7 +38768,7 @@
               "text_f1": 1
             },
             "sd/smartart-text.pptx": {
-              "layout": 0.9855,
+              "layout": 0.9951,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38776,7 +38776,7 @@
               "text_f1": 1
             },
             "sd/smartart-vertical-block-list.pptx": {
-              "layout": 0.9643,
+              "layout": 0.9824,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -75166,7 +75166,7 @@
               "text_f1": 0.9926
             },
             "text-body-properties": {
-              "layout": 0.9586,
+              "layout": 0.9659,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -90690,8 +90690,8 @@
     "openxmlsdk/pptx": {
       "features": {
         "diff": {
-          "matched": 127,
-          "mismatched": 21,
+          "matched": 128,
+          "mismatched": 20,
           "skipped": 34,
           "metrics": {
             "convert_error": 0,
@@ -90717,7 +90717,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Graphics/5.9.3.7_unfinished_.pptx": {
-              "layout": 0.5661,
+              "layout": 0.5841,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91645,7 +91645,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/CycleDiagram_TP10174326.potx": {
-              "layout": 0.2368,
+              "layout": 0.751,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91661,7 +91661,7 @@
               "text_f1": 0.9889
             },
             "v2FxTestFiles/presentation/O12_templates/HorizHierChart_TP10220217.potx": {
-              "layout": 0.9784,
+              "layout": 0.9832,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91669,7 +91669,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/HorizLabHierChart_TP10220218.potx": {
-              "layout": 0.6079,
+              "layout": 0.613,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -91677,7 +91677,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/SalesPropPres_TP10220213.potx": {
-              "layout": 0.8587,
+              "layout": 0.864,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
