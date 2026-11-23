@@ -555,7 +555,7 @@ func TestScanDocument_CapsTheElements(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := scanDocument(t.Context(), doc, documentURL, MaxElements); !errors.Is(err, want) {
+		if _, err := scanDocument(t.Context(), doc, nil, documentURL, MaxElements); !errors.Is(err, want) {
 			t.Errorf("%d elements: %v, want %v", n+3, err, want)
 		}
 	}

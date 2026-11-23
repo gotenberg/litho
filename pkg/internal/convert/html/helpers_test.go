@@ -251,6 +251,6 @@ func (*zeroFile) Read(p []byte) (int, error) {
 // parse parses the HTML source data as [parseDocument] does, without its
 // mode.
 func parse(data []byte) (*dom.Node, error) {
-	doc, _, err := parseDocument(data)
+	doc, _, _, err := parseDocument(data)
 	return doc, err
 }

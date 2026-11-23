@@ -281,7 +281,7 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 // children builds the nodes of n's children, n's style being st.
 func (b *builder) children(ctx context.Context, n *dom.Node, st *css.Style, depth int) ([]*layout.Node, error) {
 	var out []*layout.Node
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
+	for c := range b.frameOpts.shadows.Children(n) {
 		switch c.Type { //nolint:exhaustive // comments, doctypes and the rest draw nothing
 		case dom.TextNode:
 			if c.Data != "" {

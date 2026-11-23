@@ -278,7 +278,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	if err != nil {
 		return nil, err
 	}
-	sc, err := scanDocument(ctx, doc, documentBase(env.o.BaseURL), env.o.elementCap())
+	sc, err := scanDocument(ctx, doc, nil, documentBase(env.o.BaseURL), env.o.elementCap())
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	env.c.warnings = env.c.warnings[:before]
 	r := css.NewResolver(env.media, sheets)
 	opts := env.opts
-	opts.Lang, opts.Mode = sc.lang, css.NoQuirks
+	opts.Lang, opts.Mode, opts.Shadows = sc.lang, css.NoQuirks, nil
 	computed, err := r.Compute(ctx, doc, opts)
 	if err != nil {
 		return nil, fmt.Errorf("computing the styles of the %s: %w", b.edgeName(), err)

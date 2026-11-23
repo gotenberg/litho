@@ -70,7 +70,7 @@ func TestChargeTree_ChargesWhatDecodingGrows(t *testing.T) {
 		t.Fatal(err)
 	}
 	cost, text := treeCost(doc)
-	got, err := chargeTree(context.Background(), doc, 4)
+	got, err := chargeTree(context.Background(), doc, nil, 4)
 	if err != nil {
 		t.Fatal(err)
 	}

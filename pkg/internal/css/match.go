@@ -346,7 +346,9 @@ func disabled(n *html.Node) bool {
 func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 	switch p.kind { //nolint:exhaustive // psNever and the rest match nothing
 	case psRoot:
-		return n.Parent != nil && n.Parent.Type == html.DocumentNode
+		// The top-level elements of a shadow tree are no root: their
+		// parent is the shadow root (CSS Scoping 1, 3.1).
+		return n.Parent != nil && n.Parent.Type == html.DocumentNode && !isShadowRoot(n.Parent)
 	case psFirstChild:
 		return m.infoOf(n).index == 1
 	case psLastChild:

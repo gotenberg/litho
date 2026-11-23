@@ -302,10 +302,10 @@ func FuzzConvertPrintOptions(f *testing.F) {
 // prepare parses data, cascades its stylesheets and builds the content
 // tree for a first layout, as [Convert] does.
 func prepare(ctx context.Context, data []byte, o Options, fonts *text.Fonts) (*prepared, error) {
-	doc, mode, err := parseDocument(data)
+	doc, mode, shadows, err := parseDocument(data)
 	if err != nil {
 		return nil, err
 	}
-	o.mode = mode
+	o.mode, o.shadows = mode, shadows
 	return prepareDoc(ctx, doc, o, fonts, newPrintSetup(o))
 }

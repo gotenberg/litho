@@ -58,7 +58,7 @@ func TestScriptsOf_CountsWhatABrowserRuns(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := scanDocument(context.Background(), doc, documentURL, MaxElements)
+		s, err := scanDocument(context.Background(), doc, nil, documentURL, MaxElements)
 		if err != nil {
 			t.Fatal(err)
 		}

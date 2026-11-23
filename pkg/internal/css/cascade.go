@@ -410,6 +410,10 @@ type ComputeOptions struct {
 	// and ID selectors match ASCII case-insensitively (Selectors 4, 6.6
 	// and 6.7).
 	Mode DocumentMode
+	// Shadows holds the document's shadow trees: the styles are computed
+	// over the flat tree, each element inheriting from its parent there
+	// (CSS Scoping 1, 2.2 and 2.3). nil is a document without them.
+	Shadows *Shadows
 	// maxSteps lowers the step budget below maxComputeSteps, for tests;
 	// zero keeps it.
 	maxSteps int
@@ -912,7 +916,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 			stack = append(stack, frame{n: n, exit: true})
 		}
 		var kids []*html.Node
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
+		for c := range opts.Shadows.Children(n) {
 			if c.Type == html.ElementNode || c.Type == html.DocumentNode {
 				kids = append(kids, c)
 			}

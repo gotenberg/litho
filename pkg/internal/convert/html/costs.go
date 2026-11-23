@@ -5,6 +5,7 @@ import (
 
 	dom "golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -73,12 +74,17 @@ func treeCost(doc *dom.Node) (cost, text int64) {
 }
 
 // chargeTree charges the conversion's budget what the document doc parsed
-// from src bytes holds until the conversion returns ([treeCost]), and the
-// bytes of its text past src's length: the characters a legacy encoding
-// grows by as it is decoded to UTF-8. It returns what it charged, which
-// the caller releases once it drops the tree.
-func chargeTree(ctx context.Context, doc *dom.Node, src int) (int64, error) {
+// from src bytes and its shadow trees hold until the conversion returns
+// ([treeCost]), and the bytes of its text past src's length: the
+// characters a legacy encoding grows by as it is decoded to UTF-8. It
+// returns what it charged, which the caller releases once it drops the
+// tree.
+func chargeTree(ctx context.Context, doc *dom.Node, shadows *css.Shadows, src int) (int64, error) {
 	cost, text := treeCost(doc)
+	for r := range shadows.Roots() {
+		c, t := treeCost(r)
+		cost, text = cost+c, text+t
+	}
 	cost += max(text-int64(src), 0)
 	if err := limits.BudgetFrom(ctx).Charge(cost, "the document tree"); err != nil {
 		return 0, err

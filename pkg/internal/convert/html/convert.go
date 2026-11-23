@@ -80,14 +80,14 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	if err != nil {
 		return nil, err
 	}
-	doc, mode, err := parseDocument(data)
+	doc, mode, shadows, err := parseDocument(data)
 	if err != nil {
 		return nil, err
 	}
-	o.mode = mode
+	o.mode, o.shadows = mode, shadows
 	// Every layout pass prepares the tree again, so it lives until the
 	// document is assembled: its charge is given back as Convert returns.
-	charged, err := chargeTree(ctx, doc, len(data))
+	charged, err := chargeTree(ctx, doc, shadows, len(data))
 	if err != nil {
 		return nil, err
 	}
@@ -275,17 +275,19 @@ type heading struct {
 
 // parseDocument parses the HTML source data, running the insertion steps
 // of the elements it inserts that change the tree, and returns the mode
-// its DOCTYPE sets the document in (see [documentMode]).
-func parseDocument(data []byte) (*dom.Node, css.DocumentMode, error) {
+// its DOCTYPE sets the document in (see [documentMode]) and the shadow
+// trees its declarative shadow roots attach (see [attachShadows]).
+func parseDocument(data []byte) (*dom.Node, css.DocumentMode, *css.Shadows, error) {
 	src := Decode(data)
 	doc, err := dom.Parse(strings.NewReader(src))
 	if err != nil {
 		// A strings.Reader never fails, so the parser fails only on its
 		// own nesting cap.
-		return nil, css.NoQuirks, fmt.Errorf("%w: %w", ErrTooDeep, err)
+		return nil, css.NoQuirks, nil, fmt.Errorf("%w: %w", ErrTooDeep, err)
 	}
+	shadows := attachShadows(doc)
 	closeExclusiveDetails(doc)
-	return doc, documentMode(src), nil
+	return doc, documentMode(src), shadows, nil
 }
 
 // prepareDoc cascades the stylesheets of the parsed document doc and
@@ -302,7 +304,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	if o.frame != nil {
 		docURL = o.frame.base
 	}
-	scan, err := scanDocument(ctx, doc, docURL, o.elementCap())
+	scan, err := scanDocument(ctx, doc, o.shadows, docURL, o.elementCap())
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +393,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: frameHints(rootHints(scan), scan, o.frame), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option, Mode: o.mode}
+	computeOpts := css.ComputeOptions{Hints: frameHints(rootHints(scan), scan, o.frame), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option, Mode: o.mode, Shadows: o.shadows}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -680,7 +682,7 @@ type scan struct {
 // [MaxElements] outside tests, and collecting the root, the metadata, the
 // stylesheet elements, the ids and the base URL. docURL is the document's
 // URL, see [documentBase].
-func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements int) (*scan, error) {
+func scanDocument(ctx context.Context, doc *dom.Node, shadows *css.Shadows, docURL string, maxElements int) (*scan, error) {
 	s := &scan{ids: map[string]bool{}, defs: map[string]*dom.Node{}, resourceBase: docURL, docURL: docURL}
 	if docURL != documentURL {
 		// A document on the network resolves its links against its URL.
@@ -748,6 +750,31 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements
 		}
 		return true
 	})
+	// The elements of the shadow trees count toward the cap.
+	for r := range shadows.Roots() {
+		if walkErr != nil {
+			break
+		}
+		walk(r, func(n *dom.Node) bool {
+			if n.Type != dom.ElementNode || walkErr != nil {
+				return walkErr == nil
+			}
+			elements++
+			if elements > maxElements {
+				walkErr = fmt.Errorf("%w: more than %d elements", ErrTooManyElements, maxElements)
+				return false
+			}
+			if n.Namespace == "math" {
+				s.math = true
+			}
+			s.scripts += scriptsOf(n)
+			if n.Namespace != "" {
+				return true
+			}
+			// A template's content is inert (HTML Standard, 4.12.3).
+			return n.DataAtom != atom.Template
+		})
+	}
 	if walkErr != nil {
 		return nil, walkErr
 	}

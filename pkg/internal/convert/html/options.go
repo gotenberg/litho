@@ -219,6 +219,9 @@ type Options struct {
 	// mode is the document's mode, which its DOCTYPE sets
 	// ([documentMode]).
 	mode css.DocumentMode
+	// shadows holds the document's shadow trees, nil for none
+	// ([attachShadows]).
+	shadows *css.Shadows
 	// maxElements caps the elements of the document: [MaxElements] when
 	// zero, which a larger value cannot raise. A test lowers it to hold a
 	// document at the cap without cascading the full count.

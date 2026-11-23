@@ -727,7 +727,7 @@ func withoutFragment(u string) string {
 // [builder.frame]). It returns the document as its viewport shows it,
 // the warnings of its conversion, and the error that stopped it.
 func (s *frameSet) layOutDoc(ctx context.Context, o Options, fd *frameDoc, data string, w, h float64) (*layout.Embedded, []typeset.Warning, error) {
-	doc, mode, err := parseDocument([]byte(data))
+	doc, mode, shadows, err := parseDocument([]byte(data))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -736,13 +736,13 @@ func (s *frameSet) layOutDoc(ctx context.Context, o Options, fd *frameDoc, data 
 		// DOCTYPE (HTML Standard, 13.2.6.4.1).
 		mode = css.NoQuirks
 	}
-	charged, err := chargeTree(ctx, doc, len(data))
+	charged, err := chargeTree(ctx, doc, shadows, len(data))
 	if err != nil {
 		return nil, nil, err
 	}
 	defer limits.BudgetFrom(ctx).Release(charged)
 	o = frameOptions(o, fd, w, h)
-	o.mode = mode
+	o.mode, o.shadows = mode, shadows
 	p, res, err := prepareAndLayOut(ctx, doc, o, s.fonts, newPrintSetup(o), s.lay, func(p *prepared) {
 		// The canvas covers the viewport, which a page trimmed to the
 		// content would not.
