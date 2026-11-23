@@ -476,10 +476,11 @@ func (sp *sheetPlan) lastPrinted(ctx context.Context, a Range, rows, cols []band
 }
 
 // lastMerged returns the row and column bands of the last page, in the
-// sheet's page order, that a merged cell showing something reaches:
-// the page of its bottom-right cell, the merge clipped to the bands;
-// (-1, -1) when none does. A merged cell prints on every page it
-// reaches, as [sheetPlan.lastPrinted] says.
+// sheet's page order, that a merged cell showing something reaches, any
+// merged cell under Excel's rules, as [grid.usedRange] counts them: the
+// page of its bottom-right cell, the merge clipped to the bands; (-1, -1)
+// when none does. A merged cell prints on every page it reaches, as
+// [sheetPlan.lastPrinted] says.
 func (sp *sheetPlan) lastMerged(rows, cols []band) (int, int) {
 	g := sp.g
 	if len(rows) == 0 || len(cols) == 0 {
@@ -492,7 +493,7 @@ func (sp *sheetPlan) lastMerged(rows, cols []band) (int, int) {
 	lastR, lastC := -1, -1
 	for at0, m := range g.merges {
 		c := g.cell(at0[0], at0[1])
-		if c == nil || !g.shows(c) || m.LastRow < rows[0].first || m.LastColumn < cols[0].first {
+		if !g.doc.ExcelRules && (c == nil || !g.shows(c)) || m.LastRow < rows[0].first || m.LastColumn < cols[0].first {
 			continue
 		}
 		r, cc := at(rows, m.LastRow), at(cols, m.LastColumn)

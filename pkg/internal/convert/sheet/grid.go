@@ -369,8 +369,9 @@ func lined(st *Style) bool {
 // Calc counts a visible style only below the last value of its column, a
 // column without one counting its first row as that value
 // (ScTable::GetPrintArea, ScAttrArray::GetLastVisibleAttr), and stops at
-// a run of columns formatted alike ([grid.attrColumns]). Excel counts
-// every cell with a visible style, and a cell whose file stores an empty
+// a run of columns formatted alike ([grid.attrColumns]), and a merge
+// only when its first cell holds a value. Excel counts every cell with a
+// visible style, every merge, and a cell whose file stores an empty
 // string as a cell with a value ([Cell.EmptyText]).
 //
 // # Corpus evidence
@@ -386,7 +387,9 @@ func lined(st *Style) bool {
 //     column AW, past 30 columns formatted alike, on 15 pages;
 //     55406_Conditional_formatting_sample.xlsx prints its filled cells to
 //     column AL on a second page; 56278.xlsx prints a page for the column
-//     of empty strings right of each table.
+//     of empty strings right of each table; 61034.xlsx prints a blank page
+//     for its Sheet1, which holds two merges of empty cells and nothing
+//     else.
 func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
@@ -432,7 +435,7 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 		u.LastColumn = max(u.LastColumn, g.attrColumns(dataLast, attrLast))
 	}
 	for _, m := range g.merges {
-		if hasContent(g.cell(m.FirstRow, m.FirstColumn)) {
+		if excel || hasContent(g.cell(m.FirstRow, m.FirstColumn)) {
 			add(m.LastRow, m.LastColumn)
 		}
 	}

@@ -115,3 +115,25 @@ func TestUsedRange_PaintedDrawing(t *testing.T) {
 		})
 	}
 }
+
+// TestUsedRange_EmptyMerges locks a merge of empty cells: Excel counts it
+// in the used range, so a sheet holding nothing else prints a blank page;
+// Calc counts a merge only when its first cell holds a value.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 61034.xlsx prints a blank first page for its Sheet1,
+//     whose only content is the merges A1:E1 and A3:B3 of empty cells.
+func TestUsedRange_EmptyMerges(t *testing.T) {
+	for _, excel := range []bool{true, false} {
+		sh := &Sheet{Name: "S", Merges: []Range{{FirstRow: 0, FirstColumn: 0, LastRow: 0, LastColumn: 4}, {FirstRow: 2, FirstColumn: 0, LastRow: 2, LastColumn: 1}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		g := newGrid(t.Context(), doc, sh)
+		g.overflowBudget = maxOverflowCells
+		u, ok := g.usedRange(false)
+		if ok != excel || excel && (u.LastRow != 2 || u.LastColumn != 4) {
+			t.Errorf("Excel rules %t: used range %+v, %t", excel, u, ok)
+		}
+	}
+}

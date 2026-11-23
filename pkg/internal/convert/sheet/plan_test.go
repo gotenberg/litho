@@ -309,6 +309,27 @@ func TestPlan_ExcelPrintsMergedPages(t *testing.T) {
 	}
 }
 
+// TestPlan_ExcelPrintsEmptyMerges locks the pages of a merge of empty
+// cells: under Excel's rules every page it reaches prints, blank, as the
+// pages of a merged cell holding a value do; Calc prints a sheet holding
+// nothing else as it prints an empty one.
+func TestPlan_ExcelPrintsEmptyMerges(t *testing.T) {
+	pages := func(excel bool, merges []Range) int {
+		sh := &Sheet{Name: "S", Page: a4(), Merges: merges}
+		sh.Page.RowBreaks = []int{16}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		return len(convert(t, doc, office.Options{}).Pages)
+	}
+	merge := []Range{{FirstRow: 14, LastRow: 17, FirstColumn: 0, LastColumn: 1}}
+	if n := pages(true, merge); n != 2 {
+		t.Errorf("Excel's rules: %d pages, want 2", n)
+	}
+	if n, empty := pages(false, merge), pages(false, nil); n != empty {
+		t.Errorf("Calc's rules: %d pages, an empty sheet %d", n, empty)
+	}
+}
+
 // TestPlan_ExcelColumnCap locks Excel's bound on a column's width: a
 // column wider than the page prints as wide as the page, at the sheet's
 // scale, and a text overflows from it into the columns after it; Calc
