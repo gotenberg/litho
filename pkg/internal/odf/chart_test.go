@@ -439,3 +439,16 @@ func TestChartFromDocument_PlacedPlotArea(t *testing.T) {
 		t.Errorf("an automatic plot area was placed at %+v", l)
 	}
 }
+
+// TestChartFromDocument_ScatterSeriesTakeTheFirstDomain gives a scatter
+// series without a chart:domain the x values of the first series that
+// states one, as LibreOffice reads it.
+func TestChartFromDocument_ScatterSeriesTakeTheFirstDomain(t *testing.T) {
+	plot := `<chart:series chart:values-cell-range-address="Sheet1.B2:Sheet1.B3" chart:class="chart:scatter"><chart:domain table:cell-range-address="Sheet1.C2:Sheet1.C3"/></chart:series>` +
+		`<chart:series chart:values-cell-range-address="Sheet1.C2:Sheet1.C3" chart:class="chart:scatter"/>`
+	c := readODFChart(t, chartContent("", "scatter", "", plot))
+	a, b := c.Groups[0].Series[0], c.Groups[0].Series[1]
+	if b.Categories.Ref != "Sheet1.C2:Sheet1.C3" || b.Categories.Len() != 2 || b.Categories.Values[0].Number != a.Categories.Values[0].Number {
+		t.Errorf("second series x values = %+v, want the first series' %+v", b.Categories, a.Categories)
+	}
+}

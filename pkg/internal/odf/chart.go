@@ -97,6 +97,10 @@ type chartReader struct {
 	// textDefault is the chart's own text format, which every text
 	// inherits.
 	textDefault chart.TextStyle
+	// domains are the chart:domain ranges of the first series of an x-y
+	// chart that states any, which a later series without its own takes
+	// ([chartReader.series]).
+	domains []string
 }
 
 // warn records a warning once per effect and message.
@@ -745,18 +749,31 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	if s.Name == "" {
 		s.Name, s.Unnamed = "Series"+strconv.Itoa(i+1), true
 	}
-	domains := se.All(NSChart, "domain")
+	var domains []string
+	for _, d := range se.All(NSChart, "domain") {
+		domains = append(domains, d.A(NSTable, "cell-range-address"))
+	}
+	if g.Kind == chart.Scatter || g.Kind == chart.Bubble {
+		// A series of an x-y chart without domains of its own takes the
+		// first series' (LibreOffice's SchXMLPlotAreaContext, its first
+		// domain addresses).
+		if len(domains) == 0 {
+			domains = r.domains
+		} else if r.domains == nil {
+			r.domains = domains
+		}
+	}
 	if g.Kind == chart.Bubble {
 		s.Sizes = s.Values
 		s.Values = chart.Data{}
 		if len(domains) > 0 {
-			s.Values = r.data(domains[0].A(NSTable, "cell-range-address"), false)
+			s.Values = r.data(domains[0], false)
 		}
 		if len(domains) > 1 {
-			s.Categories = r.data(domains[1].A(NSTable, "cell-range-address"), false)
+			s.Categories = r.data(domains[1], false)
 		}
 	} else if len(domains) > 0 {
-		s.Categories = r.data(domains[0].A(NSTable, "cell-range-address"), false)
+		s.Categories = r.data(domains[0], false)
 	}
 	labelFormat := ""
 	if st := r.styles[name]; st != nil && !r.boolProp(name, "link-data-style-to-source", false) {
