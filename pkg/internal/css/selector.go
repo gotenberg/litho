@@ -193,6 +193,20 @@ var knownPseudoElements = map[string]bool{
 	"target-text": true, "spelling-error": true, "grammar-error": true, "cue": true,
 	"footnote-call": true, "footnote-marker": true, "note-call": true, "note-marker": true,
 	"note-callback": true, "column": true, "details-content": true,
+	// The parts of a customizable select (CSS Form Control Styling 1,
+	// 4), which Chromium parses: a printed select shows no picker.
+	"picker-icon": true, "checkmark": true,
+}
+
+// subPseudoElements are the pseudo-elements that may follow another (CSS
+// Pseudo 4, 4.3 and 3.2: ::before, ::after and ::marker of ::before,
+// ::after and ::details-content), as Chromium parses them. A selector of
+// such a chain parses and matches nothing: litho generates no
+// pseudo-element of a pseudo-element.
+var subPseudoElements = map[string]map[string]bool{
+	"before":          {"marker": true},
+	"after":           {"marker": true},
+	"details-content": {"before": true, "after": true, "marker": true},
 }
 
 // simplePseudos maps the argument-less pseudo-classes to their kind.
@@ -450,6 +464,27 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 					pseudoElement = lower(pe.value)
 					c.i++
 					empty = false
+					continue
+				}
+				if pe != nil && pe.typ == tFunction && pseudoElement == "" && eqFold(pe.value, "picker") {
+					// ::picker(select) is the drop-down of a customizable
+					// select (CSS Form Control Styling 1, 4), which a
+					// printed page never opens: it parses, as Chromium
+					// parses it, and matches nothing.
+					arg := significant(pe.children)
+					if len(arg) != 1 || arg[0].typ != tIdent || !eqFold(arg[0].value, "select") {
+						return comp, "", &selectorError{}
+					}
+					comp.never = true
+					pseudoElement = "picker"
+					c.i++
+					empty = false
+					continue
+				}
+				if pe != nil && pe.typ == tIdent && pseudoElement != "" && subPseudoElements[pseudoElement][lower(pe.value)] {
+					comp.never = true
+					pseudoElement = lower(pe.value)
+					c.i++
 					continue
 				}
 				if pe == nil || pe.typ != tIdent || pseudoElement != "" {

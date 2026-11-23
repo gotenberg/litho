@@ -149,6 +149,15 @@ func TestSupports_Conditions(t *testing.T) {
 		{"selector(a:has(b))", true},
 		{"selector(a:heading)", false},
 		{"selector(::column)", true},
+		// The chains and the select parts Chromium parses.
+		{"selector(div::before::marker)", true},
+		{"selector(details::details-content::before)", true},
+		{"selector(div::marker::before)", false},
+		{"selector(div::before::before)", false},
+		{"selector(select::picker-icon)", true},
+		{"selector(option::checkmark)", true},
+		{"selector(select::picker(select))", true},
+		{"selector(select::picker(foo))", false},
 		{"(color: red) and (width: 1px) or (scroll-snap-type: x)", false},
 		{"font-tech(color-COLRv1)", false},
 		// CSS Conditional 3, 6: a parenthesised value that is no
