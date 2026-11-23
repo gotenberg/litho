@@ -54,7 +54,7 @@ func TestPrepare_MapsElementsToRoles(t *testing.T) {
 		{`<p><samp id=x>a</samp>`, "Code"},
 		{`<p><q id=x>a</q>`, "Quote"},
 		{`<p><cite id=x>a</cite>`, "Quote"},
-		{`<figure id=x>a</figure>`, "Figure"},
+		{`<figure id=x>a</figure>`, "Aside"},
 		{`<figure><figcaption id=x>a</figcaption></figure>`, "Caption"},
 		{`<table id=x><tr><td>a</table>`, "Table"},
 		{`<table><caption id=x>a</caption><tr><td>a</table>`, "Caption"},
@@ -87,20 +87,32 @@ func TestPrepare_MapsElementsToRoles(t *testing.T) {
 	}
 }
 
-// TestPrepare_FigureName locks the Alt of a figure's Figure: its
-// aria-label, else its first figcaption's text, else its title, as
-// HTML-AAM names a figure.
-func TestPrepare_FigureName(t *testing.T) {
+// TestPrepare_FigureIsAGrouping locks the structure of a figure element:
+// an Aside grouping its content and its figcaption, a Caption, whatever
+// it holds (a Div, transparent to ISO/TS 32005, Table 5, would leave the
+// Caption under the Document), the images in it Figures of their own named as their author
+// names them. ISO 32000-2, 14.8.4.8.5 keeps a Figure for an item of
+// graphical content, which a figure of text, a table or several images
+// is not, and ISO 14289-1, 7.3 asks every Figure for a description.
+//
+// # Corpus evidence
+//
+//   - litho/html svg: a figure of two described images, with no caption,
+//     was a Figure without Alt and failed PDF/UA-1 and PDF/UA-2.
+//   - probe, html: Chromium's tagged PDF (gotenberg/gotenberg:9.4.1,
+//     nativeTaggedPdf) writes every figure as a Figure without Alt, a
+//     table, a quote or an image inside it, and its figcaption as a
+//     Caption.
+func TestPrepare_FigureIsAGrouping(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ html, alt string }{
-		{`<figure id=x aria-label=" Named " title=t><figcaption>c</figcaption></figure>`, "Named"},
-		{`<figure id=x title=t><p>x</p><figcaption> A   caption </figcaption><figcaption>b</figcaption></figure>`, "A caption"},
-		{`<figure id=x title="The title">a</figure>`, "The title"},
-		{`<figure id=x>a</figure>`, ""},
+	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 4, 4)}}
+	p := prep(t, `<figure id=f aria-label="Named"><img id=i src=a.png alt="An image"><figcaption id=c>A caption</figcaption></figure>`+
+		`<figure id=t><table><tr><td>x</td></tr></table></figure>`, Options{Resources: fsys})
+	for id, want := range map[string]struct{ role, alt string }{
+		"f": {"Aside", ""}, "c": {"Caption", ""}, "i": {"Figure", "An image"}, "t": {"Aside", ""},
 	} {
-		p := prep(t, tc.html, Options{})
-		if got := byID(t, p.root, "x").Alt; got != tc.alt {
-			t.Errorf("%s: alt %q, want %q", tc.html, got, tc.alt)
+		if n := byID(t, p.root, id); n.Role != want.role || n.Alt != want.alt {
+			t.Errorf("%s: role %q alt %q, want %q %q", id, n.Role, n.Alt, want.role, want.alt)
 		}
 	}
 }

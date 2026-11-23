@@ -39,7 +39,16 @@ var roles = map[atom.Atom]string{
 	atom.Blockquote: "BlockQuote",
 	atom.Pre:        "Code", atom.Code: "Code", atom.Kbd: "Code", atom.Samp: "Code",
 	atom.Q: "Quote", atom.Cite: "Quote",
-	atom.Figure: "Figure", atom.Figcaption: "Caption",
+	// A figure is self-contained content referred to as a unit, with its
+	// caption (HTML Standard, 4.4.12): an Aside holding a Caption (ISO
+	// 32000-2, 14.8.4.4; ISO/TS 32005, Table 5 lets an Aside hold one
+	// Caption, where a Div, which it treats as transparent, would hand the
+	// Caption to the Document), not a Figure, which ISO 32000-2,
+	// 14.8.4.8.5 keeps for an item of graphical content and ISO 14289-1,
+	// 7.3 asks a description of. The images it holds are Figures of their
+	// own, named as their author names them. PDF 1.7 role-maps the Aside
+	// to a Div.
+	atom.Figure: "Aside", atom.Figcaption: "Caption",
 	atom.Table: "Table", atom.Thead: "THead", atom.Tbody: "TBody", atom.Tfoot: "TFoot",
 	atom.Tr: "TR", atom.Th: "TH", atom.Td: "TD", atom.Caption: "Caption",
 	atom.Span: "Span", atom.Em: "Span", atom.Strong: "Span", atom.B: "Span", atom.I: "Span",
@@ -485,8 +494,6 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		if node.Style != nil {
 			node.Numbering = listNumbering(node.Style.ListStyleType, n.DataAtom == atom.Ol)
 		}
-	case atom.Figure:
-		node.Alt = figureName(n)
 	case atom.Dl:
 		node.Numbering = typeset.NumberingDescription
 	case atom.Dt, atom.Dd:
@@ -1478,31 +1485,4 @@ func bounded(s string) string {
 		s = s[:len(s)-size]
 	}
 	return s
-}
-
-// figureName returns the name of a figure element, the Alt its Figure
-// carries (ISO 14289-1, 7.3), as HTML-AAM computes a figure's accessible
-// name: its aria-label, else the text of its first figcaption child,
-// else its title; "" for none. A figure names its figcaption's text
-// because a Figure's Alt replaces what it holds for a reader.
-func figureName(n *dom.Node) string {
-	name := ""
-	if v, ok := attr(n, "aria-label"); ok {
-		name = collapse(v)
-	}
-	for c := n.FirstChild; c != nil && name == ""; c = c.NextSibling {
-		if c.Type == dom.ElementNode && c.DataAtom == atom.Figcaption && c.Namespace == "" {
-			name = collapse(textContent(c))
-			break
-		}
-	}
-	if name == "" {
-		v, _ := attr(n, "title")
-		name = collapse(v)
-	}
-	for len(name) > maxFigureName {
-		_, size := utf8.DecodeLastRuneInString(name)
-		name = name[:len(name)-size]
-	}
-	return name
 }

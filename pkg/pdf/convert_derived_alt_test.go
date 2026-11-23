@@ -35,11 +35,12 @@ func TestConvert_DerivedAltText(t *testing.T) {
 	if !bytes.Equal(plain, off) {
 		t.Error("WithDerivedAltText(false) writes other bytes than no option")
 	}
-	if got := bytes.Count(plain, []byte("/Alt (Quarterly sales)")); got != 1 {
-		t.Errorf("without the option %d /Alt entries name the caption, want the figure's alone", got)
+	// The figure is a grouping, the picture its one Figure.
+	if got := bytes.Count(plain, []byte("/Alt (Quarterly sales)")); got != 0 {
+		t.Errorf("without the option %d /Alt entries name the caption, want none", got)
 	}
-	if got := bytes.Count(on, []byte("/Alt (Quarterly sales)")); got != 2 {
-		t.Errorf("with the option %d /Alt entries name the caption, want the figure's and the picture's", got)
+	if got := bytes.Count(on, []byte("/Alt (Quarterly sales)")); got != 1 {
+		t.Errorf("with the option %d /Alt entries name the caption, want the picture's", got)
 	}
 	render := func(data []byte) image.Image {
 		t.Helper()
