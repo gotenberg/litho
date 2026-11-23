@@ -388,6 +388,62 @@ func (b *builder) pageFill(st *css.Style, g frameGeom) {
 	}
 }
 
+// placedLink returns the link element link, whose one child is a drawing
+// placed off the line (floated, positioned or set apart below the text),
+// as that placement: the link takes the drawing's place in the flow and
+// the drawing sits at the link's origin, so a paragraph that holds
+// nothing but a linked drawing lays out as one holding the drawing alone
+// (ODF 1.3 Part 3, 10.4.12 draw:a). Any other link is returned as is.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/shapes-hyperlink.odt links each of its
+//     shapes of none wrap in an otherwise empty paragraph, which
+//     LibreOffice prints below the shape, as it does without the link.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 a frame and a line of none
+//     wrap, alone in their paragraphs, move those paragraphs' lines below
+//     themselves with and without a draw:a around them.
+func (b *builder) placedLink(link *layout.Node) *layout.Node {
+	if len(link.Children) != 1 {
+		return link
+	}
+	k := link.Children[0]
+	ks := k.Style
+	if ks == nil || ks.Float == css.FloatNone && ks.Position == css.Static && ks.Display != css.Block {
+		return link
+	}
+	ws, kst := baseStyle(), *ks
+	ws.Display, ws.Position, ws.Float, ws.Clear = ks.Display, ks.Position, ks.Float, ks.Clear
+	ws.Left, ws.Top, ws.Right, ws.Bottom, ws.ZIndex, ws.Margin = ks.Left, ks.Top, ks.Right, ks.Bottom, ks.ZIndex, ks.Margin
+	ws.PageAnchor, ws.AnchorPage, ws.PageClamp = ks.PageAnchor, ks.AnchorPage, ks.PageClamp
+	ws.FrameWrap, ws.WrapGap, ws.WordAnchor, ws.WrapPolygon = ks.FrameWrap, ks.WrapGap, ks.WordAnchor, ks.WrapPolygon
+	plain := baseStyle()
+	kst.Position, kst.Float, kst.Clear = css.Static, css.FloatNone, plain.Clear
+	kst.Left, kst.Top, kst.Right, kst.Bottom, kst.ZIndex, kst.Margin = plain.Left, plain.Top, plain.Right, plain.Bottom, plain.ZIndex, plain.Margin
+	kst.PageAnchor, kst.AnchorPage, kst.PageClamp = false, 0, false
+	kst.FrameWrap, kst.WrapGap, kst.WordAnchor, kst.WrapPolygon = plain.FrameWrap, plain.WrapGap, plain.WordAnchor, nil
+	kst.Display = blockified(kst.Display)
+	k.Style, link.Style = &kst, ws
+	if g, ok := b.anchored[k]; ok {
+		delete(b.anchored, k)
+		b.anchored[link] = g
+	}
+	if g, ok := b.floats[k]; ok {
+		delete(b.floats, k)
+		b.floats[link] = g
+	}
+	if b.topFrames[k] {
+		delete(b.topFrames, k)
+		b.topFrames[link] = true
+	}
+	for i := range b.heightFrames {
+		if b.heightFrames[i].n == k {
+			b.heightFrames[i].n = link
+		}
+	}
+	return link
+}
+
 // inlineFrame appends a drawing element met in a paragraph's text (ODF
 // 1.3, Part 3, 10): a frame anchored as a character is an atomic inline
 // box on the line; one anchored to the paragraph or a character floats
@@ -406,7 +462,7 @@ func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, 
 			}
 			b.inlineFrame(k, &kids, ws, depth+1)
 		}
-		*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: c.A(odf.NSXLink, "href"), Role: "Link", Children: kids}))
+		*out = append(*out, b.placedLink(b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: c.A(odf.NSXLink, "href"), Role: "Link", Children: kids})))
 		return
 	}
 	if b.duplicateFrame(c) {

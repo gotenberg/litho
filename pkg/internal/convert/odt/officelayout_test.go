@@ -616,14 +616,15 @@ func TestConvert_LineAtItsEnds(t *testing.T) {
 // TestConvert_LinkAnchorsItsDrawing anchors a drawing that states no
 // anchor by its draw:a's text:anchor-type, as LibreOffice writes and reads
 // a linked shape: a run-through shape anchored to its paragraph is
-// positioned at its offsets, not set in the line.
+// positioned at its offsets, not set in the line; the link holding it
+// alone takes its place ([builder.placedLink]).
 func TestConvert_LinkAnchorsItsDrawing(t *testing.T) {
 	auto := `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties style:wrap="run-through" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>`
 	b := newTestBuilder(t, doc{contentAuto: auto, body: `<text:p><draw:a text:anchor-type="paragraph" xlink:href="http://example.com/"><draw:rect draw:style-name="gr1" svg:width="2cm" svg:height="1cm" svg:x="4cm" svg:y="5cm"/></draw:a></text:p>`})
 	root, _ := b.document(odfBody(b))
 	found := false
 	walkNodes(root, func(n *layout.Node) {
-		if n.Kind == layout.Replaced {
+		if n.Role == "Link" && len(n.Children) == 1 && n.Children[0].Kind == layout.Replaced {
 			found = true
 			if n.Style.Position != css.Absolute || !near(n.Style.Left.Value, 113.39, 0.01) || !near(n.Style.Top.Value, 141.73, 0.01) {
 				t.Errorf("shape position %v at %v, %v, want absolute at 113.39, 141.73", n.Style.Position, n.Style.Left, n.Style.Top)

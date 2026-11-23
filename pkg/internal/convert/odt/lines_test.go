@@ -74,14 +74,14 @@ func TestLineMarkers(t *testing.T) {
 	}
 }
 
-// TestLineWrap locks how Writer sets text around a line of none wrap (see
-// [builder.lineOf]): the line before
+// TestLineWrap locks how Writer sets text around a line of none wrap in a
+// link (see [builder.lineOf] and [builder.placedLink]): the line before
 // the anchor paragraph stays though the marker reaches above it, and the
 // anchor paragraph's text goes below the marker.
 func TestLineWrap(t *testing.T) {
 	auto := `<style:style style:name="gr" style:family="graphic"><style:graphic-properties draw:stroke="solid" svg:stroke-width="1cm" draw:marker-end="Arrow" draw:marker-end-width="2cm" style:wrap="none" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>`
 	line := `<draw:line text:anchor-type="paragraph" draw:style-name="gr" svg:x1="2cm" svg:y1="0.9cm" svg:x2="8cm" svg:y2="0.9cm"/>`
-	for _, link := range []bool{false} {
+	for _, link := range []bool{false, true} {
 		l := line
 		if link {
 			l = `<draw:a xlink:href="http://example.com/" xlink:type="simple">` + line + `</draw:a>`
