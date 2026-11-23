@@ -158,6 +158,10 @@ func (lp layoutProps) get(name, prop string) (int64, bool) {
 //     circles on the bottom of the largest, centred on it, which no
 //     constraint places but the default top left; PowerPoint's drawing
 //     saves them at 63.5 and 127.1 points down, where the rule puts them.
+//   - libreoffice/pptx: smartart-center-cycle's radial3 places its cycle,
+//     which no constraint places, in a composite of ar 1: Office's page
+//     lays the cycle out in the 320-point square in the middle of the 480
+//     by 320 frame.
 func (e *engine) composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	run := &compositeRun{e: e, a: a, s: s, cons: cons, keys: map[string]bool{}}
 	// A bound (lte) met at one size and not at the next makes the far edges
@@ -359,6 +363,10 @@ func (r *compositeRun) lay(place bool) {
 			x += xOff
 			w = min(w, s.W-x)
 			h = min(h, s.H-y)
+		} else if a.Ratio == 1 {
+			// A kid no constraint places takes the composite's box, which
+			// its aspect ratio narrows (21.4.7.49 ar).
+			x, w = xOff, s.W-2*xOff
 		}
 		boxes[i] = box{x, y, w, h}
 		for _, prop := range sortedKeys(props[k.Name]) {

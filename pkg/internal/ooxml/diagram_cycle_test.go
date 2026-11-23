@@ -59,3 +59,16 @@ func TestDiagramCycle(t *testing.T) {
 		})
 	}
 }
+
+// TestDiagramCompositeRatioPlacesAnUnplacedKid states that a composite's
+// kid no constraint places takes the composite's box as its aspect ratio
+// narrows it (21.4.7.49 ar): a square in the middle of a wide box.
+func TestDiagramCompositeRatioPlacesAnUnplacedKid(t *testing.T) {
+	layout := `<dgm:alg type="composite"><dgm:param type="ar" val="1"/></dgm:alg><dgm:shape/>` + nodeList("ellipse", "")
+	d := ParseDiagram(mustParse(t, diagramData("a")), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(3000, 1000, nil))
+	want := []string{"background rect 0,0 3000x1000", "node ellipse 1000,0 1000x1000"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}
