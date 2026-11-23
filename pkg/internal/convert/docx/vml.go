@@ -245,6 +245,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	}
 	geom := d.vmlGeometry(k)
 	g := &shape.Geometry{Preset: geom}
+	if k.Local == "roundrect" {
+		g.Adjust = []shape.Adjust{{Name: "adj", Value: arcSize(k)}}
+	}
 	if geom == "" {
 		g = d.vmlCustom(k)
 	}
@@ -259,6 +262,27 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	n := vectorShape(st, g, ss, w, h)
 	setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 	return n
+}
+
+// arcSize returns the adjustment of the DrawingML roundRect preset that
+// rounds the corners of the v:roundrect k as its arcsize does (Part 4,
+// 14.1.2.17 roundrect arcsize, 0.2 when absent): a corner's radius is
+// arcsize times the shape's shorter side, as the preset's adj is in
+// 1/100,000 of it (ECMA-376 Part 1, 20.1.10.56 roundRect), at most half.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/n779627b.docx: Word rounds a
+//     v:roundrect of arcsize 2637f (0.0402), 561.5 by 743.5 points, with
+//     corners whose straight edges start 18 to 19.5 points from the
+//     corner, a radius of about 22.6 points, arcsize times its shorter
+//     side.
+func arcSize(k *ooxml.Element) float64 {
+	f, ok := ooxml.VMLFraction(attrOr(k, "arcsize"))
+	if !ok {
+		f = 0.2
+	}
+	return min(f, 0.5) * 100000
 }
 
 // vmlFlow maps a v:textbox's layout-flow (MS-OI29500, 2.1.1394) onto a

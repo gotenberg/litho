@@ -204,3 +204,22 @@ func TestVMLGeometry_OwnPathOverType(t *testing.T) {
 		}
 	}
 }
+
+// TestVML_ArcSize rounds a v:roundrect's corners by its arcsize, a
+// fraction of its shorter side (Part 4, 14.1.2.17), 0.2 when absent, as
+// the roundRect preset's adj in 1/100,000 of that side.
+func TestVML_ArcSize(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		attr string
+		want float64
+	}{{``, 20000}, {` arcsize="2637f"`, 2637.0 / 65536 * 100000}, {` arcsize="10%"`, 10000}, {` arcsize="0.9"`, 50000}} {
+		root, err := ooxml.Parse(t.Context(), []byte(`<w:pict `+nsDecl+`><v:roundrect`+tc.attr+`/></w:pict>`), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := arcSize(root.Kids()[0]); math.Abs(got-tc.want) > 1e-6 {
+			t.Errorf("%q: adj %v, want %v", tc.attr, got, tc.want)
+		}
+	}
+}
