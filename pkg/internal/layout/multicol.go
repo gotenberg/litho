@@ -1327,13 +1327,20 @@ func holdsInside(h, m *box) bool {
 
 // layoutContextIn lays out the content of the block b, which establishes
 // a formatting context, its border box top at top, and returns that top.
-// In columns a scroll container is monolithic (CSS Fragmentation 3, 4.1,
-// as Chromium fragments it): its content is laid out without breaks, and
-// it moves to the next column when it straddles a cut, overflowing one it
-// is taller than. Under the browser rules the root of an orthogonal flow
-// is monolithic in pages and columns alike, as Chromium fragments it: its
-// content is laid out off the cuts across the axis they cut (CSS Writing
-// Modes 4, 7.3; CSS Fragmentation 3, 4.1), and the root moves to the next
+// CSS Fragmentation 3, 4.1 lets a user agent take a scroll container, or a
+// box of overflow: hidden and a definite height, as monolithic, and 4.4
+// lets it slice one that does not fit rather than lose content off the
+// fragmentainer. Blink slices such a box across the columns when it prints,
+// whatever the media type, as it slices it across pages, and keeps it
+// whole only in a viewport that scrolls, which a page never is: litho
+// slices it under the browser rules. Off the browser rules, as the Office
+// converters lay out, a clipping box stays whole in its column. A monolithic box's content is laid out without
+// breaks, and it moves to the next column when it straddles a cut,
+// overflowing one it is taller than. Under the browser rules the root of
+// an orthogonal flow is monolithic in pages and columns alike, as
+// Chromium fragments it: its content is laid out off the cuts across the
+// axis they cut (CSS Writing Modes 4, 7.3; CSS Fragmentation 3, 4.1), and
+// the root moves to the next
 // page or column whole.
 //
 // # Corpus evidence
@@ -1343,9 +1350,17 @@ func holdsInside(h, m *box) bool {
 //     top lies 100 pixels above the end of a page at the top of the next
 //     page, uncut, and moves one that straddles the end of a column of a
 //     balanced two-column container to the next column.
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) prints boxes
+//     of overflow hidden, auto, scroll and overflow-x hidden, of a height
+//     and of none, taller than the column they start in, sliced across
+//     the columns of a two-column container, their clip, borders, rounded
+//     corners and positioned children following the slices, and slices
+//     them across pages too, under the print and the screen media types
+//     alike; its scrolling viewport keeps them whole in one column.
 func (e *engine) layoutContextIn(b *box, cb cblock, top float64) float64 {
 	whole := b.ortho && e.opts.BrowserRules && b.parent != nil
-	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer() || whole) && !isMulticol(b)
+	scroller := (b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !e.opts.BrowserRules
+	b.monoCol = e.cols != nil && b.parent != nil && (scroller || whole) && !isMulticol(b)
 	if !b.monoCol && !whole {
 		e.layoutOwnContext(b, cb)
 		return top

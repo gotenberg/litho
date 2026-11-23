@@ -236,6 +236,41 @@ func TestMulticol_MonolithicMoves(t *testing.T) {
 		_____`)
 }
 
+// TestMulticol_ScrollContainerSliced locks that under the browser rules a
+// box of overflow hidden taller than what its column has left is sliced
+// across the columns, its clip cutting its content at the box's end (CSS
+// Fragmentation 3, 4.1 and 4.4), and that off them it stays whole in one
+// column.
+func TestMulticol_ScrollContainerSliced(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	clip := func(s *css.Style) { s.Overflow = css.OverflowHidden }
+	tree := func() *Node {
+		return doc(el(sty(columns(2, 1), height(2), auto), strip(red), el(sty(height(2), bg(blue), clip), el(sty(height(4), bg(lime))))))
+	}
+	tests := []struct {
+		name    string
+		browser bool
+		want    string
+	}{
+		{"browser rules", true, `
+			RR_GG
+			GG___
+			_____`},
+		{"engine rules", false, `
+			RR_GG
+			___GG
+			_____`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			res := runWith(t, tree(), Options{Page: page(5, 3), BrowserRules: tt.browser})
+			assertPixels(t, res, 1, tt.want)
+		})
+	}
+}
+
 func TestMulticol_Anchors(t *testing.T) {
 	t.Parallel()
 	target := strip(lime)
