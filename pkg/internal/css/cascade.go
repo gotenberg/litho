@@ -90,6 +90,9 @@ type Resolver struct {
 	// positionTries holds the @position-try rules whose media conditions
 	// match, the last of each name in the highest layer.
 	positionTries map[string]*positionTryRule
+	// slotted and parts hold the selectors ending in ::slotted() and
+	// ::part(), which style elements of other trees.
+	slotted, parts []selRef
 }
 
 type resolvedRule struct {
@@ -220,10 +223,17 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, scope: sh.Scope, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
 			for _, s := range sr.selectors {
 				ref := selRef{rule: idx, sel: s, anc: ancestorFeatures(s)}
-				if s.pseudoElement == "" {
+				switch pe, ok := pseudoNames[s.pseudoElement]; {
+				case s.pseudoElement == "":
 					r.elems.add(ref)
-				} else if pe, ok := pseudoNames[s.pseudoElement]; ok {
+				case ok:
 					r.pseudos[pe].add(ref)
+				case s.pseudoElement == "slotted" && sh.Scope != nil:
+					// ::slotted() from the document's tree has no slot
+					// to style: the document has no host of its own.
+					r.slotted = append(r.slotted, ref)
+				case s.pseudoElement == "part":
+					r.parts = append(r.parts, ref)
 				}
 			}
 		}
@@ -679,6 +689,10 @@ const styleAttrSpec = 1 << 31
 type cand struct {
 	d    *Declaration
 	rank int
+	// ctx is the depth of the tree the declaration comes from, 0 for the
+	// document's, which orders the declarations of one rank by their
+	// context (CSS Cascade 5, 6.1).
+	ctx int
 	// layer orders the declarations of one rank by cascade layer
 	// ([layerRank]), before specificity.
 	layer int
@@ -692,7 +706,10 @@ type pendingRef struct{ d *Declaration }
 
 // computeState is the state of one Compute call.
 type computeState struct {
-	r      *Resolver
+	r *Resolver
+	// ctx is the depth of the tree of the element matched last, the
+	// context of its own declarations ([cand.ctx]).
+	ctx    int
 	opts   ComputeOptions
 	m      *matcher
 	anc    *ancestorFilter
@@ -882,7 +899,7 @@ var computeOrder = func() []propID {
 // maxComputeSteps steps, and ctx's error when it is done.
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
-		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps), opts.Mode == Quirks), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
+		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps), opts.Mode == Quirks, opts.Shadows), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}
@@ -1040,7 +1057,7 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 		for i := range hints {
 			// Presentational hints lose to every author rule, whatever
 			// its layer (CSS Cascade 5, 6.2).
-			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), layer: -attachedRank, ord: -1, idx: i})
+			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ctx: cs.ctx, layer: -attachedRank, ord: -1, idx: i})
 		}
 	}
 	// The style attribute of an HTML, SVG and MathML element (MathML Core,
@@ -1048,7 +1065,7 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg" || n.Namespace == "math") {
 		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL, Quirks: cs.opts.Mode == Quirks})
 		for i := range decls {
-			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
+			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), ctx: cs.ctx, layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
 		}
 	}
 	return cands
@@ -1114,6 +1131,14 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
 			return c
+		}
+		// The outer context's normal declarations win, the inner one's
+		// important declarations (CSS Cascade 5, 6.1).
+		if c := cmp.Compare(a.ctx, b.ctx); c != 0 {
+			if a.d.Important {
+				return c
+			}
+			return -c
 		}
 		if c := cmp.Compare(a.layer, b.layer); c != 0 {
 			return c
@@ -1351,9 +1376,20 @@ const linearClasses = 8
 // next call reuses.
 func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	matched := cs.matched[:0]
+	sh := cs.opts.Shadows
 	var scope *html.Node
-	if cs.opts.Shadows != nil {
+	if sh != nil {
 		scope = treeScope(n)
+	}
+	cs.ctx = sh.depth(scope)
+	add := func(ref selRef) {
+		if cs.stamp[ref.rule] != cs.elem {
+			cs.stamp[ref.rule] = cs.elem
+			cs.spec[ref.rule] = ref.sel.spec
+			matched = append(matched, ref.rule)
+		} else {
+			cs.spec[ref.rule] = max(cs.spec[ref.rule], ref.sel.spec)
+		}
 	}
 	test := func(refs []selRef) {
 		for _, ref := range refs {
@@ -1366,13 +1402,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 			if !cs.anc.admits(ref.anc) || !cs.m.matches(ref.sel, n) {
 				continue
 			}
-			if cs.stamp[ref.rule] != cs.elem {
-				cs.stamp[ref.rule] = cs.elem
-				cs.spec[ref.rule] = ref.sel.spec
-				matched = append(matched, ref.rule)
-			} else {
-				cs.spec[ref.rule] = max(cs.spec[ref.rule], ref.sel.spec)
-			}
+			add(ref)
 		}
 	}
 	if id, ok := attr(n, "id"); ok {
@@ -1407,6 +1437,9 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	}
 	test(r.byTag[lower(n.Data)])
 	test(r.universal)
+	if sh != nil {
+		cs.matchShadow(n, r, add)
+	}
 	cs.matched = matched[:0]
 	out := cs.cands[:0]
 	for _, ri := range matched {
@@ -1414,9 +1447,13 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		if rr.rule.cont != nil && !cs.matchesContainers(rr.rule.cont, n, r != &cs.r.elems) {
 			continue
 		}
+		ctx := cs.ctx
+		if rr.origin == Author {
+			ctx = sh.depth(rr.scope)
+		}
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
-			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
+			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), ctx: ctx, layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
 		}
 	}
 	cs.cands = out[:0]

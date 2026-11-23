@@ -38,6 +38,8 @@ type matcher struct {
 	// quirks matches class and ID selectors ASCII case-insensitively, as
 	// a document in quirks mode asks (Selectors 4, 6.6 and 6.7).
 	quirks bool
+	// shadows holds the document's shadow trees, nil for none.
+	shadows *Shadows
 }
 
 // hasProbe names one :has() tested on one element.
@@ -46,8 +48,8 @@ type hasProbe struct {
 	n *html.Node
 }
 
-func newMatcher(docLang string, maxSteps int, quirks bool) *matcher {
-	return &matcher{info: map[*html.Node]*elemInfo{}, docLang: lower(docLang), maxSteps: maxSteps, quirks: quirks}
+func newMatcher(docLang string, maxSteps int, quirks bool, shadows *Shadows) *matcher {
+	return &matcher{info: map[*html.Node]*elemInfo{}, docLang: lower(docLang), maxSteps: maxSteps, quirks: quirks, shadows: shadows}
 }
 
 // charge spends n steps, reporting false once the budget is gone.
@@ -169,13 +171,25 @@ func (m *matcher) langOf(n *html.Node) string {
 // matches reports whether the element n matches s, ignoring a
 // pseudo-element s targets.
 func (m *matcher) matches(s *complexSel, n *html.Node) bool {
-	return m.matchFrom(s, len(s.parts)-1, n)
+	return m.matchFrom(s, len(s.parts)-1, n, false)
+}
+
+// matchesHost reports whether host, the host of the shadow tree s comes
+// from, matches s as the featureless element it is to the selectors of
+// that tree (CSS Scoping 1, 3.1.1 and 3.2.1).
+func (m *matcher) matchesHost(s *complexSel, host *html.Node) bool {
+	return m.matchFrom(s, len(s.parts)-1, host, true)
 }
 
 // matchFrom matches parts[:i+1] of s right to left, n standing for
-// parts[i] (Selectors 4, 16).
-func (m *matcher) matchFrom(s *complexSel, i int, n *html.Node) bool {
-	if !m.compound(&s.parts[i], n) {
+// parts[i] (Selectors 4, 16); featureless marks n as the host of the
+// shadow tree the selector comes from.
+func (m *matcher) matchFrom(s *complexSel, i int, n *html.Node, featureless bool) bool {
+	if featureless {
+		if !m.featurelessCompound(&s.parts[i], n) {
+			return false
+		}
+	} else if !m.compound(&s.parts[i], n) {
 		return false
 	}
 	if i == 0 {
@@ -183,25 +197,50 @@ func (m *matcher) matchFrom(s *complexSel, i int, n *html.Node) bool {
 	}
 	switch s.combs[i-1] {
 	case '>':
-		p := parentElement(n)
-		return p != nil && m.matchFrom(s, i-1, p)
+		p, pf := m.parentOf(n, featureless)
+		return p != nil && m.matchFrom(s, i-1, p, pf)
 	case '+':
+		if featureless {
+			return false
+		}
 		p := prevElement(n)
-		return p != nil && m.matchFrom(s, i-1, p)
+		return p != nil && m.matchFrom(s, i-1, p, false)
 	case '~':
+		if featureless {
+			return false
+		}
 		for p := prevElement(n); p != nil && !m.over; p = prevElement(p) {
-			if m.matchFrom(s, i-1, p) {
+			if m.matchFrom(s, i-1, p, false) {
 				return true
 			}
 		}
 	default:
-		for p := parentElement(n); p != nil && !m.over; p = parentElement(p) {
-			if m.matchFrom(s, i-1, p) {
+		p, pf := m.parentOf(n, featureless)
+		for p != nil && !m.over {
+			if m.matchFrom(s, i-1, p, pf) {
 				return true
 			}
+			p, pf = m.parentOf(p, pf)
 		}
 	}
 	return false
+}
+
+// parentOf returns the parent the combinators reach from n in its tree:
+// its parent element, or for a top-level element of a shadow tree the
+// tree's host, featureless; the host has none in its shadow tree's
+// context.
+func (m *matcher) parentOf(n *html.Node, featureless bool) (*html.Node, bool) {
+	if featureless {
+		return nil, false
+	}
+	if p := parentElement(n); p != nil {
+		return p, false
+	}
+	if h := m.shadows.Host(n.Parent); h != nil {
+		return h, true
+	}
+	return nil, false
 }
 
 func (m *matcher) anyMatches(list []*complexSel, n *html.Node) bool {
@@ -212,6 +251,132 @@ func (m *matcher) anyMatches(list []*complexSel, n *html.Node) bool {
 	}
 	return false
 }
+
+// featurelessCompound matches the compound c against the featureless
+// host n: it matches only a compound of the pseudo-classes that may
+// match a featureless element, :host, :host() and :host-context(), and
+// :is(), :where(), :not() and :has() over them, holding at least one of
+// the first three (Selectors 4, 3.6.4, featureless elements; CSS Scoping
+// 1, 3.2.1).
+func (m *matcher) featurelessCompound(c *compound, n *html.Node) bool {
+	if !m.charge(1) || !featurelessCapable(c) || !holdsHost(c, 0) {
+		return false
+	}
+	for i := range c.pseudos {
+		p := &c.pseudos[i]
+		switch p.kind { //nolint:exhaustive // featurelessCapable leaves no other kind
+		case psHost, psHostContext:
+			if !m.hostPseudo(p, n) {
+				return false
+			}
+		case psIs, psWhere:
+			if !m.anyMatchesHost(p.args, n) {
+				return false
+			}
+		case psNot:
+			if m.anyMatchesHost(p.args, n) {
+				return false
+			}
+		case psHas:
+			// The host's descendants in its shadow tree's context are the
+			// shadow tree's elements.
+			if r := m.shadows.Root(n); r == nil || !m.hasMatch(p, r) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// anyMatchesHost reports whether the featureless host n matches one of
+// the selectors of list.
+func (m *matcher) anyMatchesHost(list []*complexSel, n *html.Node) bool {
+	for _, s := range list {
+		if s.pseudoElement == "" && m.matchFrom(s, len(s.parts)-1, n, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// featurelessCapable reports whether the compound c may match a
+// featureless element: no type, ID, class or attribute selector, and only
+// the pseudo-classes [matcher.featurelessCompound] lists, a :not() whose
+// every argument ends in such a compound.
+func featurelessCapable(c *compound) bool {
+	if c.never || c.typed || c.tag != "" || len(c.ids)+len(c.classes)+len(c.attrs) > 0 || len(c.pseudos) == 0 {
+		return false
+	}
+	for i := range c.pseudos {
+		p := &c.pseudos[i]
+		switch p.kind { //nolint:exhaustive // every other pseudo-class needs features
+		case psHost, psHostContext, psIs, psWhere, psHas:
+		case psNot:
+			for _, s := range p.args {
+				if !featurelessCapable(&s.parts[len(s.parts)-1]) {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// holdsHost reports whether the compound c holds :host, :host() or
+// :host-context(), itself or in the last compound of an argument of its
+// :is(), :where() or :not(), depth levels down.
+func holdsHost(c *compound, depth int) bool {
+	if depth > maxSelectorNesting {
+		return false
+	}
+	for i := range c.pseudos {
+		p := &c.pseudos[i]
+		switch p.kind { //nolint:exhaustive // the other pseudo-classes hold no :host
+		case psHost, psHostContext:
+			return true
+		case psIs, psWhere, psNot:
+			for _, s := range p.args {
+				if holdsHost(&s.parts[len(s.parts)-1], depth+1) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// hostPseudo matches :host, :host() or :host-context() against the
+// featureless host n (CSS Scoping 1, 3.2.1): :host() when n matches its
+// compound, :host-context() when n or one of its shadow-including
+// ancestors does.
+func (m *matcher) hostPseudo(p *pseudoSel, n *html.Node) bool {
+	if p.kind == psHost {
+		return p.args == nil || m.anyMatches(p.args, n)
+	}
+	for e, steps := n, 0; e != nil && steps <= maxShadowAncestors && !m.over; e, steps = m.shadowIncludingParent(e), steps+1 {
+		if m.anyMatches(p.args, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// shadowIncludingParent returns the parent element of n, or the host of
+// the shadow tree n is a top-level element of (DOM Standard, 4.2.2).
+func (m *matcher) shadowIncludingParent(n *html.Node) *html.Node {
+	if p := parentElement(n); p != nil {
+		return p
+	}
+	return m.shadows.Host(n.Parent)
+}
+
+// maxShadowAncestors bounds the shadow-including ancestors
+// :host-context() walks. Anti-DoS guard, not spec-mandated: each step is
+// an element of the document, the parser's nesting cap bounds every
+// tree's depth, and the shadow roots are capped too.
+const maxShadowAncestors = 1 << 16
 
 // compound matches one compound selector.
 func (m *matcher) compound(c *compound, n *html.Node) bool {

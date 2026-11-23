@@ -2,6 +2,7 @@ package css
 
 import (
 	"iter"
+	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -40,6 +41,9 @@ type Shadows struct {
 	// order lists the hosts as they were attached, which keeps every walk
 	// over them in document order.
 	order []*html.Node
+	// depths holds each shadow root's depth: 1 for a tree whose host is
+	// in the document's, one more for each tree around it.
+	depths map[*html.Node]int
 }
 
 // Attach records root, made by [NewShadowRoot], as the shadow root of
@@ -108,7 +112,10 @@ func (s *Shadows) AssignSlots() {
 		return
 	}
 	s.assigned, s.slotOf = map[*html.Node][]*html.Node{}, map[*html.Node]*html.Node{}
+	s.depths = map[*html.Node]int{}
 	for _, host := range s.order {
+		// A host's tree was attached before the trees inside it.
+		s.depths[s.roots[host]] = s.depths[treeScope(host)] + 1
 		slots := map[string]*html.Node{}
 		stack := []*html.Node{s.roots[host]}
 		for len(stack) > 0 {
@@ -144,6 +151,15 @@ func (s *Shadows) AssignSlots() {
 			}
 		}
 	}
+}
+
+// depth returns the depth of the tree whose shadow root is root, 0 for the
+// document's (nil) and for a nil s.
+func (s *Shadows) depth(root *html.Node) int {
+	if s == nil || root == nil {
+		return 0
+	}
+	return s.depths[root]
 }
 
 // Slot returns the slot n is assigned to, nil for none.
@@ -202,4 +218,148 @@ func treeRoot(n *html.Node) *html.Node {
 		n = n.Parent
 	}
 	return n
+}
+
+// matchShadow adds, through add, the rules of other trees that match the
+// element n, or its pseudo-element of index x: a host's own shadow
+// tree's rules that match it as a featureless host (CSS Scoping 1,
+// 3.2.1), and for an element the ::slotted() rules of the trees of the
+// slots it is assigned to, through slots assigned to slots (3.2.2), and
+// the ::part() rules of the trees its part names reach through its hosts'
+// exportparts (CSS Shadow Parts 1, 4.1 and 5).
+func (cs *computeState) matchShadow(n *html.Node, x *selIndex, add func(selRef)) {
+	sh, m := cs.opts.Shadows, cs.m
+	if root := sh.Root(n); root != nil {
+		for _, ref := range x.universal {
+			if rr := &cs.r.rules[ref.rule]; rr.origin == Author && rr.scope == root && m.matchesHost(ref.sel, n) {
+				add(ref)
+			}
+		}
+	}
+	if x != &cs.r.elems {
+		return
+	}
+	steps := 0
+	for s := sh.Slot(n); s != nil && steps < maxShadowAncestors && !m.over; s, steps = sh.Slot(s), steps+1 {
+		scope := treeScope(s)
+		for _, ref := range cs.r.slotted {
+			if cs.r.rules[ref.rule].scope != scope {
+				continue
+			}
+			last := len(ref.sel.parts) - 1
+			if m.anyMatches(ref.sel.parts[last].slotted, n) && m.matches(ref.sel, s) {
+				add(ref)
+			}
+		}
+	}
+	if len(cs.r.parts) == 0 {
+		return
+	}
+	v, ok := attr(n, "part")
+	if !ok {
+		return
+	}
+	names := strings.Fields(v)
+	host := sh.Host(treeScope(n))
+	for steps = 0; host != nil && len(names) > 0 && steps < maxShadowAncestors && !m.over; steps++ {
+		outer := treeScope(host)
+		for _, ref := range cs.r.parts {
+			scope := cs.r.rules[ref.rule].scope
+			if scope != outer && scope != sh.Root(host) || !holdsAll(names, ref.sel.parts[len(ref.sel.parts)-1].partNames) {
+				continue
+			}
+			// The rules of the host's tree reach its part names, and
+			// :host::part() rules of its shadow tree do too.
+			if scope == outer && m.matches(ref.sel, host) || scope != outer && m.matchesHost(ref.sel, host) {
+				add(ref)
+			}
+		}
+		names = exportedParts(host, names)
+		host = sh.Host(outer)
+	}
+}
+
+// holdsAll reports whether names holds every name of want, compared
+// case-sensitively (CSS Shadow Parts 1, 4.1).
+func holdsAll(names, want []string) bool {
+	for _, w := range want {
+		found := false
+		for _, n := range names {
+			if n == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// exportedParts returns the part names the host's exportparts attribute
+// gives, to the tree around host, the elements of its shadow tree that
+// hold names (CSS Shadow Parts 1, 5): each mapping "inner: outer" or
+// "name" whose inner name names holds exports its outer name; a mapping
+// that does not parse is skipped.
+func exportedParts(host *html.Node, names []string) []string {
+	v, ok := attr(host, "exportparts")
+	if !ok {
+		return nil
+	}
+	var out []string
+	for item := range strings.SplitSeq(v, ",") {
+		inner, outer, mapped := strings.Cut(item, ":")
+		inner, outer = strings.TrimSpace(inner), strings.TrimSpace(outer)
+		if !mapped {
+			outer = inner
+		}
+		if inner == "" || outer == "" || strings.ContainsAny(inner+outer, " \t\n\f\r:") {
+			continue
+		}
+		if holdsAll(names, []string{inner}) {
+			out = append(out, outer)
+		}
+	}
+	return out
+}
+
+// reservedCustomNames are the names with a hyphen that are no valid
+// custom element names (HTML Standard, 4.13.2).
+var reservedCustomNames = map[string]bool{
+	"annotation-xml": true, "color-profile": true, "font-face": true, "font-face-src": true,
+	"font-face-uri": true, "font-face-format": true, "font-face-name": true, "missing-glyph": true,
+}
+
+// ValidCustomElementName reports whether name is a valid custom element
+// name (HTML Standard, 4.13.2): a lowercase ASCII letter, then
+// characters of PCENChar, a hyphen among them, and none of the reserved
+// names. The parser lowercases the ASCII letters of an HTML element's
+// name, so an uppercase letter left is none of its.
+func ValidCustomElementName(name string) bool {
+	if name == "" || name[0] < 'a' || name[0] > 'z' || !strings.Contains(name, "-") || reservedCustomNames[name] {
+		return false
+	}
+	for _, r := range name {
+		if !pcenChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// pcenChar reports whether r is a PCENChar (HTML Standard, 4.13.2).
+func pcenChar(r rune) bool {
+	switch {
+	case r == '-' || r == '.' || r == '_' || r == 0xB7:
+		return true
+	case r >= '0' && r <= '9', r >= 'a' && r <= 'z':
+		return true
+	case r >= 0xC0 && r <= 0xD6, r >= 0xD8 && r <= 0xF6, r >= 0xF8 && r <= 0x37D,
+		r >= 0x37F && r <= 0x1FFF, r >= 0x200C && r <= 0x200D, r >= 0x203F && r <= 0x2040,
+		r >= 0x2070 && r <= 0x218F, r >= 0x2C00 && r <= 0x2FEF, r >= 0x3001 && r <= 0xD7FF,
+		r >= 0xF900 && r <= 0xFDCF, r >= 0xFDF0 && r <= 0xFFFD, r >= 0x10000 && r <= 0xEFFFF:
+		return true
+	}
+	return false
 }

@@ -91,7 +91,7 @@ func TestSelector_LangAsChromium(t *testing.T) {
 func TestSelector_HasCost(t *testing.T) {
 	t.Parallel()
 	doc := parseHTML(t, strings.Repeat("<div>", 300)+"<p id=x>x</p>"+strings.Repeat("</div>", 300))
-	m := newMatcher("", maxComputeSteps, false)
+	m := newMatcher("", maxComputeSteps, false, nil)
 	sel := mustSelectors(t, "div:has(p)")
 	n := 0
 	var walk func(*html.Node)

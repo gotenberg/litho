@@ -89,45 +89,5 @@ var shadowHostNames = map[string]bool{
 // HTML element of a valid custom element name or of a name of
 // [shadowHostNames].
 func validShadowHost(n *dom.Node) bool {
-	return n.Type == dom.ElementNode && n.Namespace == "" && (shadowHostNames[n.Data] || validCustomElementName(n.Data))
-}
-
-// reservedCustomNames are the names with a hyphen that are no valid
-// custom element names (HTML Standard, 4.13.2).
-var reservedCustomNames = map[string]bool{
-	"annotation-xml": true, "color-profile": true, "font-face": true, "font-face-src": true,
-	"font-face-uri": true, "font-face-format": true, "font-face-name": true, "missing-glyph": true,
-}
-
-// validCustomElementName reports whether name is a valid custom element
-// name (HTML Standard, 4.13.2): a lowercase ASCII letter, then
-// characters of PCENChar, a hyphen among them, and none of the reserved
-// names. The parser lowercases the ASCII letters of an HTML element's
-// name, so an uppercase letter left is none of its.
-func validCustomElementName(name string) bool {
-	if name == "" || name[0] < 'a' || name[0] > 'z' || !strings.Contains(name, "-") || reservedCustomNames[name] {
-		return false
-	}
-	for _, r := range name {
-		if !pcenChar(r) {
-			return false
-		}
-	}
-	return true
-}
-
-// pcenChar reports whether r is a PCENChar (HTML Standard, 4.13.2).
-func pcenChar(r rune) bool {
-	switch {
-	case r == '-' || r == '.' || r == '_' || r == 0xB7:
-		return true
-	case r >= '0' && r <= '9', r >= 'a' && r <= 'z':
-		return true
-	case r >= 0xC0 && r <= 0xD6, r >= 0xD8 && r <= 0xF6, r >= 0xF8 && r <= 0x37D,
-		r >= 0x37F && r <= 0x1FFF, r >= 0x200C && r <= 0x200D, r >= 0x203F && r <= 0x2040,
-		r >= 0x2070 && r <= 0x218F, r >= 0x2C00 && r <= 0x2FEF, r >= 0x3001 && r <= 0xD7FF,
-		r >= 0xF900 && r <= 0xFDCF, r >= 0xFDF0 && r <= 0xFFFD, r >= 0x10000 && r <= 0xEFFFF:
-		return true
-	}
-	return false
+	return n.Type == dom.ElementNode && n.Namespace == "" && (shadowHostNames[n.Data] || css.ValidCustomElementName(n.Data))
 }

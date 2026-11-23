@@ -164,3 +164,40 @@ func TestShadow_StylesStayInTheirTree(t *testing.T) {
 		}
 	}
 }
+
+func TestShadow_CrossTreeSelectors(t *testing.T) {
+	t.Parallel()
+	// CSS Scoping 1, 3.2; CSS Shadow Parts 1, 4 and 5; CSS Cascade 5, 6.1.
+	// Each case colours the run X blue when the rule reaches it as the
+	// clause says, red otherwise.
+	host := func(css, inner, light string) string {
+		return `<body style="color: red"><div class="h"><template shadowrootmode="open"><style>` + css + `</style>` + inner + `</template>` + light + `</div>`
+	}
+	tests := []struct {
+		name, src string
+	}{
+		{":host", host(`:host { color: blue }`, `X`, ``)},
+		{":host() matches the host's compound", host(`:host(.h) { color: blue } :host(.other) { color: red }`, `X`, ``)},
+		{":host-context() reaches the ancestors", `<body style="color: red"><section class="ctx"><div><template shadowrootmode="open"><style>:host-context(.ctx) { color: blue }</style>X</template></div></section>`},
+		{"the host is featureless", host(`:host { color: blue } div:host, .h:host, *:host { color: red }`, `X`, ``)},
+		{"combinators reach the host", host(`:host > span { color: blue } div > span { color: red }`, `<span>X</span>`, ``)},
+		{"::slotted()", host(`::slotted(b) { color: blue } ::slotted(i) { color: red }`, `<slot></slot>`, `<b>X</b>`)},
+		{"::slotted() through a slot of a slot", `<body style="color: red"><div><template shadowrootmode="open"><style>::slotted(b) { color: blue }</style><p><template shadowrootmode="open"><slot></slot></template><slot></slot></p></template><b>X</b></div>`},
+		{"::part()", `<style>.h::part(a b) { color: blue }</style>` + host(``, `<span part="a b c">X</span>`, ``)},
+		{"::part() wants every name", `<style>.h::part(a) { color: blue } .h::part(a z) { color: red }</style>` + host(``, `<span part="a">X</span>`, ``)},
+		{"exportparts", `<style>.o::part(outer) { color: blue } .o::part(a) { color: red }</style><body style="color: red"><div class="o"><template shadowrootmode="open"><p exportparts="a: outer"><template shadowrootmode="open"><span part="a">X</span></template></p></template></div>`},
+		{"outer normal declarations win", `<style>.h { color: blue }</style>` + host(`:host { color: red }`, `X`, ``)},
+		{"inner important declarations win", `<style>div.h { color: red !important }</style>` + host(`:host { color: blue !important }`, `X`, ``)},
+		{"slotted loses to the light tree's rules", `<style>b { color: blue }</style>` + host(`::slotted(b) { color: red }`, `<slot></slot>`, `<b>X</b>`)},
+		{":defined holds for a built-in host", host(`:host(:defined) { color: blue }`, `X`, ``)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := convertDoc(t, "<!DOCTYPE html>"+tt.src, Options{})
+			if c := textColor(t, doc.Pages[0], "X"); c != textBlue {
+				t.Errorf("X is %v, want blue", c)
+			}
+		})
+	}
+}

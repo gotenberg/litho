@@ -67,7 +67,7 @@ type Matcher struct {
 // tests over its life; past them every match fails. lang is the document
 // language :lang() falls back to, "" for none.
 func NewMatcher(lang string, maxSteps int) *Matcher {
-	return &Matcher{m: newMatcher(lang, maxSteps, false)}
+	return &Matcher{m: newMatcher(lang, maxSteps, false, nil)}
 }
 
 // Match reports whether the element n matches one of the selectors of s,

@@ -77,6 +77,11 @@ const (
 	psInRange
 	psOutOfRange
 	psOpen
+	// psHost is :host and :host(), psHostContext :host-context(): they
+	// match a shadow host from inside its shadow tree, args holding the
+	// compound a functional form tests (CSS Scoping 1, 3.2.1).
+	psHost
+	psHostContext
 )
 
 // pseudoSel is a pseudo-class with its arguments.
@@ -116,6 +121,11 @@ type compound struct {
 	attrPrefixes []string
 	anyNS        bool
 	typed        bool
+	// slotted is the argument of a trailing ::slotted(), one compound
+	// selector (CSS Scoping 1, 3.2.2); partNames the names of a trailing
+	// ::part() (CSS Shadow Parts 1, 4.1).
+	slotted   []*complexSel
+	partNames []string
 }
 
 // elementNS is the namespace a compound selector asks an element to be in.
@@ -220,10 +230,9 @@ var simplePseudos = map[string]pseudoKind{
 	"required": psRequired, "optional": psOptional, "read-only": psReadOnly, "read-write": psReadWrite,
 	"placeholder-shown": psPlaceholderShown, "default": psDefault, "indeterminate": psIndeterminate,
 	"valid": psValid, "invalid": psInvalid, "in-range": psInRange, "out-of-range": psOutOfRange, "open": psOpen,
-	// A static document has no user interaction, autofill, top layer or
-	// shadow tree.
+	// A static document has no user interaction, autofill or top layer.
 	"user-valid": psNever, "user-invalid": psNever, "autofill": psNever, "popover-open": psNever,
-	"modal": psNever, "fullscreen": psNever, "host": psNever,
+	"modal": psNever, "fullscreen": psNever, "host": psHost,
 }
 
 // parseSelectorList parses a <selector-list> (Selectors 4, 4.1). A
@@ -320,6 +329,8 @@ func parseComplex(list []token, depth int) (*complexSel, *selectorError) {
 	}
 	if s.pseudoElement != "" {
 		spec = addSpec(spec, packSpec(0, 0, 1))
+		// ::slotted() adds its argument's (CSS Scoping 1, 3.2.2).
+		spec = addSpec(spec, maxSpec(s.parts[len(s.parts)-1].slotted))
 	}
 	s.spec = spec
 	return s, nil
@@ -342,6 +353,9 @@ func (c *compound) specificity() uint32 {
 			spec = addSpec(spec, maxSpec(p.args))
 		case psNthChild, psNthLastChild:
 			spec = addSpec(spec, addSpec(packSpec(0, 1, 0), maxSpec(p.of)))
+		case psHost, psHostContext:
+			// A pseudo-class, plus its argument's (CSS Scoping 1, 3.2.1).
+			spec = addSpec(spec, addSpec(packSpec(0, 1, 0), maxSpec(p.args)))
 		default:
 			spec = addSpec(spec, packSpec(0, 1, 0))
 		}
@@ -455,13 +469,32 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 			if n.typ == tColon {
 				c.i++
 				pe := c.peek()
-				if pe != nil && pe.typ == tFunction && pseudoElement == "" && (eqFold(pe.value, "slotted") || eqFold(pe.value, "part")) {
-					// ::slotted() and ::part() reach into shadow trees,
-					// which a parsed document has none of: the selector
-					// matches nothing (CSS Scoping 1, 3.2.2; CSS Shadow
-					// Parts 1, 4.1).
-					comp.never = true
-					pseudoElement = lower(pe.value)
+				if pe != nil && pe.typ == tFunction && pseudoElement == "" && eqFold(pe.value, "slotted") {
+					// ::slotted(<compound-selector>) (CSS Scoping 1,
+					// 3.2.2).
+					arg, err := parseCompoundArg(pe.children, depth)
+					if err != nil {
+						return comp, "", err
+					}
+					comp.slotted = arg
+					pseudoElement = "slotted"
+					c.i++
+					empty = false
+					continue
+				}
+				if pe != nil && pe.typ == tFunction && pseudoElement == "" && eqFold(pe.value, "part") {
+					// ::part(<ident>+) (CSS Shadow Parts 1, 4.1).
+					args := significant(pe.children)
+					if len(args) == 0 {
+						return comp, "", &selectorError{}
+					}
+					for _, a := range args {
+						if a.typ != tIdent {
+							return comp, "", &selectorError{}
+						}
+						comp.partNames = append(comp.partNames, a.value)
+					}
+					pseudoElement = "part"
 					c.i++
 					empty = false
 					continue
@@ -535,6 +568,22 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 		return comp, "", &selectorError{}
 	}
 	return comp, pseudoElement, nil
+}
+
+// parseCompoundArg parses the argument of :host(), :host-context() and
+// ::slotted(): one compound selector, without a pseudo-element.
+func parseCompoundArg(list []token, depth int) ([]*complexSel, *selectorError) {
+	if depth >= maxSelectorNesting {
+		return nil, &selectorError{}
+	}
+	arg, err := parseComplex(trimWS(list), depth+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(arg.parts) != 1 || arg.pseudoElement != "" {
+		return nil, &selectorError{}
+	}
+	return []*complexSel{arg}, nil
 }
 
 // parseAttr parses the contents of an attribute selector (Selectors 4, 6).
@@ -678,13 +727,24 @@ func parsePseudo(t token, depth int) (pseudoSel, *selectorError) {
 				dir = 1
 			}
 			return pseudoSel{kind: psDir, a: dir}, nil
-		case "state", "host":
-			// Custom element states and shadow hosts: a parsed
-			// document has neither (CSS Scoping 1, 3.2.1).
+		case "state":
+			// Custom element states: litho runs no script that sets one.
 			if len(significant(t.children)) == 0 {
 				return pseudoSel{}, &selectorError{}
 			}
 			return pseudoSel{kind: psNever}, nil
+		case "host", "host-context":
+			// :host(<compound-selector>), :host-context(<compound-selector>)
+			// (CSS Scoping 1, 3.2.1).
+			arg, err := parseCompoundArg(t.children, depth)
+			if err != nil {
+				return pseudoSel{}, err
+			}
+			kind := psHost
+			if name == "host-context" {
+				kind = psHostContext
+			}
+			return pseudoSel{kind: kind, args: arg}, nil
 		case "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type":
 			kind := map[string]pseudoKind{
 				"nth-child": psNthChild, "nth-last-child": psNthLastChild,
