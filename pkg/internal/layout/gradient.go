@@ -375,9 +375,14 @@ func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, 
 	}
 	// CSS Images 3, 3.1.1: the angle points from the start to the end of
 	// the gradient line, 0deg up and 90deg right; "to <corner>" makes the
-	// line perpendicular to the diagonal between the two other corners.
+	// line perpendicular to the diagonal between the two other corners. A
+	// Diagonal one runs along the diagonal itself, from corner to corner:
+	// along it the line's length is the diagonal's.
 	theta := g.Angle * math.Pi / 180
-	if g.Corner != [2]int8{} {
+	switch {
+	case g.Corner != [2]int8{} && g.Diagonal:
+		theta = detmath.Atan2(float64(g.Corner[0])*w, -float64(g.Corner[1])*h)
+	case g.Corner != [2]int8{}:
 		theta = detmath.Atan2(float64(g.Corner[0])*h, -float64(g.Corner[1])*w)
 	}
 	dx, dy := detmath.Sin(theta), -detmath.Cos(theta)

@@ -417,6 +417,10 @@ type Gradient struct {
 	// then vertical, -1 for left or top and +1 for right or bottom; zero
 	// otherwise. Its angle depends on the box, so it stays a keyword.
 	Corner [2]int8
+	// Diagonal runs a Corner gradient's line from the opposite corner to
+	// Corner, as Chromium draws a prefixed legacy gradient; otherwise the
+	// line is perpendicular to the other diagonal (CSS Images 3, 3.1.1).
+	Diagonal bool
 	// Circle selects a circular ending shape over an elliptical one.
 	Circle bool
 	Size   RadialSize

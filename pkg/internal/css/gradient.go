@@ -18,11 +18,15 @@ type gradientSpec struct {
 	repeating bool
 	angle     float64
 	corner    [2]int8
-	circle    bool
-	size      RadialSize
-	radius    [2]length
-	center    [2]length
-	stops     []stopSpec
+	// diagonal runs a corner gradient from corner to corner, as a
+	// prefixed legacy gradient does, where "to <corner>" makes its line
+	// perpendicular to the other diagonal.
+	diagonal bool
+	circle   bool
+	size     RadialSize
+	radius   [2]length
+	center   [2]length
+	stops    []stopSpec
 	// space and hue are the <color-interpolation-method>, method set
 	// when one is written.
 	space  colorSpace
@@ -50,13 +54,18 @@ type imageSpec struct {
 var gradientFunctions = map[string]struct {
 	kind      GradientKind
 	repeating bool
+	legacy    bool
 }{
-	"linear-gradient":           {LinearGradient, false},
-	"repeating-linear-gradient": {LinearGradient, true},
-	"radial-gradient":           {RadialGradient, false},
-	"repeating-radial-gradient": {RadialGradient, true},
-	"conic-gradient":            {ConicGradient, false},
-	"repeating-conic-gradient":  {ConicGradient, true},
+	"linear-gradient":                   {LinearGradient, false, false},
+	"repeating-linear-gradient":         {LinearGradient, true, false},
+	"radial-gradient":                   {RadialGradient, false, false},
+	"repeating-radial-gradient":         {RadialGradient, true, false},
+	"conic-gradient":                    {ConicGradient, false, false},
+	"repeating-conic-gradient":          {ConicGradient, true, false},
+	"-webkit-linear-gradient":           {LinearGradient, false, true},
+	"-webkit-repeating-linear-gradient": {LinearGradient, true, true},
+	"-webkit-radial-gradient":           {RadialGradient, false, true},
+	"-webkit-repeating-radial-gradient": {RadialGradient, true, true},
 }
 
 // bgImageValue parses one background <image> or none: a gradient function
@@ -74,7 +83,11 @@ func bgImageValue(t token, c *declCtx, prop string) (imageSpec, bool) {
 	}
 	if t.typ == tFunction {
 		if f, ok := gradientFunctions[lower(t.value)]; ok {
-			g, ok := parseGradient(significant(t.children), f.kind, f.repeating)
+			parse := parseGradient
+			if f.legacy {
+				parse = parseLegacyGradient
+			}
+			g, ok := parse(significant(t.children), f.kind, f.repeating)
 			if !ok {
 				return imageSpec{}, false
 			}
@@ -157,6 +170,214 @@ func parseGradient(args []token, kind GradientKind, repeating bool) (*gradientSp
 	}
 	g.stops = stops
 	return g, true
+}
+
+// parseLegacyGradient parses the arguments of a prefixed legacy linear or
+// radial gradient, the syntax of the CSS Images 3 drafts before the "to"
+// keyword and the "at" clause. No current standard defines it, and the
+// Compatibility Standard lists no such function: the reading below is
+// Chromium's, measured.
+//
+//   - -webkit-linear-gradient([<angle> | <side-or-corner>]?, <stops>):
+//     the angle runs counterclockwise from the right, 90deg pointing up,
+//     and a side or corner names where the line starts, without "to"; a
+//     corner line runs from that corner to the opposite one.
+//   - -webkit-radial-gradient([<position>,]? [<shape> || <size>,]?
+//     <stops>): the centre first, without "at", then the shape and its
+//     size, an extent keyword, contain for closest-side, cover for
+//     farthest-corner, or two lengths.
+//
+// A colour interpolation method may lead the first argument, as Chromium
+// reads it there.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints -webkit-linear-gradient(left top,
+//     red, blue) on a 120 by 60 box as an axial shading from 0 0 to 120 60,
+//     where linear-gradient(to right bottom, red, blue) runs from 36 -18 to
+//     84 78, and -webkit-linear-gradient(30deg, red, blue) from 2.01 63.48
+//     to 117.99 -3.48, the line of linear-gradient(60deg, red, blue). It
+//     draws (20px 30px, red, blue) centred at 20px 30px, (center, 20px
+//     30px, red, blue) as an ellipse of those radii, (left top, circle
+//     contain, red, blue) all blue, and nothing for (to right, red, blue)
+//     or (circle at center, red, blue).
+func parseLegacyGradient(args []token, kind GradientKind, repeating bool) (*gradientSpec, bool) {
+	parts := splitCommas(args)
+	if len(parts) == 0 {
+		return nil, false
+	}
+	g := &gradientSpec{kind: kind, repeating: repeating, angle: 180}
+	first, method, ok := g.takeInterpolation(parts[0])
+	if !ok {
+		return nil, false
+	}
+	if method {
+		if len(first) > 0 {
+			return nil, false
+		}
+		parts = parts[1:]
+		if len(parts) == 0 {
+			return nil, false
+		}
+		first = parts[0]
+	}
+	switch kind { //nolint:exhaustive // no conic gradient has a prefixed form
+	case LinearGradient:
+		if ok, consumed := g.legacyDirection(first); consumed {
+			if !ok {
+				return nil, false
+			}
+			parts = parts[1:]
+		}
+	case RadialGradient:
+		g.center = [2]length{pctLength(50), pctLength(50)}
+		if len(parts) > 1 && legacyPosition(parts[0]) {
+			p, ok := parsePosition(parts[0])
+			if !ok {
+				return nil, false
+			}
+			g.center = p
+			parts = parts[1:]
+		}
+		if len(parts) > 1 {
+			if ok, consumed := g.legacyShape(parts[0]); consumed {
+				if !ok {
+					return nil, false
+				}
+				parts = parts[1:]
+			}
+		}
+	}
+	stops, ok := parseStops(parts, false)
+	if !ok {
+		return nil, false
+	}
+	g.stops = stops
+	return g, true
+}
+
+// legacyDirection parses the first argument of a prefixed legacy linear
+// gradient: an angle counterclockwise from the right, or the side or
+// corner the line starts at. consumed is false when v is not a direction,
+// so that it is the first colour stop.
+func (g *gradientSpec) legacyDirection(v []token) (ok, consumed bool) {
+	if len(v) == 0 {
+		return false, false
+	}
+	if a, isAngle := gradientAngle(v[0]); isAngle {
+		if len(v) != 1 {
+			return false, true
+		}
+		g.angle = math.Mod(450-a, 360)
+		return true, true
+	}
+	var h, vert int8
+	for i, t := range v {
+		if t.typ != tIdent {
+			if i == 0 {
+				return false, false
+			}
+			return false, true
+		}
+		switch k := lower(t.value); k {
+		case "left", "right":
+			if h != 0 {
+				return false, true
+			}
+			h = 1
+			if k == "right" {
+				h = -1
+			}
+		case "top", "bottom":
+			if vert != 0 {
+				return false, true
+			}
+			vert = 1
+			if k == "bottom" {
+				vert = -1
+			}
+		default:
+			if i == 0 && k != "to" {
+				return false, false
+			}
+			return false, true
+		}
+	}
+	switch {
+	case h != 0 && vert != 0:
+		g.corner, g.diagonal = [2]int8{h, vert}, true
+	case h > 0:
+		g.angle = 90
+	case h < 0:
+		g.angle = 270
+	case vert > 0:
+		g.angle = 180
+	default:
+		g.angle = 0
+	}
+	return true, true
+}
+
+// legacyPosition reports whether the argument v of a prefixed legacy
+// radial gradient is a centre: positions alone, no colour.
+func legacyPosition(v []token) bool {
+	if len(v) == 0 || len(v) > 4 {
+		return false
+	}
+	for _, t := range v {
+		if !isPositionToken(t) {
+			return false
+		}
+	}
+	return true
+}
+
+// legacyExtents are the size keywords of a prefixed legacy radial
+// gradient: the extents, with contain and cover for closest-side and
+// farthest-corner.
+var legacyExtents = map[string]RadialSize{
+	"closest-side": ClosestSide, "closest-corner": ClosestCorner,
+	"farthest-side": FarthestSide, "farthest-corner": FarthestCorner,
+	"contain": ClosestSide, "cover": FarthestCorner,
+}
+
+// legacyShape parses the shape and size argument of a prefixed legacy
+// radial gradient: <shape> || <extent keyword>, or two lengths, an
+// ellipse's radii. consumed is false when v is neither, so that it is a
+// colour stop.
+func (g *gradientSpec) legacyShape(v []token) (ok, consumed bool) {
+	if len(v) == 2 && v[0].typ != tIdent && v[1].typ != tIdent {
+		a, okA := parseLength(v[0], allowPct|nonNeg)
+		b, okB := parseLength(v[1], allowPct|nonNeg)
+		if !okA || !okB {
+			return false, false
+		}
+		g.size, g.radius = RadialExplicit, [2]length{a, b}
+		return true, true
+	}
+	shape, extent := "", false
+	for _, t := range v {
+		if t.typ != tIdent {
+			return false, shape != "" || extent
+		}
+		k := lower(t.value)
+		switch e, isExtent := legacyExtents[k]; {
+		case k == "circle" || k == "ellipse":
+			if shape != "" {
+				return false, true
+			}
+			shape = k
+		case isExtent:
+			if extent {
+				return false, true
+			}
+			extent, g.size = true, e
+		default:
+			return false, shape != "" || extent
+		}
+	}
+	g.circle = shape == "circle"
+	return len(v) > 0, len(v) > 0
 }
 
 // linearDirection parses <angle> or to <side-or-corner>. consumed is false
@@ -492,7 +713,7 @@ func parseStops(parts [][]token, conic bool) ([]stopSpec, bool) {
 // kept, currentColor resolved to color.
 func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 	out := &Gradient{
-		Kind: g.kind, Repeating: g.repeating, Angle: g.angle, Corner: g.corner,
+		Kind: g.kind, Repeating: g.repeating, Angle: g.angle, Corner: g.corner, Diagonal: g.diagonal,
 		Circle: g.circle, Size: g.size,
 		Stops: make([]GradientStop, len(g.stops)),
 	}

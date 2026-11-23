@@ -140,3 +140,57 @@ func TestGradient_URLClearsGradient(t *testing.T) {
 		t.Errorf("gradient %+v image %q", s.BackgroundGradient, s.BackgroundImage)
 	}
 }
+
+// TestGradient_LegacyPrefixed checks the prefixed legacy linear and radial
+// gradients, read as Chromium reads them: an angle counterclockwise from
+// the right, the side or corner a line starts at, a corner line running
+// from corner to corner, and a radial centre then shape and size before
+// the stops.
+func TestGradient_LegacyPrefixed(t *testing.T) {
+	t.Parallel()
+	red, blue := rgb(255, 0, 0), rgb(0, 0, 255)
+	auto := Dimension{Kind: Auto}
+	stops := []GradientStop{{Color: red, Position: auto}, {Color: blue, Position: auto}}
+	center := [2]Dimension{pct(0.5), pct(0.5)}
+	for _, tc := range []struct {
+		decl string
+		want *Gradient
+	}{
+		{"-webkit-linear-gradient(red, blue)", &Gradient{Angle: 180, Stops: stops}},
+		{"-webkit-linear-gradient(top, red, blue)", &Gradient{Angle: 180, Stops: stops}},
+		{"-webkit-linear-gradient(left, red, blue)", &Gradient{Angle: 90, Stops: stops}},
+		{"-webkit-linear-gradient(right, red, blue)", &Gradient{Angle: 270, Stops: stops}},
+		{"-webkit-linear-gradient(bottom, red, blue)", &Gradient{Angle: 0, Stops: stops}},
+		{"-webkit-linear-gradient(0deg, red, blue)", &Gradient{Angle: 90, Stops: stops}},
+		{"-webkit-linear-gradient(90deg, red, blue)", &Gradient{Angle: 0, Stops: stops}},
+		{"-webkit-linear-gradient(30deg, red, blue)", &Gradient{Angle: 60, Stops: stops}},
+		{"-webkit-linear-gradient(left top, red, blue)", &Gradient{Angle: 180, Corner: [2]int8{1, 1}, Diagonal: true, Stops: stops}},
+		{"-webkit-linear-gradient(bottom right, red, blue)", &Gradient{Angle: 180, Corner: [2]int8{-1, -1}, Diagonal: true, Stops: stops}},
+		{"-webkit-repeating-linear-gradient(left, red, blue)", &Gradient{Angle: 90, Repeating: true, Stops: stops}},
+		{"-webkit-radial-gradient(red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Center: center, Stops: stops}},
+		{"-webkit-radial-gradient(center, circle cover, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Circle: true, Center: center, Stops: stops}},
+		{"-webkit-radial-gradient(left top, circle contain, red, blue)", &Gradient{
+			Kind: RadialGradient, Angle: 180, Circle: true, Size: ClosestSide, Center: [2]Dimension{pct(0), pct(0)}, Stops: stops,
+		}},
+		{"-webkit-radial-gradient(20px 30px, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Center: [2]Dimension{pts(15), pts(22.5)}, Stops: stops}},
+		{"-webkit-radial-gradient(center, 20px 30px, red, blue)", &Gradient{
+			Kind: RadialGradient, Angle: 180, Size: RadialExplicit, Radius: [2]Dimension{pts(15), pts(22.5)}, Center: center, Stops: stops,
+		}},
+		{"-webkit-radial-gradient(ellipse closest-corner, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Size: ClosestCorner, Center: center, Stops: stops}},
+	} {
+		s := styleOf(t, "background-image: "+tc.decl)
+		if !reflect.DeepEqual(exported(s.BackgroundGradient), tc.want) {
+			t.Errorf("%s:\n got %+v\nwant %+v", tc.decl, s.BackgroundGradient, tc.want)
+		}
+	}
+	for _, decl := range []string{
+		"-webkit-linear-gradient(to right, red, blue)",
+		"-webkit-linear-gradient(left left, red, blue)",
+		"-webkit-radial-gradient(circle at center, red, blue)",
+		"-webkit-linear-gradient(top 10px, red, blue)",
+	} {
+		if s := styleOf(t, "background-image: "+decl); s.BackgroundGradient != nil {
+			t.Errorf("%s: parsed as %+v", decl, s.BackgroundGradient)
+		}
+	}
+}

@@ -205,3 +205,18 @@ func TestGradient_ReplacedPicture(t *testing.T) {
 		_GGBBRR_
 		________`)
 }
+
+// TestGradient_DiagonalCorner checks a Diagonal corner gradient, as a
+// prefixed legacy one is drawn: its line runs from corner to corner, so
+// the switch at its middle crosses a wide box almost upright, where "to
+// bottom right" cuts it along the other diagonal (RRRRRRBB over
+// RRBBBBBB).
+func TestGradient_DiagonalCorner(t *testing.T) {
+	t.Parallel()
+	half := css.Dimension{Kind: css.Percent, Value: 0.5}
+	g := &css.Gradient{Corner: [2]int8{1, 1}, Diagonal: true, Stops: gstops(red, half, blue, half)}
+	res := run(t, doc(el(sty(width(8), height(2), grad(g)))), page(8, 2))
+	assertPixels(t, res, 1, `
+		RRRRBBBB
+		RRRRBBBB`)
+}
