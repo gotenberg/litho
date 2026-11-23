@@ -55,6 +55,8 @@ type itemCtx struct {
 	// placed reports the label is placed: later paragraphs are indented
 	// alone.
 	placed bool
+	// style names the item's list style.
+	style string
 }
 
 // list builds a text:list (ODF 1.3, Part 3, 5.3): its items, each
@@ -102,6 +104,9 @@ func (b *builder) list(c *odf.Element, ctx *blockCtx) []*layout.Node {
 			continue
 		}
 		item := &itemCtx{lvl: lvl, header: header}
+		if lc.style != nil {
+			item.style = lc.style.Name
+		}
 		if !header && lvl != nil {
 			b.number(item, lc, it)
 		}
@@ -384,22 +389,32 @@ func (b *builder) outlineLabel(level int) string {
 }
 
 // indent lays the item's level indentation over the paragraph
-// properties p of a paragraph of the item, whose own style is own:
-// Writer applies the list level's indent, then the paragraph's
-// automatic style's own indent when it sets one.
-func (item *itemCtx) indent(p paraState, own *odf.Style) paraState {
+// properties p of a paragraph of the item, whose style chain is chain,
+// its own style last: Writer applies the list level's indent, then the
+// paragraph's automatic style's own indent when it sets one. A paragraph
+// whose list style comes from its common style keeps the indent of that
+// style, or of a style it derives from, set at or below the style that
+// names the list style ([levelIndents]).
+func (item *itemCtx) indent(p paraState, chain []*odf.Style) paraState {
 	if item == nil || item.lvl == nil {
 		return p
 	}
+	var own *odf.Style
+	if len(chain) > 0 {
+		own = chain[len(chain)-1]
+	}
 	lp := item.lvl.Props
-	if lp.Get("text:list-level-position-and-space-mode") == "label-alignment" {
+	switch {
+	case !levelIndents(chain, item.style):
+		// The paragraph style's indent stands.
+	case lp.Get("text:list-level-position-and-space-mode") == "label-alignment":
 		if ml, ok := odf.Length(lp.Get("fo:margin-left")); ok {
 			p.margin[css.Left] = ml
 		}
 		if ti, ok := odf.Length(lp.Get("fo:text-indent")); ok {
 			p.indent = ti
 		}
-	} else {
+	default:
 		sb, _ := odf.Length(lp.Get("text:space-before"))
 		mlw, _ := odf.Length(lp.Get("text:min-label-width"))
 		p.margin[css.Left] += sb + mlw
@@ -421,6 +436,52 @@ func (item *itemCtx) indent(p paraState, own *odf.Style) paraState {
 		}
 	}
 	return p
+}
+
+// levelIndents reports whether the list level's indent applies to a
+// paragraph of a list item of the list style list whose paragraph style
+// chain is chain, its own style last: when its styles name no list style
+// or another one, the list's being the paragraph's own then, when its
+// automatic style names one, or when, walking its common styles from the
+// nearest, a style naming a list style comes before one setting an indent
+// (fo:margin-left or fo:text-indent), the indent of a style counting
+// before its list style; a common style that sets an indent first keeps
+// it, as Writer decides
+// whether a list level's indents apply (SwTextNode::
+// AreListLevelIndentsApplicable). ODF 1.3 Part 3, 19.880 leaves it to the
+// application.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/tdf114287.odt prints the items of a list
+//     whose paragraph style sets both the list style and a 50 mm indent
+//     at that indent, and those of one whose automatic style names the
+//     list style over a common style of a 50 mm indent at the list
+//     level's 13.3 mm.
+func levelIndents(chain []*odf.Style, list string) bool {
+	named := ""
+	for i := len(chain) - 1; i >= 0 && named == ""; i-- {
+		named = chain[i].ListStyle
+	}
+	if named != list {
+		return true
+	}
+	for i := len(chain) - 1; i >= 0; i-- {
+		st := chain[i]
+		if st.Auto {
+			if st.ListStyle != "" {
+				return true
+			}
+			continue
+		}
+		if pp := st.Props(odf.ParagraphProps); pp.Has("fo:margin-left") || pp.Has("fo:text-indent") {
+			return false
+		}
+		if st.ListStyle != "" {
+			return true
+		}
+	}
+	return true
 }
 
 // attach makes the paragraph n, of text properties t, the labelled first

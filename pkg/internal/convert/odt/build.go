@@ -564,7 +564,7 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	t := b.paraText(name)
 	p := b.paraProps(name)
 	if ctx.indent != nil {
-		p = ctx.indent.indent(p, b.styles.Style(b.scope, odf.FamilyParagraph, name))
+		p = ctx.indent.indent(p, b.styles.Chain(b.scope, odf.FamilyParagraph, name))
 	}
 	// The paragraph's style is built here and shared once its children
 	// are made: n and its line breaks hold it from then on.
