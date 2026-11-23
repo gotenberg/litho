@@ -290,11 +290,53 @@ type Group struct {
 	// category, a line from the lowest of its series' values to the
 	// highest (ECMA-376 Part 1, 21.2.2.80 hiLowLines).
 	HighLow *Stroke
+	// OfPie, when set, draws a pie group as a pie of pie or a bar of pie:
+	// the points it splits off are drawn in a second plot beside the pie,
+	// which shows them as one sector (ECMA-376 Part 1, 21.2.2.126
+	// ofPieChart).
+	OfPie *OfPie
 	// UpDown, when set, draws a line group's up-down bars: at each
 	// category, a bar from the first series' value to the last's
 	// (21.2.2.218 upDownBars).
 	UpDown *UpDownBars
 }
+
+// OfPie is how a pie of pie or bar of pie splits its points and draws the
+// second plot (ECMA-376 Part 1, 21.2.2.126 ofPieChart).
+type OfPie struct {
+	// Bar draws the second plot as a stacked bar, else as a pie
+	// (ofPieType).
+	Bar bool
+	// Split says which points go to the second plot, with SplitAt
+	// (splitType, splitPos).
+	Split   OfPieSplit
+	SplitAt float64
+	// Custom lists the 0-based indices of the points a custom split sends
+	// to the second plot (custSplit secondPiePt).
+	Custom []int
+	// SecondSize is the size of the second plot in percent of the pie's,
+	// 5 to 200 (secondPieSize).
+	SecondSize float64
+	// Lines, when set, joins the sector of the split points to the second
+	// plot (serLines).
+	Lines *Stroke
+}
+
+// OfPieSplit is how an [OfPie] chooses the points of its second plot
+// (ECMA-376 Part 1, 21.2.3 ST_SplitType).
+type OfPieSplit uint8
+
+// The splits.
+const (
+	// SplitPosition sends the last SplitAt points.
+	SplitPosition OfPieSplit = iota
+	// SplitValue sends the points whose value is below SplitAt.
+	SplitValue
+	// SplitPercent sends the points below SplitAt percent of the total.
+	SplitPercent
+	// SplitCustom sends the points [OfPie.Custom] lists.
+	SplitCustom
+)
 
 // UpDownBars are the up-down bars of a line group (ECMA-376 Part 1,
 // 21.2.2.218 upDownBars).

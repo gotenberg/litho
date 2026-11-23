@@ -115,7 +115,9 @@ func (rd *renderer) render(r typeset.Rect) {
 		}
 		switch {
 		case pie:
-			rd.pies(officePie(plot))
+			if !rd.ofPieDrawn(plot, officePie(plot)) {
+				rd.pies(officePie(plot))
+			}
 		case hierarchical(c):
 			rd.hierarchy(plot)
 		default:
@@ -159,7 +161,9 @@ func (rd *renderer) render(r typeset.Rect) {
 	switch {
 	case len(c.Groups) == 0:
 	case pie:
-		rd.pies(plot)
+		if !rd.ofPieDrawn(plot, plot) {
+			rd.pies(plot)
+		}
 	case hierarchical(c):
 		rd.hierarchy(plot)
 	default:
@@ -168,6 +172,17 @@ func (rd *renderer) render(r typeset.Rect) {
 	if c.Notice != nil {
 		rd.notice(c.Notice, r)
 	}
+}
+
+// ofPieDrawn draws the first group as a pie of pie or a bar of pie in
+// plot, its pie sized by square, and reports whether it did: false for a
+// group without [Group.OfPie], or one whose split leaves a plot empty.
+func (rd *renderer) ofPieDrawn(plot, square typeset.Rect) bool {
+	g := rd.c.Groups[0]
+	if g.Kind != Pie || g.OfPie == nil || len(g.Series) == 0 || rd.pieView(g) != nil {
+		return false
+	}
+	return rd.ofPie(g, plot, square)
 }
 
 // hierarchical reports a chart drawn as a treemap or a sunburst.

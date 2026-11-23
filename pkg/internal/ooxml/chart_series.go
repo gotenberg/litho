@@ -25,7 +25,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Kind = chart.Pie
 		g.VaryColors = true
 		if e.Local == "ofPieChart" {
-			p.warn(warn.ContentUnsupported, warn.Approximated, "a pie-of-pie or bar-of-pie chart is drawn as a pie")
+			g.OfPie = p.ofPie(e)
 		}
 	case "doughnutChart":
 		g.Kind = chart.Doughnut
@@ -840,3 +840,52 @@ func (p *chartReader) stockLines(e *Element, g *chart.Group) {
 // upDownOutline is the width of the automatic outline of Office's up-down
 // bars, in points (stockLines).
 const upDownOutline = 0.5
+
+// ofPie reads how the ofPieChart element e splits its points and draws
+// its second plot (ECMA-376 Part 1, 21.2.2.126 ofPieChart and its ofPieType,
+// splitType, splitPos, custSplit, secondPieSize and serLines children).
+// An automatic split, or a split without a position, sends the last
+// officeOfPieAuto points; an absent size is the schema's 75%.
+func (p *chartReader) ofPie(e *Element) *chart.OfPie {
+	o := &chart.OfPie{Bar: childVal(e, "ofPieType") == "bar", SecondSize: 75, SplitAt: officeOfPieAuto}
+	if v := percentVal(e, "secondPieSize", 75); !math.IsNaN(v) {
+		o.SecondSize = math.Max(5, math.Min(v, 200))
+	}
+	at := floatVal(e, "splitPos")
+	switch childVal(e, "splitType") {
+	case "val":
+		o.Split = chart.SplitValue
+	case "percent":
+		o.Split = chart.SplitPercent
+	case "cust":
+		o.Split = chart.SplitCustom
+		for _, k := range e.Child(NSChart, "custSplit").Kids() {
+			if !k.Is(NSChart, "secondPiePt") || len(o.Custom) >= chart.MaxPoints {
+				continue
+			}
+			if i, ok := Int(attrOr(k, "val")); ok && i >= 0 && i < chart.MaxPoints {
+				o.Custom = append(o.Custom, i)
+			}
+		}
+	case "pos":
+	default:
+		// An automatic split keeps the default position.
+		at = math.NaN()
+	}
+	if !math.IsNaN(at) {
+		o.SplitAt = at
+	}
+	if l := e.Child(NSChart, "serLines"); l != nil {
+		o.Lines = p.lineOf(l.Child(NSChart, "spPr"), &chart.Stroke{Color: typeset.Black, Width: upDownOutline})
+	}
+	return o
+}
+
+// officeOfPieAuto is how many of the last points Office sends to the second
+// plot of a pie of pie or bar of pie that leaves the split automatic.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/barOfPieChart.xlsx states no splitType and
+//     no splitPos; Excel draws its last three points of nine in the bar.
+const officeOfPieAuto = 3

@@ -794,3 +794,26 @@ func TestChartFromElement_StockLines(t *testing.T) {
 		t.Errorf("a line chart without them = %+v %+v", plain.HighLow, plain.UpDown)
 	}
 }
+
+// TestChartFromElement_OfPie reads a bar of pie's split and second plot
+// (ECMA-376 Part 1, 21.2.2.126 ofPieChart), an automatic split as the
+// last officeOfPieAuto points, and warns of nothing.
+func TestChartFromElement_OfPie(t *testing.T) {
+	one := ser(0, "A", "", "9", "8", "7", "6")
+	c := readChart(t, chartXML("", "", `<c:ofPieChart><c:ofPieType val="bar"/>`+one+
+		`<c:splitType val="cust"/><c:custSplit><c:secondPiePt val="1"/><c:secondPiePt val="3"/></c:custSplit><c:secondPieSize val="300"/><c:serLines/></c:ofPieChart>`), false)
+	o := c.Groups[0].OfPie
+	if o == nil || !o.Bar || o.Split != chart.SplitCustom || len(o.Custom) != 2 || o.Custom[1] != 3 || o.SecondSize != 200 || o.Lines == nil {
+		t.Fatalf("of pie = %+v", o)
+	}
+	for _, w := range c.Warnings {
+		t.Errorf("warning %q", w.Message)
+	}
+	auto := readChart(t, chartXML("", "", `<c:ofPieChart><c:ofPieType val="pie"/>`+one+`<c:splitPos val="1"/></c:ofPieChart>`), false).Groups[0].OfPie
+	if auto == nil || auto.Bar || auto.Split != chart.SplitPosition || auto.SplitAt != officeOfPieAuto || auto.SecondSize != 75 || auto.Lines != nil {
+		t.Errorf("automatic of pie = %+v", auto)
+	}
+	if pos := readChart(t, chartXML("", "", `<c:ofPieChart>`+one+`<c:splitType val="pos"/><c:splitPos val="2"/></c:ofPieChart>`), false).Groups[0].OfPie; pos.SplitAt != 2 {
+		t.Errorf("split by position = %+v", pos)
+	}
+}
