@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -334,6 +336,9 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		}
 		return refs.elem(i)
 	}
+	// ids are the identifiers given the notes, each with its element, for
+	// the IDTree.
+	var ids ast.PdfArray
 	for i, e := range st.order {
 		if i%ctxCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
@@ -343,6 +348,14 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		dict := ast.PdfDict{
 			"Type": ast.PdfName("StructElem"),
 			"S":    refs.name(e.Role),
+		}
+		if e.Role == "Note" {
+			// ISO 14289-1, 7.9: a Note carries an ID, unique in the
+			// structure hierarchy (ISO 32000-1, 14.7.2, Table 323), which
+			// the element's place in the tree's order makes it.
+			id := ast.PdfString("note-" + strconv.Itoa(i))
+			dict["ID"] = id
+			ids = append(ids, id, refs.elem(i))
 		}
 		var p *StructElem
 		hasParent := st.parents[i] >= 0
@@ -485,6 +498,11 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	}
 	if rm := roleMap(written, v); rm != nil {
 		root["RoleMap"] = rm
+	}
+	if len(ids) > 0 {
+		// ISO 32000-1, 14.7.2, Table 322: elements with identifiers ask for
+		// the IDTree, a name tree (7.9.6) whose keys sort as byte strings.
+		root["IDTree"] = ast.PdfDict{"Names": sortedNames(ids)}
 	}
 	if v == Version20 {
 		// ISO 32000-2, 14.7.2, Table 355: /Namespaces lists the namespaces
@@ -728,4 +746,24 @@ func listNumbering(n ListNumbering, v Version) string {
 		}
 	}
 	return names[n]
+}
+
+// sortedNames returns the key and value pairs of a name tree's Names array
+// pairs in the order of their keys, byte by byte (ISO 32000-1, 7.9.6).
+func sortedNames(pairs ast.PdfArray) ast.PdfArray {
+	type entry struct {
+		key   string
+		value ast.PdfObject
+	}
+	entries := make([]entry, 0, len(pairs)/2)
+	for k := 0; k+1 < len(pairs); k += 2 {
+		key, _ := pairs[k].(ast.PdfString)
+		entries = append(entries, entry{string(key), pairs[k+1]})
+	}
+	slices.SortFunc(entries, func(a, b entry) int { return strings.Compare(a.key, b.key) })
+	out := make(ast.PdfArray, 0, len(pairs))
+	for _, e := range entries {
+		out = append(out, ast.PdfString(e.key), e.value)
+	}
+	return out
 }

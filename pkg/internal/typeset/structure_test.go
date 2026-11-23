@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -402,5 +403,53 @@ func TestStructureReadsContentInOrder(t *testing.T) {
 	// The text, in one sequence, comes first in the content stream.
 	if strings.Count(out, "/P <</MCID") != 2 {
 		t.Errorf("want two sequences, the float's and the text's:\n%s", out)
+	}
+}
+
+// TestWriteNoteIDs pins that every Note carries an ID unique in the
+// structure hierarchy, as ISO 14289-1, 7.9 asks, and that the structure
+// tree root's IDTree names each, its keys in byte order (ISO 32000-1,
+// 14.7.2, Table 322; 7.9.6).
+//
+// # Corpus evidence
+//
+//   - litho/docx footnotes, litho/odt comments, poi/docx
+//     document/footnotes.docx and 40 other sources of footnotes, endnotes
+//     or comments: their notes carried no ID until a PDF/UA remediation
+//     gave them one, without an IDTree.
+func TestWriteNoteIDs(t *testing.T) {
+	t.Parallel()
+	p := &typeset.StructElem{Role: "P"}
+	var texts []typeset.Fragment
+	for i := range 12 {
+		n := &typeset.StructElem{Role: "Note"}
+		p.Kids = append(p.Kids, n)
+		r := run(t, sans, 12, typeset.Point{X: 40, Y: float64(60 + 20*i)}, "n")
+		r.Parent = n
+		texts = append(texts, r)
+	}
+	doc := &typeset.Document{
+		Metadata:  typeset.Metadata{Title: "Notes", Lang: "en"},
+		Structure: &typeset.StructElem{Role: "Document", Lang: "en", Kids: []*typeset.StructElem{p}},
+		Pages:     []*typeset.Page{letter(texts...)},
+	}
+	for _, v := range []typeset.Version{typeset.Version17, typeset.Version20} {
+		out := string(writeVersion(t, doc, v))
+		if got := strings.Count(out, "/ID (note-"); got != 12 {
+			t.Errorf("%s: %d notes carry an ID, want 12", v, got)
+		}
+		tree := regexp.MustCompile(`/IDTree\s*<<\s*/Names\s*\[(.*?)\]\s*>>`).FindStringSubmatch(out)
+		if tree == nil {
+			i := max(strings.Index(out, "/IDTree"), 0)
+			t.Fatalf("%s: no IDTree: %q", v, out[i:min(i+160, len(out))])
+		}
+		keys := regexp.MustCompile(`\((note-\d+)\)`).FindAllStringSubmatch(tree[1], -1)
+		var names []string
+		for _, k := range keys {
+			names = append(names, k[1])
+		}
+		if len(names) != 12 || !slices.IsSorted(names) {
+			t.Errorf("%s: IDTree keys %q, want the 12 IDs in byte order", v, names)
+		}
 	}
 }
