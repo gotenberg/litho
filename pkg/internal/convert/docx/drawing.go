@@ -505,7 +505,9 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	ss := ooxml.ParseShapeStyle(spPr, sp.Child(ooxml.NSWPS, "style"), d.theme)
 	fx := d.effectList(spPr, sp.Child(ooxml.NSWPS, "style"))
 	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil && pictureShape(spPr, ss) {
-		n := d.picture(s, ref, st, w, h, "")
+		// The picture is the shape: the shape's description is the
+		// picture's, its Figure's Alt (ISO 14289-1, 7.3).
+		n := d.picture(s, ref, st, w, h, alt)
 		if n != nil {
 			n.Picture = d.withEffects(n.Picture, fx)
 		}

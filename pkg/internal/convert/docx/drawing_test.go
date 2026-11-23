@@ -887,6 +887,28 @@ func TestLockedCanvas_PictureAlt(t *testing.T) {
 	}
 }
 
+// TestPictureShape_Alt describes a shape that draws a picture alone, a
+// rectangle filled with it (pictureShape), by the description of its
+// drawing, as a picture is (ISO 14289-1, 7.3).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/crop-roundtrip.docx: a rectangle filled
+//     with a photograph, its drawing described "ramen", drew a Figure
+//     without a description and failed PDF/UA-1 and PDF/UA-2.
+func TestPictureShape_Alt(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><wp:docPr id="89" name="Rectangle 89" descr="ramen"/>` +
+		`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/>` +
+		`<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+		`<a:blipFill><a:blip r:embed="rIda"/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:ln><a:noFill/></a:ln></wps:spPr><wps:bodyPr/></wps:wsp>` +
+		`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	figs := role(build(t, body, map[string]string{"word/media/a.png": pngData(t, 4, 4)}).root, "Figure")
+	if len(figs) != 1 || figs[0].Alt != "ramen" {
+		t.Fatalf("%d figures %+v, want one described %q", len(figs), figs, "ramen")
+	}
+}
+
 // A group's child space scales onto its canvas by its extent over its
 // child extent; nested groups multiply, so each scale is capped and the
 // coordinates of a hostile canvas stay finite.
