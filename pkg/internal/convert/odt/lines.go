@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -285,4 +286,44 @@ func ellipsePart(c *odf.Element, w, h float64) (string, bool, typeset.Rect) {
 		return arc + "Z", false, bounds
 	}
 	return arc, true, bounds
+}
+
+// frameOutline gives st, the box of a text frame of geometry g whose text
+// box is k, the outline Writer draws for it: a frame whose graphic style
+// sets draw:stroke solid is outlined in svg:stroke-color at
+// svg:stroke-width, a hairline when the style states none, in place of
+// its fo:border (ODF 1.3 Part 3, 20.148, 20.150, 20.152), and a text box
+// of draw:corner-radius (19.137) rounds the frame's corners, each radius
+// cut to half the frame's width across and half its height down. It
+// reports whether it rounded the corners: Writer does not cut a rounded
+// frame's text at its corners.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/shapes-hyperlink.odt outlines a 5.102 by
+//     2.117 cm frame of radius 1.799 cm in a blue hairline, its corners
+//     1.799 cm across and 1.058 cm down, its text starting left of the
+//     curve.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 frames of draw:stroke solid
+//     print a hairline outline of their stroke colour whatever fo:border
+//     says, a 0.1 cm one at 0.1 cm; a 0.6 cm radius rounds a 5 by 2 cm
+//     frame by 0.6 cm, a 3 cm one by 2.5 cm across and 1 cm down.
+func frameOutline(st *css.Style, k *odf.Element, g frameGeom) bool {
+	if g.props.Get("draw:stroke") == "solid" {
+		bd := css.Border{Width: css.MinBorderStroke, Style: css.Solid, Color: css.Color{R: 0x34 / 255.0, G: 0x65 / 255.0, B: 0xa4 / 255.0, A: 1}}
+		if col, ok := odf.ParseColor(g.props.Get("svg:stroke-color")); ok {
+			bd.Color = cssColor(col)
+		}
+		if w, ok := odf.Length(g.props.Get("svg:stroke-width")); ok && w > bd.Width {
+			bd.Width = w
+		}
+		st.Border = [4]css.Border{bd, bd, bd, bd}
+	}
+	r, ok := odf.Length(k.A(odf.NSDraw, "corner-radius"))
+	if !ok || !numeric.PositiveFinite(r) || !g.hasW || !g.hasH {
+		return false
+	}
+	rad := css.Radius{H: css.Pts(math.Min(r, g.w/2)), V: css.Pts(math.Min(r, g.h/2))}
+	st.BorderRadius = [4]css.Radius{rad, rad, rad, rad}
+	return true
 }

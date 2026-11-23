@@ -128,3 +128,26 @@ func TestEllipseParts(t *testing.T) {
 		t.Error("an arc is not open")
 	}
 }
+
+// TestRoundedFrame locks the outline of a text frame of draw:stroke solid
+// and draw:corner-radius (see [frameOutline]).
+func TestRoundedFrame(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties draw:stroke="solid" svg:stroke-color="#0000ff" draw:fill="solid" draw:fill-color="#b0c4de" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+	body := `<draw:frame draw:style-name="fr" text:anchor-type="page" text:anchor-page-number="1" svg:x="3cm" svg:y="3cm" svg:width="5cm" svg:height="2cm"><draw:text-box draw:corner-radius="3cm"><text:p>Text</text:p></draw:text-box></draw:frame><text:p/>`
+	pg := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+	blue := typeset.Color{R: 0, G: 0, B: 1, A: 1}
+	found := false
+	for _, p := range paths(pg) {
+		if p.Fill == nil || p.Fill.Color != blue {
+			continue
+		}
+		for _, op := range p.Ops {
+			if op.Kind == typeset.CurveTo {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("no rounded blue outline")
+	}
+}

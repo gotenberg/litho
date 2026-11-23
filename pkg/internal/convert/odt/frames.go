@@ -1243,6 +1243,7 @@ func rectOps(r typeset.Rect) []typeset.PathOp {
 // that a reader hears the box either way (ISO 14289-1, 7.3).
 func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	st := b.frameBox(g)
+	rounded := frameOutline(st, k, g)
 	b.pageFill(st, g)
 	applyWritingMode(st, g.props.Get("style:writing-mode"))
 	st.Display = css.InlineBlock
@@ -1256,7 +1257,7 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		st.MinHeight = st.Height
 		st.Height = css.Dimension{Kind: css.Auto}
 	}
-	if st.Height.Kind == css.Points && k.A(odf.NSDraw, "chain-next-name") == "" {
+	if st.Height.Kind == css.Points && k.A(odf.NSDraw, "chain-next-name") == "" && !rounded {
 		// A text box of a fixed height clips the text it cannot hold, as
 		// Writer draws it; one linked to a next box, whose text Writer
 		// continues there, shows it all, the chain not being laid out.
