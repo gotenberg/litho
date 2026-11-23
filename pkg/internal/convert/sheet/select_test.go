@@ -115,10 +115,11 @@ func TestConvert_SheetSelection(t *testing.T) {
 		}
 		dests = append(dests, l.Dest.Page)
 	}
-	// The link to Three, which does not print, is dropped; the one to
-	// Two lands on its page.
-	if !slices.Equal(dests, []int{2}) {
-		t.Errorf("destinations %v, want [2]", dests)
+	// The link to Three, which does not print, leads to the first page,
+	// as LibreOffice links a sheet it does not print ([targetPage]); the
+	// one to Two lands on its page.
+	if !slices.Equal(dests, []int{1, 2}) {
+		t.Errorf("destinations %v, want [1 2]", dests)
 	}
 
 	if _, err := Convert(context.Background(), selectionBook(), pinnedFonts(t), office.Options{Sheets: []string{"Six"}}); !errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), `"Six"`) {

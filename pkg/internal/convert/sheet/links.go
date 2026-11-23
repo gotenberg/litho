@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -124,11 +125,25 @@ func (sl *sheetLinker) resolve(pg *typeset.Page) {
 }
 
 // targetPage returns the 1-based page that prints the link target in the
-// book target, 0 for none.
+// book target, 0 for none. Under Calc's rules a target on a sheet that
+// prints no page, hidden or empty, leads to the first page: LibreOffice
+// exports such a link as a link to the document itself, which opens at
+// its start.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/sheet_name_with_dots.ods links "#'1.1.1.1'.C1"
+//     and "#'1.1.1.1'!C2", cells of an empty sheet, and LibreOffice
+//     exports both as links to the uploaded file.
+//   - litho/ods: sheet-selection links "#Data.A1" on a hidden sheet, which
+//     LibreOffice exports as a link to the uploaded file.
 func targetPage(doc *Document, target string, pages []*pagePlan) int {
 	si, r, c, cell, ok := sheetTarget(doc, target)
 	if !ok {
 		return 0
+	}
+	if !doc.ExcelRules && len(pages) > 0 && !slices.ContainsFunc(pages, func(p *pagePlan) bool { return p.sp.idx == si }) {
+		return 1
 	}
 	first := 0
 	for k, p := range pages {
