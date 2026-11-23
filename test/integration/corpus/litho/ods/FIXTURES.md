@@ -42,6 +42,15 @@ The spreadsheets below each lock how Calc prints one script in cells. Their runn
 | `cjk-cells`        | 1                   | Noto Sans CJK JP, SC and KR, Liberation Sans          | Article 1 in Japanese, Simplified Chinese and Korean, wrapped in cells (`fo:wrap-option="wrap"`), beside the same title stacked (`style:direction="ttb"`) and turned a quarter (`style:rotation-angle="90"`), in three rows 45 mm high                     |
 | `indic-thai-cells` | 1                   | Noto Sans Devanagari, Noto Sans Thai, Liberation Sans | Articles 1 and 3 in Hindi and Thai, wrapped in cells, and a row of clusters at `style:font-size-complex` 16 points                                                                                                                                         |
 
+## Expected text
+
+Two spreadsheets print text LibreOffice writes in a form PDF.js reads apart from the page. Each names `expectedText` in its `options.json`, beside a file `expected-text.txt` holding the page's text in reading order, written from the source's runs: what the pages print, generated list numbers and bullets included, the characters as the source holds them. A line ends where the reference's page ends it inside Thai or CJK text, which no space parts, so that a reader's tokens are the file's (`FEATURES.md`, "Expected text"). The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; neither the key nor the file changes the reference. What the reference holds, as PDF.js reads it, and what the file adds:
+
+| Source             | What PDF.js reads of the reference                                                                                      | The file                                                                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `indic-thai-cells` | Devanagari and Thai marks as items of their own or mapped to other characters                                           | The cells row by row, each Thai line ended where its cell wraps it                                                                     |
+| `rtl-sheet`        | The cells of each right-to-left row run together (`סעיףנושאשנהאחוז`); the Arabic sheet in visual order with stray marks | The cells row by row, sheet by sheet; `0.125` in the `0%` format as the page prints it, `13%`, where the cell's cached text says `12%` |
+
 ## Paper documents
 
 `corpus build` generates the paper documents from the committed `paper-grid` and `paper-fit` into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed. They are the workbooks of `litho/xlsx`'s bases in ODF: a grid of 20 columns by 130 rows with a header and a footer, and 16 columns by 120 rows fitted to one page wide (`style:scale-to-X` 1, `style:scale-to-Y` 0), on portrait Letter. The LibreOffice route takes the paper options, so the option documents have references of their own. Measured on the references: LibreOffice prints each option workbook as it prints the workbook stating that paper itself, the same pages and the same text (`paper-grid-option-a5-portrait`: 20 pages, as `paper-grid-a5-portrait`).
@@ -60,4 +69,4 @@ The spreadsheets below each lock how Calc prints one script in cells. Their runn
 
 ## Accepted disagreements
 
-- `sheet-selection`: `Summary` links to a cell of `Data`, a hidden sheet. LibreOffice writes that link as a `file:///tmp/<uuid>/...` URI of the route's upload directory, a path no converter can know; litho drops a link to a sheet that does not print. Link recall is 2 of 3. `hidden-sheets`, where `Data` prints, scores the link.
+- `sheet-selection`: `Summary` links to a cell of `Data`, a hidden sheet. LibreOffice writes that link as a URI of the upload itself, which the cell reads as a link to the first page (`FEATURES.md`, "Links to the upload"); litho drops a link to a sheet that does not print. Link recall is 2 of 3. `hidden-sheets`, where `Data` prints, scores the link.
