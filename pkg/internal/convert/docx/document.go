@@ -164,6 +164,9 @@ type document struct {
 	// collects its drawings positioned from the page.
 	inMargin      bool
 	marginAnchors []pendingAnchor
+	// fromPara collects the drawings of the paragraph being built that
+	// are positioned from its top ([document.paragraph]).
+	fromPara []*layout.Node
 	// background is the page background of every page, nil for none.
 	background *css.Style
 	// form gathers the form controls made fields.

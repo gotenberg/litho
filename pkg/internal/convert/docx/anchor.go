@@ -227,6 +227,9 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			return
 		}
 		st.Left, st.Top = css.Pts(p.posH), css.Pts(p.posV)
+		if p.relV == "paragraph" {
+			d.fromPara = append(d.fromPara, n)
+		}
 		// LibreOffice keeps a drawing positioned from its paragraph
 		// inside the page its paragraph is on.
 		st.PageClamp = d.pageAnchors()
@@ -315,6 +318,9 @@ func (d *document) placeWord(p placement, n *layout.Node) {
 		st.Display = css.Block
 	}
 	d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, word: true})
+	if p.relV == "paragraph" {
+		d.fromPara = append(d.fromPara, n)
+	}
 }
 
 // maxPolygonPoints bounds the points read from a wrap polygon.

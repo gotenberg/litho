@@ -70,6 +70,9 @@ type paraInfo struct {
 	// [document.finish].
 	autoBefore, autoAfter bool
 	list                  *numInstance
+	// fromPara is the drawings of the paragraph positioned from its top,
+	// which [document.finish] measures from above its space before.
+	fromPara []*layout.Node
 	// frame is the properties of the text frame of the body the paragraph
 	// belongs to, nil for none ([document.placeFrame]).
 	frame *ooxml.Element
@@ -323,6 +326,7 @@ func (d *document) finish(bs []blockNode, flowStart bool) []*layout.Node {
 		if info.contextual && next != nil && next.style == info.style {
 			after = 0
 		}
+		d.measureFromTop(info.fromPara, before)
 		st := *b.node.Style
 		st.Margin[css.Top], st.Margin[css.Bottom] = css.Pts(before), css.Pts(after)
 		if len(info.borders) > 0 {
@@ -470,7 +474,11 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		d.comments.resume(sink)
 	}
 	d.revisions.bound(p, st, sink, true)
+	outer := d.fromPara
+	d.fromPara = nil
 	d.inlines(s, rp, st, lineMult, p, sink, depth)
+	fromPara := d.fromPara
+	d.fromPara = outer
 	d.revisions.bound(p, st, sink, false)
 	segs := sink.finish()
 	var out []blockNode
@@ -560,6 +568,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		if d.framePlaced(pp.framePr) {
 			info.frame = pp.framePr
 		}
+		info.fromPara = holding(seg.nodes, fromPara)
 		if hardBreak {
 			info.before = 0
 		}
@@ -574,6 +583,60 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			info.indRight = *pp.indRight
 		}
 		out = append(out, blockNode{node: n, info: info})
+	}
+	return out
+}
+
+// measureFromTop moves the drawings ns, positioned from the top of a
+// paragraph whose space before is before points, up by that space: Word
+// measures a vertical offset from the paragraph (ECMA-376 Part 1,
+// 20.4.3.5 ST_RelFromV paragraph; VML's default) from above the
+// paragraph's space before, where the layout places the drawing from the
+// paragraph's first line.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/behinddoc.docx: a group of offset
+//     33.15 pt from a paragraph spaced 40 pt before, first on its page,
+//     prints its top at 104 pt, the top margin (70.85 pt) plus the
+//     offset, 40 pt above where the paragraph's text starts.
+//   - libreoffice/docx ooxmlimport/groupshape-line.docx: a VML group
+//     50.4 pt from a paragraph spaced 100 pt before prints its line
+//     at 108 pt, 43.2 pt of margin, 50.4 and the line's 14.4 in the
+//     group.
+func (d *document) measureFromTop(ns []*layout.Node, before float64) {
+	if before == 0 {
+		return
+	}
+	for _, n := range ns {
+		st := *n.Style
+		switch {
+		case st.WordAnchor.Set && !st.WordAnchor.FromPage:
+			st.WordAnchor.Y -= before
+		case st.Position == css.Absolute && st.Top.Kind == css.Points:
+			st.Top.Value -= before
+		default:
+			continue
+		}
+		n.Style = d.share(&st)
+	}
+}
+
+// holding returns the nodes of set found in the trees ns.
+func holding(ns, set []*layout.Node) []*layout.Node {
+	if len(set) == 0 {
+		return nil
+	}
+	var out []*layout.Node
+	stack := slices.Clone(ns)
+	for len(stack) > 0 && len(out) < len(set) {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if slices.Contains(set, n) {
+			out = append(out, n)
+			continue
+		}
+		stack = append(stack, n.Children...)
 	}
 	return out
 }

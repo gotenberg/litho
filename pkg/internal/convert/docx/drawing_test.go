@@ -509,6 +509,41 @@ func TestDrawings_WordAnchor(t *testing.T) {
 	}
 }
 
+// TestDrawings_FromAboveSpaceBefore locks the origin of a drawing
+// positioned from its paragraph (ECMA-376 Part 1, 20.4.3.5 paragraph):
+// above the paragraph's space before, so the offset loses that space,
+// for a drawing in front of the text, one wrapping it and a VML shape;
+// one positioned from its line keeps its offset.
+func TestDrawings_FromAboveSpaceBefore(t *testing.T) {
+	t.Parallel()
+	anchor := func(rel, wrap string) string {
+		return `<w:r><w:drawing><wp:anchor behindDoc="0" relativeHeight="2"><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>` +
+			`<wp:positionV relativeFrom="` + rel + `"><wp:posOffset>381000</wp:posOffset></wp:positionV>` +
+			`<wp:extent cx="1270000" cy="635000"/>` + wrap + `<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r>`
+	}
+	body := `<w:p><w:pPr><w:spacing w:before="800"/></w:pPr>` + anchor("paragraph", `<wp:wrapNone/>`) +
+		anchor("paragraph", `<wp:wrapSquare wrapText="bothSides"/>`) + anchor("line", `<wp:wrapNone/>`) +
+		`<w:r><w:pict><v:rect style="position:absolute;margin-left:0;margin-top:30pt;width:20pt;height:20pt"/></w:pict></w:r>` +
+		`<w:r><w:t>text</w:t></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 4, 2)})
+	shapes := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 4 {
+		t.Fatalf("%d drawings", len(shapes))
+	}
+	if st := shapes[0].Style; st.Position != css.Absolute || !near(st.Top, -10) {
+		t.Errorf("drawing in front of the text at %v, want -10", st.Top)
+	}
+	if a := shapes[1].Style.WordAnchor; !a.Set || math.Abs(a.Y+10) > 0.01 {
+		t.Errorf("wrapped drawing %+v, want Y -10", a)
+	}
+	if st := shapes[2].Style; !near(st.Top, 30) {
+		t.Errorf("drawing from its line at %v, want 30", st.Top)
+	}
+	if st := shapes[3].Style; !near(st.Top, -10) {
+		t.Errorf("VML shape at %v, want -10", st.Top)
+	}
+}
+
 // TestTextBox_Rotation locks a text box turned by its shape's rotation
 // (ECMA-376 Part 1, 20.1.7.6 xfrm rot) with its text, and one whose body
 // keeps the text upright (21.1.2.1.1 bodyPr upright) left unturned.
