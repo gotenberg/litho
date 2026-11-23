@@ -1668,6 +1668,9 @@ type Style struct {
 	// which are flex or grid items (CSS Page 3, 4.1), any more than to
 	// those of a flex container it lays out.
 	flexOrGrid bool
+	// ListItemRoot marks a ListItem of display: flow-root list-item, which
+	// establishes a block formatting context (CSS Display 3, 2.3).
+	ListItemRoot bool
 }
 
 // colorSlots is a bit set of the colour longhands other than color.

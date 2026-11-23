@@ -446,3 +446,14 @@ func TestBlock_CalcMinHeight(t *testing.T) {
 		t.Errorf("indefinite: child %v tall, want 25", got[3])
 	}
 }
+
+// TestListItemRoot_HoldsItsMargins locks CSS Display 3, 2.3: a list item
+// of display flow-root list-item establishes a block formatting context,
+// so its child's top margin stays inside it.
+func TestListItemRoot_HoldsItsMargins(t *testing.T) {
+	li := sty(display(css.ListItem), func(s *css.Style) { s.ListItemRoot = true })
+	rb := boxes(t, doc(el(li, el(sty(height(10), margin(20, 0, 0, 0))))), page(100, 100))
+	if b := kid(t, rb, 0); b.y != 0 || b.h < px(30)-1e-6 {
+		t.Errorf("list item at y %g, height %g: want 0 and the child's margin inside", b.y, b.h)
+	}
+}

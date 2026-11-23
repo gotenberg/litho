@@ -843,6 +843,9 @@ func equalStyle(a, b *Style) bool {
 	if a.flexOrGrid != b.flexOrGrid {
 		return false
 	}
+	if a.ListItemRoot != b.ListItemRoot {
+		return false
+	}
 	return true
 }
 
@@ -1173,6 +1176,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.currentColor))
 	h = mixBool(h, x.colorExprs != nil)
 	h = mixBool(h, x.flexOrGrid)
+	h = mixBool(h, x.ListItemRoot)
 	return h
 }
 

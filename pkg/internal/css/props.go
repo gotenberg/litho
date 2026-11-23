@@ -554,6 +554,10 @@ var displays3 = map[string]Display{
 	"-webkit-box": Block, "-webkit-inline-box": InlineBlock,
 }
 
+// flowRootListItem is the specified display: flow-root list-item, a
+// block-level list item that establishes a block formatting context.
+type flowRootListItem struct{}
+
 // parseDisplay parses display (CSS Display 3, 2), the one- and two-keyword
 // forms.
 func parseDisplay(v []token, c *declCtx) (any, bool) {
@@ -586,7 +590,9 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 	inline := words["inline"]
 	if words["list-item"] {
 		// CSS Display 3, 2: list-item with an outer display and flow or
-		// flow-root inside; litho lays flow-root out as flow.
+		// flow-root inside. A block-level list item of flow-root inside
+		// establishes a block formatting context (2.3); an inline one is
+		// laid out as an inline list item.
 		for w := range words {
 			if w != "list-item" && w != "inline" && w != "block" && w != "flow" && w != "flow-root" {
 				return nil, false
@@ -597,6 +603,9 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		}
 		if inline {
 			return InlineListItem, true
+		}
+		if words["flow-root"] {
+			return flowRootListItem{}, true
 		}
 		return ListItem, true
 	}
@@ -836,14 +845,17 @@ func init() {
 			initial:  canvasText,
 		}},
 		{pDisplay, propDef{name: "display", parse: parseDisplay, compute: func(_ *styler, st *Style, v any) {
+			st.ListItemRoot = false
 			switch d := v.(type) {
 			case Display:
 				st.Display, st.flexOrGrid, st.LineClamp.webkitBox = d, false, false
 			case laidAs:
 				st.Display, st.flexOrGrid, st.LineClamp.webkitBox = d.d, true, d.webkitBox
+			case flowRootListItem:
+				st.Display, st.flexOrGrid, st.LineClamp.webkitBox, st.ListItemRoot = ListItem, false, false, true
 			}
 		}, copyFrom: func(dst, src *Style) {
-			dst.Display, dst.flexOrGrid, dst.LineClamp.webkitBox = src.Display, src.flexOrGrid, src.LineClamp.webkitBox
+			dst.Display, dst.flexOrGrid, dst.LineClamp.webkitBox, dst.ListItemRoot = src.Display, src.flexOrGrid, src.LineClamp.webkitBox, src.ListItemRoot
 		}}},
 		{pPosition, enumProp("position", false, func(s *Style) *Position { return &s.Position }, map[string]Position{
 			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Sticky, "-webkit-sticky": Sticky,

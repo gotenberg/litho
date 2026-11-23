@@ -122,6 +122,10 @@ func TestProperties_Longhands(t *testing.T) {
 		{"display: inline flow-root", func(s *Style) bool { return s.Display == InlineBlock }},
 		{"display: flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
 		{"display: block flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
+		// CSS Display 3, 2.3: a flow-root list item is a list item that
+		// establishes a block formatting context.
+		{"display: flow-root list-item", func(s *Style) bool { return s.Display == ListItem && s.ListItemRoot }},
+		{"display: list-item", func(s *Style) bool { return s.Display == ListItem && !s.ListItemRoot }},
 		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineGrid }},
 		{"position: sticky", func(s *Style) bool { return s.Position == Sticky }},
 		{"opacity: 150%", func(s *Style) bool { return s.Opacity == 1 }},

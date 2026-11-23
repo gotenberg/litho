@@ -466,7 +466,7 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot || b.st.SizeContainer() || b.st.Contain&(css.ContainLayout|css.ContainPaint) != 0 ||
+		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot || b.st.ListItemRoot || b.st.SizeContainer() || b.st.Contain&(css.ContainLayout|css.ContainPaint) != 0 ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b) || b.ortho
 }
