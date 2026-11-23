@@ -1,10 +1,13 @@
 package odt
 
 import (
+	"encoding/xml"
+	"math"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -93,5 +96,35 @@ func TestLineWrap(t *testing.T) {
 		if !near(y["Before"], 67.9, 0.3) || !near(y["After"]-y["Before"], 149.45-67.9, 0.5) {
 			t.Errorf("link %v: Before at %.2f, After %.2f below it; want 67.90 and 81.55", link, y["Before"], y["After"]-y["Before"])
 		}
+	}
+}
+
+// TestEllipseParts locks the sections, cuts and arcs of an ellipse (see
+// [ellipsePart]): angles on the circle the ellipse scales, bounds of the
+// part alone.
+func TestEllipseParts(t *testing.T) {
+	el := func(kind, start, end string) *odf.Element {
+		return &odf.Element{Attr: []xml.Attr{
+			{Name: xml.Name{Space: odf.NSDraw, Local: "kind"}, Value: kind},
+			{Name: xml.Name{Space: odf.NSDraw, Local: "start-angle"}, Value: start},
+			{Name: xml.Name{Space: odf.NSDraw, Local: "end-angle"}, Value: end},
+		}}
+	}
+	if d, _, _ := ellipsePart(el("full", "30", "300"), 100, 60); d != "" {
+		t.Errorf("a full ellipse draws %q, want the ellipse", d)
+	}
+	d, open, r := ellipsePart(el("section", "30", "300"), 100, 60)
+	// From the centre (50, 30) to the point at 30 degrees, (50+50 cos 30,
+	// 30-30 sin 30), round through the top, the left and the bottom to
+	// 300 degrees: the bounds stop at the 30 degree point on the right.
+	if !strings.HasPrefix(d, "M50 30L93.30127") || open {
+		t.Errorf("section %q, open %v", d, open)
+	}
+	want := typeset.Rect{X: 0, Y: 0, Width: 50 + 50*math.Cos(30*math.Pi/180), Height: 60}
+	if !near(r.X, want.X, 1e-9) || !near(r.Y, want.Y, 1e-9) || !near(r.Width, want.Width, 1e-9) || !near(r.Height, want.Height, 1e-9) {
+		t.Errorf("section bounds %+v, want %+v", r, want)
+	}
+	if _, open, _ := ellipsePart(el("arc", "30", "300"), 100, 60); !open {
+		t.Error("an arc is not open")
 	}
 }

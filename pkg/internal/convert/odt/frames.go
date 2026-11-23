@@ -253,6 +253,11 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 		box := b.lineOf(c, g).box
 		g.x, g.y, g.w, g.h, g.hasW, g.hasH = box.X, box.Y, box.Width, box.Height, true, true
 	}
+	if (c.Is(odf.NSDraw, "ellipse") || c.Is(odf.NSDraw, "circle")) && g.hasW && g.hasH {
+		if d, _, r := ellipsePart(c, g.w, g.h); d != "" {
+			g.x, g.y, g.w, g.h = g.x+r.X, g.y+r.Y, r.Width, r.Height
+		}
+	}
 	// LibreOffice writes a position against the page's top or bottom
 	// margin area, which ODF 1.3 does not name, as loext:vertical-rel
 	// beside a style:vertical-rel ODF 1.3 knows.
@@ -1278,7 +1283,7 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 }
 
 // shapeSVG returns an SVG drawing of a shape (ODF 1.3, Part 3, 10.3) in
-// its own box: rectangles, ellipses, circles, polylines, polygons
+// its own box: rectangles, ellipses and circles whole or in part, polylines, polygons
 // and paths with their viewBox; "" for a shape it does not draw (a custom
 // shape draws through [customShape]).
 func shapeSVG(c *odf.Element, g frameGeom) string {
@@ -1306,6 +1311,16 @@ func shapeSVG(c *odf.Element, g frameGeom) string {
 		r, _ := odf.Length(c.A(odf.NSDraw, "corner-radius"))
 		body = fmt.Sprintf(`<rect x="0" y="0" width="%g" height="%g" rx="%g" %s/>`, w, h, r, paint)
 	case "ellipse", "circle":
+		fw, okW := odf.Length(c.A(odf.NSSVG, "width"))
+		fh, okH := odf.Length(c.A(odf.NSSVG, "height"))
+		if d, open, r := ellipsePart(c, fw, fh); d != "" && okW && okH {
+			if open {
+				paint = fmt.Sprintf(`fill="none" stroke="%s" stroke-width="%g"`, stroke, sw)
+			}
+			// The box bounds the part, the ellipse's own box around it.
+			return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%gpt" height="%gpt" viewBox="%g %g %g %g" preserveAspectRatio="none" overflow="visible"><path d="%s" %s/></svg>`,
+				w, h, r.X, r.Y, math.Max(r.Width, 1), math.Max(r.Height, 1), d, paint)
+		}
 		body = fmt.Sprintf(`<ellipse cx="%g" cy="%g" rx="%g" ry="%g" %s/>`, w/2, h/2, w/2, h/2, paint)
 	case "path", "polyline", "polygon":
 		vb := c.A(odf.NSSVG, "viewBox")

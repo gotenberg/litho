@@ -2,8 +2,10 @@ package odt
 
 import (
 	"context"
+	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -212,4 +214,75 @@ func (d lineDrawing) picture() *layout.Picture {
 		return out
 	}
 	return pic
+}
+
+// ellipsePart returns the SVG path data of a draw:ellipse or draw:circle
+// of kind section, cut or arc in a w by h box (ODF 1.3 Part 3, 19.147
+// draw:kind, 19.200 draw:start-angle, 19.144 draw:end-angle), whether it
+// is open (an arc, stroked and never filled), and the bounds of what it
+// draws in that box; "" for a whole one. The part runs counterclockwise
+// from the start angle to the end angle, angles in degrees on the circle
+// the ellipse is a scaled copy of: a section closes through the centre, a
+// cut along the chord. Writer places and wraps the part by its bounds.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/shapes-hyperlink.odt prints its section
+//     from 311.97 to 237.53 degrees as a pie missing its lower wedge, and
+//     the paragraph after it a line below the wedge's two lowest points,
+//     7.8 points above the ellipse's bottom.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 a 4 by 3 cm ellipse from 30
+//     to 300 degrees meets its bounds at the point (rx cos 300, ry sin
+//     300) from its centre, not at the polar angle 300; an arc prints its
+//     line alone.
+func ellipsePart(c *odf.Element, w, h float64) (string, bool, typeset.Rect) {
+	kind := c.A(odf.NSDraw, "kind")
+	if kind != "section" && kind != "cut" && kind != "arc" {
+		return "", false, typeset.Rect{}
+	}
+	start, okS := odf.ParseAngle(c.A(odf.NSDraw, "start-angle"), false)
+	end, okE := odf.ParseAngle(c.A(odf.NSDraw, "end-angle"), false)
+	if !okS {
+		start = 0
+	}
+	if !okE {
+		end = 360
+	}
+	sweep := math.Mod(end-start, 360)
+	if sweep < 0 {
+		sweep += 360
+	}
+	if sweep == 0 {
+		return "", false, typeset.Rect{}
+	}
+	rx, ry := float64(w/2), float64(h/2)
+	point := func(deg float64) (float64, float64) {
+		sin, cos := detmath.SincosDegrees(deg)
+		return rx + float64(rx*cos), ry - float64(ry*sin)
+	}
+	sx, sy := point(start)
+	ex, ey := point(end)
+	minX, minY, maxX, maxY := math.Min(sx, ex), math.Min(sy, ey), math.Max(sx, ex), math.Max(sy, ey)
+	if kind == "section" {
+		minX, minY, maxX, maxY = math.Min(minX, rx), math.Min(minY, ry), math.Max(maxX, rx), math.Max(maxY, ry)
+	}
+	for a := 0.0; a < 360; a += 90 {
+		if off := math.Mod(a-start+360, 360); off <= sweep {
+			x, y := point(a)
+			minX, minY, maxX, maxY = math.Min(minX, x), math.Min(minY, y), math.Max(maxX, x), math.Max(maxY, y)
+		}
+	}
+	bounds := typeset.Rect{X: minX, Y: minY, Width: maxX - minX, Height: maxY - minY}
+	large := 0
+	if sweep > 180 {
+		large = 1
+	}
+	arc := fmt.Sprintf("M%g %gA%g %g 0 %d 0 %g %g", sx, sy, rx, ry, large, ex, ey)
+	switch kind {
+	case "section":
+		return fmt.Sprintf("M%g %gL", rx, ry) + arc[1:] + "Z", false, bounds
+	case "cut":
+		return arc + "Z", false, bounds
+	}
+	return arc, true, bounds
 }
