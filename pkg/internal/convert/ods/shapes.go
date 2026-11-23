@@ -432,13 +432,19 @@ func appendFrag(out []typeset.Fragment, f typeset.Fragment) []typeset.Fragment {
 // dimension line draw:line-distance to the left of the way from its
 // first point to its second, with its arrowheads, and a guide from each
 // point, starting draw:guide-distance from it and passing the dimension
-// line by draw:guide-overhang; [reader.measureText] adds the measured
-// value.
+// line by draw:guide-overhang, the first and the second guide reaching
+// draw:start-guide and draw:end-guide further past their points;
+// [reader.measureText] adds the measured value.
 //
 // # Corpus evidence
 //
 //   - libreoffice/ods: sc/tdf137576_Measureline.ods, measured downwards,
 //     prints its dimension line right of its points.
+//   - libreoffice/ods: sc/measurelineHideColSave.ods, line distance 1.82
+//     mm, start guide 5.95 mm and end guide 7.31 mm, prints guides 24.87
+//     and 28.72 points long: from 4.95 and 6.31 mm past the points (the
+//     guide length less the 1 mm guide distance) to 2 mm past the
+//     dimension line.
 func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (shapeArt, bool) {
 	x1, y1, x2, y2, ok := lineEnds(el, dx, dy)
 	n := detmath.Hypot(x2-x1, y2-y1)
@@ -454,6 +460,8 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	dist := length("draw:line-distance", measureLineDistance)
 	over := length("draw:guide-overhang", measureGuideOverhang)
 	gap := length("draw:guide-distance", measureGuideDistance)
+	startGuide := max(length("draw:start-guide", 0), 0)
+	endGuide := max(length("draw:end-guide", 0), 0)
 	// The normal turns the way from the first point to the second a
 	// quarter counterclockwise on the page.
 	nx, ny := (y2-y1)/n, -(x2-x1)/n
@@ -463,17 +471,25 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	if arrow == 0 {
 		arrow = s.endArrow
 	}
-	guide := func(x, y float64) []typeset.PathOp {
-		return segment(x+float64(nx*gap), y+float64(ny*gap), x+float64(nx*(dist+over)), y+float64(ny*(dist+over)))
+	guide := func(x, y, extra float64) []typeset.PathOp {
+		from := gap - extra
+		return segment(x+float64(nx*from), y+float64(ny*from), x+float64(nx*(dist+over)), y+float64(ny*(dist+over)))
 	}
-	pts := [][2]float64{{x1, y1}, {x2, y2}, {x1 + float64(nx*(dist+over)), y1 + float64(ny*(dist+over))}, {x2 + float64(nx*(dist+over)), y2 + float64(ny*(dist+over))}}
+	pts := [][2]float64{
+		{x1, y1},
+		{x2, y2},
+		{x1 + float64(nx*(gap-startGuide)), y1 + float64(ny*(gap-startGuide))},
+		{x2 + float64(nx*(gap-endGuide)), y2 + float64(ny*(gap-endGuide))},
+		{x1 + float64(nx*(dist+over)), y1 + float64(ny*(dist+over))},
+		{x2 + float64(nx*(dist+over)), y2 + float64(ny*(dist+over))},
+	}
 	return shapeArt{
 		bounds: bounds(pts, math.Max(arrow, s.line.Width)),
 		line:   [4]float64{ax, ay, bx, by},
 		draw: func(context.Context) []typeset.Fragment {
 			out := s.stroke(segment(ax, ay, bx, by))
-			out = append(out, s.stroke(guide(x1, y1))...)
-			out = append(out, s.stroke(guide(x2, y2))...)
+			out = append(out, s.stroke(guide(x1, y1, startGuide))...)
+			out = append(out, s.stroke(guide(x2, y2, endGuide))...)
 			if s.startArrow > 0 {
 				out = appendFrag(out, arrowhead(ax, ay, bx, by, s.startArrow, s.line.Color))
 			}

@@ -291,3 +291,41 @@ func TestRead_ShapeBoxIsItsOutline(t *testing.T) {
 		t.Errorf("box from x %.2f, %.2f wide; want %.2f, %.2f", d[0].X, d[0].Width, 100.1*mm, 44.9*mm)
 	}
 }
+
+// TestMeasureGuides locks the guides of a dimension line (see
+// [measureArt]): each from its point's guide length less the guide
+// distance past the point to the guide overhang past the dimension line.
+func TestMeasureGuides(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:stroke="solid" draw:line-distance="1.82mm" draw:start-guide="5.95mm" draw:end-guide="7.31mm"/></style:style>`,
+		body: `<table:table table:name="S"><table:shapes><draw:measure draw:style-name="gr1" svg:x1="10mm" svg:y1="50mm" svg:x2="110mm" svg:y2="50mm"/></table:shapes>` +
+			`<table:table-row><table:table-cell/></table:table-row></table:table>`,
+	}
+	doc, _ := read(t, f.bytes())
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 1 || ds[0].Picture == nil {
+		t.Fatalf("drawings %+v", ds)
+	}
+	var lengths []float64
+	for _, fr := range ds[0].Picture.Vector(t.Context(), typeset.Rect{Width: ds[0].Width, Height: ds[0].Height}) {
+		var walk func(typeset.Fragment)
+		walk = func(fr typeset.Fragment) {
+			switch v := fr.(type) {
+			case *typeset.Group:
+				for _, c := range v.Content {
+					walk(c)
+				}
+			case *typeset.Path:
+				if v.Stroke != nil && len(v.Ops) == 2 && v.Ops[0].P[0].X == v.Ops[1].P[0].X {
+					lengths = append(lengths, math.Abs(v.Ops[1].P[0].Y-v.Ops[0].P[0].Y))
+				}
+			}
+		}
+		walk(fr)
+	}
+	mm := 72 / 25.4
+	want := []float64{(1.82 + 2 + 5.95 - 1) * mm, (1.82 + 2 + 7.31 - 1) * mm}
+	if len(lengths) != 2 || math.Abs(lengths[0]-want[0]) > 0.01 || math.Abs(lengths[1]-want[1]) > 0.01 {
+		t.Errorf("guides %v points long, want %v", lengths, want)
+	}
+}
