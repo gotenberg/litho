@@ -1,0 +1,3 @@
+TextFill:
+SolidFill
+GradientFill

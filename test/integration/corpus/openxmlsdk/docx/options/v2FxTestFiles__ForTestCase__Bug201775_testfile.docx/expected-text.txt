@@ -1,0 +1,31 @@
+The overall Open XML file format SDK takes on the layered approach. The following diagram illustrates the overall SDK components. The low level layer contains stream reads/writes, Open XML DOM, Open XML Packaging API and Open XML Syntax Validation. This document outlines the low level layer functionalities.
+User Applications
+Content Search
+Open XML App Level Validation
+Content Reuse
+Document Assembly
+Document Manipulation
+Open XML File Format High Level API
+Wordprocessing
+ML
+High Level Functions
+SpreadsheetML
+High Level Functions
+PresentationML
+High Level Functions
+SharedML
+High Level Functions
+Other High Level API
+High Level Functions
+Open XML File Format Low Level
+Stream Reading/Writing
+Open XML Low Level DOM
+Open XML Packaging API
+Open XML Syntax Validation
+System Support
+.NET Framework 3.0
+System.IO.Packaging
+OpenXML Schema
+1.1.1 Architectural Design
+The SDK low level contains a low level DOM, readers, writers and an event mechanism. The low level DOM has 2 parts: the framework and generated classes. The framework defines the base classes and object hierarchy of the low level layer. The generated classes represent a strongly typed XML DOM for Open XML schema.
+For design details, please view the design documents: Stage2 Low Level Design, Framework Design, Framework Classes, Rules of Code Generator.

@@ -64,3 +64,14 @@ Recorded while LibreOffice built this corpus's references, until 2026-11-11: the
 - `tdf139336_ColumnsWithFootnoteDoNotOccupyEntirePage.docx`: LibreOffice prints two pages, moving the last section's second column to page 2 although page 1 has room for it; litho balances the columns on page 1 with the ten footnotes under them. The sections carry no setting that asks for the move.
 - `ooxmlexport/del-then-format.docx`: LibreOffice prints the deleted run "BBB" because a formatting change is stacked on the deletion; litho drops deleted text as a printed document does.
 - `ooxmlimport/n751077.docx`: LibreOffice prints the second text box of a page-anchored group on a page of its own although the group's geometry fits the first page; litho keeps the group on its anchor page, as the engine places every page-anchored box.
+
+## Expected text
+
+Four references hold no text, or part of it, where the page shows text: Office for the web draws the text as outlines or a picture. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture                                    | What the reference does                                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `ooxmlexport/fdo73247.docx`                | Draws a turned text box with a reflection as a picture                                                       |
+| `ooxmlexport/fdo76249.docx`                | Draws the locked canvas, its two words included, as a picture                                                |
+| `ooxmlexport/TextEffects_TextFill.docx`    | Holds `TextFill:` and `GradientFill`; draws `SolidFill` as outlines. `NoFill` prints nothing and is left out |
+| `ooxmlexport/TextEffects_TextOutline.docx` | Holds `NoLine`; draws the gradient and solid outlined runs as paths                                          |

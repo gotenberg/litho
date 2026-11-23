@@ -21,3 +21,16 @@ The Open XML SDK's test documents scored by the `diff` feature (see `FEATURES.md
 `corpus update` walks `test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage` and keeps a document of the format's extensions when it is at most 150 KiB, is not under `Robustness/` (malformed on purpose), qualifies as `corpus update` (`cmd/corpus/select_qualify.go`) decides (see `poi/FIXTURES.md`), and its bytes are not those of a document already kept: the storage holds several sets twice. A file name holds spaces and other characters a shell or a form field mangles, so its ID writes each run of them `_`. The qualifying documents are sorted by ID and the first 250 of each format kept.
 
 The Open XML SDK is under the MIT licence; its test documents are downloaded for testing, never committed.
+
+## Expected text
+
+Thirteen references hold no text, or part of it, or read it one letter a token, where the page shows text. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture                                                                                                   | What the reference does                                                                               |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `docx` `v2FxTestFiles/ForTestCase/Bug201775_testfile.docx`                                                | Draws the locked canvas, a diagram of 28 labelled boxes, as a picture; holds the paragraphs around it |
+| `pptx` `v2FxTestFiles/presentation/AutoShapes_3D_Rotation_Parallel_Isometric_Right_Up_.pptx`              | Draws the text of the shapes under a 3-D rotation as a picture; holds the title                       |
+| `pptx` `O14ISOStrict/PowerPoint/vertOverflowEllipsis_bodyPrVertOverflow_VertOverflowEllipsis.pptx`        | Holds stacked text one letter a line, cut by an ellipsis                                              |
+| `pptx` `v2FxTestFiles/presentation/Text_withExtrusion_100chars*.pptx` (3)                                 | Draws the extruded title and bullets as outlines                                                      |
+| `pptx` `v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars*.pptx` (3)                       | As above                                                                                              |
+| `pptx` `v2FxTestFiles/presentation/Text_withEffects_100chars*.pptx` (3), `Text_withEffects_200chars.pptx` | Holds the title; draws the bullets, in capitals (`cap="all"`) with a reflection, as a picture         |

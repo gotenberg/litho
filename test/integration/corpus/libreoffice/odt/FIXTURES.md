@@ -44,3 +44,12 @@ Each reference handed to the cell as litho's conversion scores 1 on pages, links
 - `odfexport/tdf118502.odt`: the picture is an EPS whose text LibreOffice renders, so the reference carries it as extractable text; litho draws the EPS through its replacement picture, with no text to extract. The page agrees; text F1 is 0.
 - `odfexport/embedded-pdf.odt`: the embedded PDF's text is extractable from LibreOffice's reference, which renders the PDF's content as text; litho draws the embedded object as its replacement picture.
 - `odfexport/tdf139126.odt`: a table formula's saved result is a 300-digit number, which litho prints wrapped in its cell; LibreOffice recalculates the formula on load and prints "** Expression is faulty **". Formula evaluation is out of scope.
+
+## Expected text
+
+Two references hold text PDF.js reads apart from the page. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture                         | What PDF.js reads of the reference                                                                                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `layout/drop_complex_word.fodt` | `লিব্রে অলিস` for the Bengali word `লিব্রেঅফিস`, its drop cap apart and a glyph mapped to `ল`; poppler reads the word right |
+| `layout/drop_vertical.fodt`     | `L i b r e o f f i c e`: a vertical frame one letter a line                                                                 |

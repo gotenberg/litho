@@ -65,3 +65,11 @@ Recorded while LibreOffice built this corpus's references, until 2026-11-11: the
 - `sc/orderOfCNumFmtElements.xlsx`: its pie charts are 3D, which LibreOffice draws in perspective with their walls and depth; litho draws every chart flat, so the slices sit elsewhere while the labels and legend agree.
 - `sc/hyperlinks.xlsx`: an empty sheet holds a hidden VML comment shape 750 pt tall, which LibreOffice counts in the print range and prints as four blank pages after the two of content; litho prints the two pages the cells fill.
 - `sc/XlStartupExternal.xlsx`: LibreOffice recalculates a formula over an external `[1]!` defined name on load and prints `Err:509` where Excel cached a value; litho prints the cached value.
+
+## Expected text
+
+One reference holds no text where the page shows it. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture             | What the reference does                                                       |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `sc/tdf142881.xlsx` | Draws the text of four shapes turned 45, 135, 225 and 315 degrees as outlines |

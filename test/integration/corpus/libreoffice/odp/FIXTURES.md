@@ -47,8 +47,19 @@ Each reference handed to the cell as litho's conversion scores 1 on pages, links
 - `sd/Math.fodp`, `sd/formula.fodp`: formula objects LibreOffice renders through its own formula editor; litho has no formula renderer and draws the object's replacement picture when the file holds one.
 - `sd/tdf169952_multiple_OLEs.odp`, `sd/linked_ole.odp`: embedded and linked OLE objects LibreOffice draws itself; their replacement pictures are StarView metafiles, which litho does not draw.
 - `sd/embedded-pdf.odp`: a PDF used as a picture, whose text LibreOffice renders; litho draws the replacement picture.
-- `sd/tdf100348_Fontwork2TextWarp.odp`, `sd/tdf100348_FontworkBitmapFill.odp`, `sd/tdf100348_FontworkGradientGlow.odp`: Fontwork is drawn as outlines by LibreOffice, so the reference holds no text; litho writes the text unwarped.
+- `sd/tdf100348_Fontwork2TextWarp.odp`, `sd/tdf100348_FontworkBitmapFill.odp`, `sd/tdf100348_FontworkGradientGlow.odp`: Fontwork is drawn as outlines by LibreOffice, so the reference holds no text; litho writes the text unwarped. Each names an expected text (see "Expected text").
 - `sd/extfile_field.odp`: the file name field prints the route's temporary upload path in the reference, which changes on every conversion; litho prints nothing for it.
 - `sd/numfmt.odp`: the date and time fields print the moment of the conversion in the reference.
 - `sd/slide-tile-background.odp`: LibreOffice prints none of the slide's tiled background bitmap, with or without its zero size; litho tiles it.
 - `sd/tdf96708.odp`: white text on a white slide is read by PDF.js and left out by litho's text extraction.
+
+## Expected text
+
+Four references hold no text where the slide shows it. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture                                 | What the reference does                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------- |
+| `sd-data/fit-to-size.fodp`              | Draws the Fontwork of shapes 5 and 6 as outlines; shapes 1 to 4 keep their text |
+| `sd/tdf100348_Fontwork2TextWarp.odp`    | Draws the warped Fontwork as outlines                                           |
+| `sd/tdf100348_FontworkBitmapFill.odp`   | Draws the Fontwork as outlines filled with the bitmap                           |
+| `sd/tdf100348_FontworkGradientGlow.odp` | Draws the Fontwork as outlines with a gradient and a glow                       |
