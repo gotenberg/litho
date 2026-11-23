@@ -172,6 +172,9 @@ type DiagramAtom struct {
 	HideGeom  bool
 	Rot       float64
 	ZOrderOff int
+	// Adjust holds a shape's adjust values (21.4.3.1 adj), in the order
+	// written.
+	Adjust []DiagramAdjust
 
 	// A constraint (21.4.2.6), or a rule's forName.
 	Constraint DiagramConstraint
@@ -186,6 +189,20 @@ type DiagramAtom struct {
 	Func, Arg, Op, Val string
 	Else               bool
 }
+
+// DiagramAdjust is an adjust value of a layout shape (21.4.3.1 adj): Idx
+// names the preset's adjust value from 1, Val its value, an angle in
+// degrees or a share of the shape's size.
+type DiagramAdjust struct {
+	Idx int
+	Val float64
+}
+
+// maxDiagramAdjusts caps the adjust values read for one layout shape.
+// Anti-DoS guard, not spec-mandated: the preset geometries take at most
+// eight adjust values (ECMA-376 Part 1, Annex D), so sixteen keeps every
+// one a real definition states.
+const maxDiagramAdjusts = 16
 
 // DiagramConstraint is a constraint of a layout node (21.4.2.6 constr).
 type DiagramConstraint struct {
@@ -401,6 +418,16 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 			}
 			s.Rot = parseDouble(attrOr(k, "rot"), 0)
 			s.ZOrderOff, _ = Int(attrOr(k, "zOrderOff"))
+			for _, adj := range k.Child(NSDgm, "adjLst").Kids() {
+				if !adj.Is(NSDgm, "adj") || len(s.Adjust) >= maxDiagramAdjusts {
+					continue
+				}
+				idx, ok := Int(attrOr(adj, "idx"))
+				val := parseDouble(attrOr(adj, "val"), math.NaN())
+				if ok && idx >= 1 && idx <= maxDiagramAdjusts && numeric.Finite(val) {
+					s.Adjust = append(s.Adjust, DiagramAdjust{Idx: idx, Val: val})
+				}
+			}
 			add(s)
 		case "alg":
 			s := &DiagramAtom{Kind: AtomAlg, Parent: a, Node: a.Node, Alg: attrOr(k, "type"), Params: map[string]string{}}

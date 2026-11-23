@@ -109,6 +109,7 @@ func (s *DiagramShape) Preset() string {
 type shapeTemplate struct {
 	preset string
 	line   *Element
+	adjust []DiagramAdjust
 }
 
 // mode is what a layout definition walk does at each atom, after
@@ -537,7 +538,7 @@ func (e *engine) bind(p *DiagramPoint, s *DiagramShape) {
 func (e *engine) copyShape(a *DiagramAtom) *DiagramShape {
 	t, ok := e.tmpls[a]
 	if !ok {
-		t = &shapeTemplate{preset: a.ShapeType}
+		t = &shapeTemplate{preset: a.ShapeType, adjust: a.Adjust}
 		e.tmpls[a] = t
 	}
 	e.shapes++

@@ -4,6 +4,8 @@ import (
 	"encoding/xml"
 	"math"
 	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // Element returns the laid out shape s as the shape element a diagram's
@@ -16,7 +18,7 @@ func (s *DiagramShape) Element(space, preset string, draws bool) *Element {
 	sp := &Element{Space: space, Local: "sp"}
 	pr := &Element{Space: space, Local: "spPr"}
 	if draws && preset != "rect" {
-		pr.Children = append(pr.Children, newA("prstGeom", []string{"prst", preset}, newA("avLst", nil)))
+		pr.Children = append(pr.Children, newA("prstGeom", []string{"prst", preset}, s.avLst(preset)))
 	}
 	if draws {
 		if f := fillChild(s.FillSpPr); f != nil {
@@ -46,6 +48,41 @@ func (s *DiagramShape) Element(space, preset string, draws bool) *Element {
 		sp.Children = append(sp.Children, tb)
 	}
 	return sp
+}
+
+// avLst returns the adjust values of the shape's layout shape as the
+// avLst of its preset (21.4.3.1 adj; 20.1.9.5 avLst): an angle in
+// degrees written in 60000ths of a degree, any other value, a share of
+// the shape's size, in 100000ths. An index the preset does not have is
+// left out.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: O12_templates/CycleDiagram_TP10174326's cycle8
+//     states each pie's angles in degrees (270 to 342 for the first of
+//     five): Office prints five wedges of 72 degrees around the circle.
+//   - openxmlsdk/pptx: O12_templates/HorizHierChart_TP10220217's
+//     hierarchy2 boxes state roundRect 0.1: Office rounds a 170.6 by 85.7
+//     point box by 8.57 points, 0.1 of its shorter side (the preset's
+//     default would give 14.3).
+func (s *DiagramShape) avLst(preset string) *Element {
+	av := newA("avLst", nil)
+	if s.tmpl == nil || len(s.tmpl.adjust) == 0 {
+		return av
+	}
+	names, angles := shape.AdjustGuides(preset)
+	for _, a := range s.tmpl.adjust {
+		if a.Idx < 1 || a.Idx > len(names) {
+			continue
+		}
+		unit := 100000.0
+		if angles[a.Idx-1] {
+			unit = 60000
+		}
+		v := math.Round(a.Val * unit)
+		av.Children = append(av.Children, newA("gd", []string{"name", names[a.Idx-1], "fmla", "val " + strconv.FormatFloat(v, 'f', -1, 64)}))
+	}
+	return av
 }
 
 // fillChild returns the fill among e's children, nil for none.
