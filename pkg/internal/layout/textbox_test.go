@@ -132,3 +132,38 @@ func TestTextBoxTrim_TrimsEachColumn(t *testing.T) {
 		}
 	}
 }
+
+func TestTextBoxTrim_SlicedTrimsTheFirstFragmentAlone(t *testing.T) {
+	// CSS Inline 3, 6.2: a box split by fragmentation under
+	// box-decoration-break: slice is trimmed at the start of its first
+	// fragment alone. Lines 20px tall of 10px Ahem (text edges 8px over the
+	// baseline) in 45px columns: the first column starts at its first
+	// line's glyphs, and the line a break moved to the second column's top
+	// keeps its half leading there.
+	lh := func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 2} }
+	mc := func(s *css.Style) {
+		s.Columns.Count, s.Columns.Fill = 2, css.FillAuto
+		s.ColumnGap = css.Pts(px(10))
+		s.Width, s.Height = css.Pts(px(30)), css.Pts(px(45))
+		s.Orphans, s.Widows = 1, 1
+	}
+	trim := func(s *css.Style) {
+		s.TextBoxTrim = css.TrimStart
+		s.TextBoxEdge = css.TextBoxEdge{Over: css.EdgeText, Under: css.EdgeText}
+	}
+	res := run(t, doc(el(sty(mc, lh), el(sty(trim, lh), txt(sty(lh), "x x x x")))), page(40, 60))
+	var got [][2]float64
+	for _, r := range texts(res, 1) {
+		got = append(got, [2]float64{r.x / css.Pt, r.y / css.Pt})
+	}
+	want := [][2]float64{{0, 8}, {0, 28}, {20, 13}, {20, 33}}
+	if len(got) != len(want) {
+		t.Fatalf("runs at %v, want %v", got, want)
+	}
+	for i := range want {
+		if !near(got[i][0], want[i][0]) || !near(got[i][1], want[i][1]) {
+			t.Errorf("runs at %v, want %v", got, want)
+			break
+		}
+	}
+}

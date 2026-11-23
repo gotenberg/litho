@@ -35,10 +35,20 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 			}
 			over, _ := e.trimEdges(st, owner.lang)
 			if d := l.baseline - over; d > 0 {
-				b.shift(0, -d)
-				b.y, b.sy, b.anchorY = b.y+d, b.sy+d, b.anchorY+d
-				own.shiftFloats(math.Inf(-1), -d)
-				end -= d
+				if cut, ok := e.pushedAt(b, l.y); ok {
+					// Under box-decoration-break: slice only the start of
+					// the box's first fragment is trimmed (CSS Inline 3,
+					// 6.2): the content flowing on from it moves up, the
+					// content a break moved to the top of a later page or
+					// column keeps its place, and all after it.
+					shiftBefore(b, cut, -d, 0)
+					own.shiftFloatsBefore(cut, -d)
+				} else {
+					b.shift(0, -d)
+					b.y, b.sy, b.anchorY = b.y+d, b.sy+d, b.anchorY+d
+					own.shiftFloats(math.Inf(-1), -d)
+					end -= d
+				}
 			}
 		}
 	}
@@ -59,6 +69,84 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 		}
 	}
 	return end
+}
+
+// pushedAt returns the first flow position below the line top y at which
+// a line or a box inside b starts at the top of a page or column: where a
+// break moved content past a cut, false when none does or when the
+// engine does not paginate.
+func (e *engine) pushedAt(b *box, y float64) (float64, bool) {
+	if !e.paginating() {
+		return 0, false
+	}
+	at := math.Inf(1)
+	var walk func(c *box, depth int)
+	walk = func(c *box, depth int) {
+		for _, l := range c.lines {
+			if l.y > y+eps && l.y < at && e.atPageTop(l.y) {
+				at = l.y
+			}
+		}
+		if depth >= maxEdgeLineDepth {
+			return
+		}
+		for _, k := range c.kids {
+			if k.kind != kindBlock && k.kind != kindReplaced || k.inline || k.abs || !k.laidOut || k.y >= at {
+				continue
+			}
+			if k.y > y+eps && e.atPageTop(k.y) {
+				at = k.y
+				continue
+			}
+			walk(k, depth+1)
+		}
+	}
+	walk(b, 0)
+	return at, !math.IsInf(at, 1)
+}
+
+// shiftBefore moves by dy the content of b that starts above the flow
+// position cut: its lines, the blocks above the cut whole, and the part
+// above it of a block the cut crosses, whose top moves while its end
+// stays. b itself keeps its place.
+func shiftBefore(b *box, cut, dy float64, depth int) {
+	for _, l := range b.lines {
+		if l.y >= cut-eps {
+			continue
+		}
+		l.y += dy
+		for _, it := range l.items {
+			if it.atomic != nil {
+				it.atomic.shift(0, dy)
+			}
+		}
+	}
+	if b.outside != nil && b.outside.baseline < cut {
+		b.outside.baseline += dy
+		b.outside.sym.Y += dy
+	}
+	for _, k := range b.kids {
+		switch k.kind {
+		case kindBlock, kindReplaced:
+			switch {
+			case k.inline:
+			case k.y+k.borderH() <= cut+eps:
+				k.shift(0, dy)
+			case k.y < cut && depth < maxEdgeLineDepth:
+				k.y, k.sy, k.anchorY = k.y+dy, k.sy+dy, k.anchorY+dy
+				k.h -= dy
+				shiftBefore(k, cut, dy, depth+1)
+			}
+		case kindInline:
+			if k.anchorY < cut {
+				k.shiftInline(0, dy)
+			}
+		case kindText, kindBreak:
+			if k.anchorY < cut {
+				k.anchorY += dy
+			}
+		}
+	}
 }
 
 // shiftFloatsAfter moves by dy the floats of the inline content of b
@@ -84,6 +172,20 @@ func (c *bfc) shiftFloats(y, dy float64) {
 	}
 	for i := range c.floats {
 		if f := &c.floats[i]; !f.initial && f.y0 >= y-eps {
+			f.y0 += dy
+			f.y1 += dy
+		}
+	}
+}
+
+// shiftFloatsBefore moves by dy the float rectangles of c whose top is
+// above y; a nil c holds none.
+func (c *bfc) shiftFloatsBefore(y, dy float64) {
+	if c == nil {
+		return
+	}
+	for i := range c.floats {
+		if f := &c.floats[i]; !f.initial && f.y0 < y-eps {
 			f.y0 += dy
 			f.y1 += dy
 		}
