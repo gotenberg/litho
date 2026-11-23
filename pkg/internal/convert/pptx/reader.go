@@ -1,6 +1,7 @@
 package pptx
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -227,7 +228,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if subject == "" {
 		subject = cp.Description
 	}
-	doc.Meta = typeset.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
+	doc.Meta = typeset.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cmp.Or(cp.Language, defaultTextLang(r.defaultText))}
 	first := 1
 	if n, ok := intAttr(root, "firstSlideNum"); ok {
 		first = min(max(n, 1), maxFirstSlideNumber)
@@ -460,4 +461,19 @@ func (r *reader) own(l *layer) {
 // type typ the package holds, "" for none.
 func (r *reader) related(part, typ string) string {
 	return r.pkg.RelatedPart(r.ctx, part, typ)
+}
+
+// defaultTextLang returns the language the presentation's default text
+// style dt gives its text, the lang of the default run properties of its
+// default paragraph properties, else of its first level (ECMA-376 Part 1,
+// 19.2.1.8 defaultTextStyle; 21.1.2.3.2 defRPr lang): the language of a
+// run that states none, which a presentation whose core properties name
+// no language states its text is in. "" for none.
+func defaultTextLang(dt *ooxml.Element) string {
+	for _, p := range []string{"defPPr", "lvl1pPr"} {
+		if v, ok := dt.Child(ooxml.NSA, p).Child(ooxml.NSA, "defRPr").Attr("lang"); ok && v != "" && v != "x-none" {
+			return v
+		}
+	}
+	return ""
 }

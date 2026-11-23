@@ -227,3 +227,31 @@ func TestPresentation_Bookmarks(t *testing.T) {
 		t.Errorf("first number %d, want 10", doc.FirstNumber)
 	}
 }
+
+// TestPresentation_LanguageOfTheDefaultTextStyle locks the language of a
+// presentation whose core properties name none: the lang of its default
+// text style's default run properties, of its default paragraph
+// properties, else of its first level (ECMA-376 Part 1, 19.2.1.8), as
+// the language its runs take when they state none; "" when neither does.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx, litho/pptx, openxmlsdk/pptx, poi/pptx: 553
+//     presentations state a language in their default text style or
+//     their runs and none in their core properties; their conversions
+//     left all their text in no language (ISO 14289-1, 7.2), which a
+//     PDF/UA remediation then declared English, the Polish of
+//     chart2/CustomDataLabel_tdf115107.pptx included.
+func TestPresentation_LanguageOfTheDefaultTextStyle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, extra, want string }{
+		{"default paragraph", `<p:defaultTextStyle><a:defPPr><a:defRPr lang="pl-PL"/></a:defPPr><a:lvl1pPr><a:defRPr lang="en-US"/></a:lvl1pPr></p:defaultTextStyle>`, "pl-PL"},
+		{"first level", `<p:defaultTextStyle><a:defPPr/><a:lvl1pPr><a:defRPr lang="de-DE"/></a:lvl1pPr></p:defaultTextStyle>`, "de-DE"},
+		{"none", `<p:defaultTextStyle><a:defPPr><a:defRPr lang="x-none"/></a:defPPr></p:defaultTextStyle>`, ""},
+	} {
+		doc, _ := readDeck(t, testDeck{presExtra: tc.extra, slides: []testSlide{{tree: title("T")}}})
+		if doc.Meta.Lang != tc.want {
+			t.Errorf("%s: language %q, want %q", tc.name, doc.Meta.Lang, tc.want)
+		}
+	}
+}

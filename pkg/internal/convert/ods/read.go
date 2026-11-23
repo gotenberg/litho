@@ -179,6 +179,12 @@ func (r *reader) tick() bool {
 // document reads the office:spreadsheet body (ODF 1.3, Part 3, 9.1).
 func (r *reader) document(body *odf.Element) *sheet.Document {
 	r.doc = &sheet.Document{Meta: r.metadata(), Default: r.defaultStyle()}
+	if r.doc.Meta.Lang == "" {
+		// A spreadsheet whose metadata names no language states the
+		// language of its text in its default cell style, which every
+		// cell's text takes unless its own style says otherwise.
+		r.doc.Meta.Lang = odf.Lang(r.styles.Default(odf.FamilyCell, odf.TextProps))
+	}
 	if n, err := intconv.Atoi(r.styles.Default(odf.FamilyCell, odf.CellProps).Get("style:decimal-places")); err == nil && n >= 0 {
 		r.doc.GeneralDecimals, r.doc.LimitGeneral = min(n, maxGeneralDecimals), true
 	}

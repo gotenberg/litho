@@ -40,13 +40,13 @@ var sameBytesCases = []struct {
 	{formatDOCX, "docx/parts/shapes-effects-3d", "802e8748188b548d2f00291b77873f2ad1b4b8999e567f6a7c4055ea6177d92b"},
 	{formatXLSX, "xlsx/parts/real_dashboard", "639fc81b371686c7da2d112c6cf163f8f3ac8130f2701d0628ed0ef60d101f9e"},
 	{formatXLSX, "xlsx/parts/charts_pie_doughnut", "184d4bbd6845d2460a8374c66123cd8a6e75097b9c074bdaff25973320797d4a"},
-	{formatPPTX, "pptx/parts/chart-pie", "db181f494fff72a3b01befb4fa2b5d1fea9bd7f31cbb3d28a08495f3fa14954d"},
-	{formatPPTX, "pptx/parts/chart-3d", "1d734de6778b6004dbc7b54c6bb791c3c4cf98bcf8ff76d91fb99997c3b70824"},
-	{formatPPTX, "pptx/parts/fill-gradient", "ef2d1d9c9fb6b6a7d058be6917325ad7fb40f2347a00e58654133a657827f136"},
-	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "bd0cdae24a912972b8be38bde04e91264b28f01d72b42b0fbe9ad17bdd40b70a"},
+	{formatPPTX, "pptx/parts/chart-pie", "b74dd1bc765a2131f3b7c2007a419833e3fbca8f87fd1bc306b448836433a69b"},
+	{formatPPTX, "pptx/parts/chart-3d", "4a2b66d70493ad793828f58025bd842acf46d5a5df87861d57bbd8721f8c9c36"},
+	{formatPPTX, "pptx/parts/fill-gradient", "4f01ef5be2392e205905d8e81dc561c1b58f803259b993820af33ba17d12d571"},
+	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "4e6bf506ecb5b0aaf75b02fd2ff8d65a0ebed9cb4c55ac94f523335a61505b3e"},
 	{formatODT, "odt/sources/mixed-sections", "a0d798280a169ffd5893ec47d4c5856f170ae674044058b085cc132498f3dea8"},
-	{formatODS, "ods/sources/mixed-sheets", "dda900462838cc6e366ba8a2a51fd3131ad6b9e12fc2cb7ebe2fba3a911fd596"},
-	{formatODP, "odp/sources/wide-deck", "ab36b7f6cdc0833b4ca921f5251781298696a593186b674f11f7a1039bc6a5cd"},
+	{formatODS, "ods/sources/mixed-sheets", "6d99d178382437ef7516ba65e62f85e2765de9a058c7f6e7c5f568f9c5227a57"},
+	{formatODP, "odp/sources/wide-deck", "f58920587536938f585939f6357ab169390422506b39a3578c3530fff9e89747"},
 }
 
 // sameBytesText is the source of the plain text case.

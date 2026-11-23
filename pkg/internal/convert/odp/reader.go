@@ -184,6 +184,12 @@ func (r *reader) tick() bool {
 func (r *reader) document(body *odf.Element) *slides.Document {
 	// Impress wraps Korean at its spaces alone.
 	doc := &slides.Document{Meta: r.metadata(), KeepHangulWords: true}
+	if doc.Meta.Lang == "" {
+		// A presentation whose metadata names no language states the
+		// language of its text in its default graphic style, which the
+		// text of every shape takes unless its own style says otherwise.
+		doc.Meta.Lang = odf.Lang(r.styles.Default(odf.FamilyGraphic, odf.TextProps))
+	}
 	var pages []*odf.Element
 	for _, el := range body.Children {
 		switch {
