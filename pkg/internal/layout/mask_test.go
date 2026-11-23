@@ -1,6 +1,9 @@
 package layout
 
 import (
+	"context"
+	"image"
+	"image/color"
 	"math"
 	"testing"
 
@@ -72,4 +75,47 @@ func TestMask_NoClip(t *testing.T) {
 		BBBB
 		BBBB
 		BBBB`)
+}
+
+// TestMask_RasterImage locks a mask layer of a raster image (CSS Masking
+// 1, 6.1 and 6.2): by its alpha, a PNG opaque on its left half keeps the
+// left half; by its luminance, an opaque picture black on the left and
+// white on the right keeps the right half.
+func TestMask_RasterImage(t *testing.T) {
+	halves := func(left, right color.NRGBA) *Picture {
+		img := image.NewNRGBA(image.Rect(0, 0, 20, 4))
+		for y := range 4 {
+			for x := range 20 {
+				img.SetNRGBA(x, y, right)
+				if x < 10 {
+					img.SetNRGBA(x, y, left)
+				}
+			}
+		}
+		return &Picture{Source: source(img), Width: px(20), Height: px(4)}
+	}
+	pics := map[string]*Picture{
+		"alpha.png": halves(color.NRGBA{A: 255}, color.NRGBA{}),
+		"luma.png":  halves(color.NRGBA{A: 255}, color.NRGBA{R: 255, G: 255, B: 255, A: 255}),
+	}
+	for _, tt := range []struct {
+		url         string
+		mode        css.MaskMode
+		left, right bool
+	}{
+		{"alpha.png", css.MaskMatchSource, true, false},
+		{"luma.png", css.MaskLuminance, false, true},
+	} {
+		mask := func(s *css.Style) {
+			s.Mask = css.Mask{Images: []css.MaskImage{{URL: tt.url}}, Modes: []css.MaskMode{tt.mode}}
+		}
+		root := doc(el(sty(width(20), height(4), bg(red), mask)))
+		res := runWith(t, root, Options{Page: page(20, 4), Image: func(_ context.Context, url string) (*Picture, error) {
+			return pics[url], nil
+		}})
+		img := render(t, res, 1)
+		if l, r := code(img.At(4, 2)) == 'R', code(img.At(15, 2)) == 'R'; l != tt.left || r != tt.right {
+			t.Errorf("%s: red left %v, right %v, want %v, %v", tt.url, l, r, tt.left, tt.right)
+		}
+	}
 }

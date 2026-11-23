@@ -15,9 +15,9 @@ type maskLayer struct {
 	luminance bool
 	clip      typeset.Rect
 	op        css.MaskComposite
-	// raster reports a layer of a raster image or of one that cannot be
-	// read, which Chromium does not apply.
-	raster bool
+	// unread reports a layer of an image that cannot be read, which
+	// Chromium does not apply.
+	unread bool
 }
 
 // maskOf returns the soft mask of b's mask in flow coordinates, nil for
@@ -45,10 +45,14 @@ type maskLayer struct {
 //     255 where it masks out) read, at (10, 10), (10, 90) and (90, 90) of a
 //     100 pixel box, 160, 153 and 243 for intersect where the clause gives
 //     about 136, 248 and 255; its luminance intersect matches litho's
-//     within 2 levels. It writes an element whose mask image is
-//     a PNG, waiting 3 seconds or not, as an isolated group with no soft
-//     mask: unmasked; so it draws an element whose mask names no element
-//     or an image that does not exist.
+//     within 2 levels. It draws an element whose mask names no element or
+//     an image that does not exist unmasked.
+//   - probe, html: Chromium 156, served the page over HTTP, masks by a
+//     PNG's alpha, by a JPEG's luminance under mask-mode luminance, by its
+//     opaque tile otherwise, and tiles, spaces, rounds, sizes, positions
+//     and clips a raster mask image as a background image; served from a
+//     file, as Gotenberg's HTML route serves it, the mask image's CORS
+//     fetch fails and it prints the element unmasked.
 func (p *painter) maskOf(b *box) *typeset.SoftMask {
 	layers := b.st.MaskLayers()
 	if len(layers) == 0 {
@@ -57,11 +61,11 @@ func (p *painter) maskOf(b *box) *typeset.SoftMask {
 	drawn := make([]maskLayer, 0, len(layers))
 	for _, l := range layers {
 		ml := p.maskLayer(b, l)
-		if ml.raster {
-			// CSS Masking 1, 6.1 masks by the image, and by transparent
-			// black for an image that cannot be read; Chromium prints the
-			// element as if the layer were not there.
-			p.e.warnOnce(warn.ContentUnsupported, warn.Omitted, "a raster mask image, or one that cannot be read, is not applied, as Chromium prints it", b.y)
+		if ml.unread {
+			// CSS Masking 1, 6.1 masks by transparent black for an image
+			// that cannot be read; Chromium prints the element as if the
+			// layer were not there.
+			p.e.warnOnce(warn.ContentUnsupported, warn.Omitted, "a mask image that cannot be read is not applied, as Chromium prints it", b.y)
 			continue
 		}
 		drawn = append(drawn, ml)
@@ -164,11 +168,12 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 			frags = append(frags, pa)
 		}
 	} else if pic := zoomedPicture(p.e.picture(l.Image, origin.Y), b.st.UsedZoom()); pic != nil {
-		if pic.Vector == nil {
-			out.raster = true
-			return out
-		}
 		pic = naturalPicture(pic, origin.Width, origin.Height)
+		if pa := p.e.patternTiles(st, pic, origin, clip); pa != nil {
+			// A raster image tiled as a background is.
+			frags = append(frags, pa)
+			return maskClipped(out, frags, clip)
+		}
 		tiles := p.e.tiles(st, pic, origin, clip, origin.Y)
 		for i, t := range tiles {
 			f := p.e.pictureFrag(pic, t, nil)
@@ -181,9 +186,14 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 			frags = append(frags, f)
 		}
 	} else if l.Image != "" {
-		out.raster = true
+		out.unread = true
 		return out
 	}
+	return maskClipped(out, frags, clip)
+}
+
+// maskClipped returns the layer out painting frags within its clip box.
+func maskClipped(out maskLayer, frags []typeset.Fragment, clip typeset.Rect) maskLayer {
 	if len(frags) > 0 {
 		frags = []typeset.Fragment{&typeset.Group{Opacity: 1, Clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}, Content: frags}}
 	}

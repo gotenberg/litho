@@ -191,9 +191,10 @@
 // included, a reference box or an SVG clipPath element (CSS Masking 1,
 // 5.1), clip one
 // of the rectangle of an absolutely positioned box (CSS 2.2, 11.1.2), and
-// a mask a soft mask of its layers, gradients, vector images and SVG mask
-// elements (CSS Masking 1, 6 and 7). A raster mask image, and a mask that
-// names nothing, leave the box unmasked, as Chromium prints them.
+// a mask a soft mask of its layers, gradients, images and SVG mask
+// elements (CSS Masking 1, 6 and 7). A mask image that cannot be read,
+// and a mask that names nothing, leave the box unmasked, as Chromium
+// prints them.
 //
 // # Office documents
 //
