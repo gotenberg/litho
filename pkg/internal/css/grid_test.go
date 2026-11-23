@@ -3,6 +3,7 @@ package css
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -78,7 +79,6 @@ func TestGrid_InvalidValues(t *testing.T) {
 		"grid-template-columns: repeat(auto-fill, 10px) repeat(auto-fit, 10px)",
 		"grid-template-columns: repeat(0, 10px)",
 		"grid-template-columns: minmax(1fr, 10px)",
-		"grid-template-columns: subgrid",
 		"grid-template-areas: 'a b' 'a'",
 		"grid-template-areas: 'a b a'",
 		"grid-row-start: 0",
@@ -89,6 +89,60 @@ func TestGrid_InvalidValues(t *testing.T) {
 		if len(s.GridTemplateColumns.Sizes) != 0 || s.GridTemplateAreas != nil || !s.GridRowStart.IsAuto() || !s.GridColumnStart.IsAuto() {
 			t.Errorf("%s: accepted", decl)
 		}
+	}
+}
+
+// TestGrid_Subgrid checks the subgrid value of CSS Grid 2, 7.2 and its
+// <line-name-list>, in the longhands and the shorthands.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) answers
+//     CSS.supports as the cases say: a list of names, an integer repeat()
+//     and one repeat(auto-fill) of names, [] included; no track size, no
+//     span among the names, no auto-fit, no repeat(0), no second
+//     auto-fill; subgrid on either side of grid-template's slash, and
+//     beside auto-flow in grid alone.
+func TestGrid_Subgrid(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		decl  string
+		names [][]string
+		ok    bool
+	}{
+		{"grid-template-columns: subgrid", nil, true},
+		{"grid-template-columns: subgrid [a] [b c]", [][]string{{"a"}, {"b", "c"}}, true},
+		{"grid-template-columns: subgrid repeat(2, [a] [b])", [][]string{{"a"}, {"b"}, {"a"}, {"b"}}, true},
+		{"grid-template-columns: subgrid []", [][]string{nil}, true},
+		{"grid-template-columns: subgrid [a] repeat(auto-fill, [b]) [c]", [][]string{{"a"}, {"c"}}, true},
+		{"grid-template-columns: subgrid repeat(auto-fill, [a]) repeat(auto-fill, [b])", nil, false},
+		{"grid-template-columns: subgrid 10px", nil, false},
+		{"grid-template-columns: subgrid [span]", nil, false},
+		{"grid-template-columns: subgrid repeat(auto-fit, [a])", nil, false},
+		{"grid-template-columns: subgrid repeat(0, [a])", nil, false},
+		{"grid-template: subgrid [a] / 10px", [][]string{{"a"}}, true},
+		{"grid-template: 10px / subgrid", nil, true},
+		{"grid-template: subgrid / auto-flow 10px", nil, false},
+		{"grid: subgrid / auto-flow 10px", nil, true},
+		{"grid: auto-flow / subgrid", nil, true},
+	} {
+		s := styleOf(t, tc.decl)
+		l := s.GridTemplateColumns
+		if strings.HasPrefix(tc.decl, "grid-template: subgrid") || strings.HasPrefix(tc.decl, "grid: subgrid") {
+			l = s.GridTemplateRows
+		}
+		if l.Subgrid != tc.ok {
+			t.Errorf("%s: subgrid %v, want %v", tc.decl, l.Subgrid, tc.ok)
+			continue
+		}
+		if tc.ok && tc.names != nil && !reflect.DeepEqual(l.Names, tc.names) {
+			t.Errorf("%s: names %q, want %q", tc.decl, l.Names, tc.names)
+		}
+	}
+	l := styleOf(t, "grid-template-columns: subgrid [x] repeat(auto-fill, [r] [s]) [y]").GridTemplateColumns
+	want := [][]string{{"x"}, {"r"}, {"s"}, {"r"}, {"s"}, {"y"}, nil}
+	if got := l.SubgridNames(7); !reflect.DeepEqual(got, want) {
+		t.Errorf("SubgridNames(7) = %q, want %q", got, want)
 	}
 }
 

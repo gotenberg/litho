@@ -136,7 +136,9 @@
 // containing block the grid generates takes the area its placement names.
 // The rows are laid out top down where they land: a row whose items cannot
 // start on its page moves to the next one, a taller one breaks inside its
-// items. Subgrids, masonry and vertical writing modes are not laid out.
+// items. A subgrid takes its tracks from its parent and its items size
+// them (CSS Grid 2, 9). Masonry and vertical writing modes are not laid
+// out.
 //
 // # Sizing keywords
 //

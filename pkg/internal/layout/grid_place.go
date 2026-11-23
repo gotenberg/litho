@@ -51,6 +51,9 @@ type gridPlacement struct {
 type gitem struct {
 	b          *box
 	start, end [2]int
+	// sub marks an item hoisted out of a subgrid (subgrid.go), nil for
+	// an item of the grid itself.
+	sub *gsub
 }
 
 // span returns the number of tracks the item spans in axis ax.
@@ -340,6 +343,34 @@ func (l lineSet) resolveAxis(s, e css.GridLine) axisPos {
 	return axisPos{span: max(min(span, MaxTracksPerAxis), 1)}
 }
 
+// subgridAxis returns the explicit grid of a subgridded axis (CSS Grid 2,
+// 9): the n auto tracks s spans in the parent, its lines named by the
+// parent and by the subgrid's own line name list l, and by the areas of
+// the subgrid's own template that fit.
+func subgridAxis(l css.TrackList, s *subAxis, areas *css.GridAreas, ax int) gridAxis {
+	g := gridAxis{sizes: make([]css.TrackSize, s.n), autoAt: -1}
+	own := l.SubgridNames(s.n + 1)
+	g.names = make([][]string, s.n+1)
+	for i := range g.names {
+		g.names[i] = slices.Concat(own[i], s.names[i])
+	}
+	if areas != nil {
+		for _, a := range areas.Areas {
+			lo, hi := a.Row0, a.Row1
+			if ax == colAxis {
+				lo, hi = a.Col0, a.Col1
+			}
+			if lo <= s.n {
+				g.names[lo] = append(g.names[lo], a.Name+"-start")
+			}
+			if hi <= s.n {
+				g.names[hi] = append(g.names[hi], a.Name+"-end")
+			}
+		}
+	}
+	return g
+}
+
 // clampPos keeps a definite position inside the bounds the implicit grid
 // may reach.
 func clampPos(p axisPos) axisPos {
@@ -377,8 +408,28 @@ const gridWorkPerCheck = 1 << 16
 func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlacement, error) {
 	st := b.st
 	p := &gridPlacement{}
-	p.axes[rowAxis] = explicitAxis(st.GridTemplateRows, rep[rowAxis], st.GridTemplateAreas, rowAxis, st.GridAutoRows)
-	p.axes[colAxis] = explicitAxis(st.GridTemplateColumns, rep[colAxis], st.GridTemplateAreas, colAxis, st.GridAutoColumns)
+	lists := [2]css.TrackList{st.GridTemplateRows, st.GridTemplateColumns}
+	autos := [2][]css.TrackSize{st.GridAutoRows, st.GridAutoColumns}
+	// sub holds the tracks a subgridded axis spans, 0 for an axis of the
+	// grid's own.
+	var sub [2]int
+	var given [2]*subAxis
+	if b.grid != nil {
+		given = b.grid.sub
+	}
+	for ax := range 2 {
+		if s := given[ax]; s != nil && lists[ax].Subgrid {
+			sub[ax] = s.n
+			p.axes[ax] = subgridAxis(lists[ax], s, st.GridTemplateAreas, ax)
+			continue
+		}
+		if lists[ax].Subgrid {
+			// A grid that is no subgrid takes subgrid as none (CSS Grid 2,
+			// 9.1).
+			lists[ax] = css.TrackList{}
+		}
+		p.axes[ax] = explicitAxis(lists[ax], rep[ax], st.GridTemplateAreas, ax, autos[ax])
+	}
 	sets := [2]lineSet{{names: p.axes[rowAxis].names}, {names: p.axes[colAxis].names}}
 	type pending struct {
 		it  *gitem
@@ -395,7 +446,10 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 			sets[colAxis].resolveAxis(ks.GridColumnStart, ks.GridColumnEnd),
 		}
 		for ax := range 2 {
-			if pos[ax].definite {
+			switch {
+			case sub[ax] > 0 && !pos[ax].definite:
+				pos[ax].span = min(pos[ax].span, sub[ax])
+			case pos[ax].definite:
 				pos[ax] = clampPos(pos[ax])
 				lo[ax] = min(lo[ax], pos[ax].start)
 				hi[ax] = max(hi[ax], pos[ax].end)
@@ -420,6 +474,16 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 		p.n[ax] = min(hi[ax]-lo[ax], MaxTracksPerAxis)
 	}
 	occ := &occupancy{n: p.n}
+	// Auto-placement searches the cross axis from cLo to its end, the
+	// explicit tracks alone when the axis is subgridded: an item placed
+	// past them by a hypothetical implicit line is clamped into them
+	// afterwards (CSS Grid 2, 9).
+	cLo := 0
+	cEnd := func() int { return occ.n[cross] }
+	if n := sub[cross]; n > 0 {
+		cLo = p.off[cross]
+		cEnd = func() int { return p.off[cross] + n }
+	}
 	toImplicit := func(q *pending) {
 		for ax := range 2 {
 			if q.pos[ax].definite {
@@ -477,14 +541,18 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 		case stop():
 			c = occ.n[cross]
 		case !dense:
-			c = cursors[at]
+			c = max(cursors[at], cLo)
 		default:
-			c = resume[key]
+			c = max(resume[key], cLo)
 		}
-		for !stop() && !occ.free(flow, at, q.it.end[flow], c, c+span) && c < MaxTracksPerAxis {
+		lim := MaxTracksPerAxis
+		if sub[cross] > 0 {
+			lim = cEnd()
+		}
+		for !stop() && !occ.free(flow, at, q.it.end[flow], c, c+span) && c < lim {
 			c++
 		}
-		c = min(c, MaxTracksPerAxis-span)
+		c = max(min(c, lim-span), cLo)
 		if dense {
 			resume[key] = c
 		}
@@ -494,7 +562,7 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 		cursors[at] = c + span
 	}
 	// Step 4: the rest, with the auto-placement cursor.
-	curF, curC := 0, 0
+	curF, curC := 0, cLo
 	for i := range ps {
 		q := &ps[i]
 		if q.pos[flow].definite {
@@ -507,7 +575,7 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 			curF = occ.n[flow]
 			if !q.pos[cross].definite {
 				spanC := max(min(q.pos[cross].span, occ.n[cross]), 1)
-				q.it.start[cross], q.it.end[cross] = 0, spanC
+				q.it.start[cross], q.it.end[cross] = cLo, cLo+spanC
 			}
 		case q.pos[cross].definite:
 			cs, ce := q.it.start[cross], q.it.end[cross]
@@ -532,9 +600,9 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 				curF, curC = at/MaxTracksPerAxis, at%MaxTracksPerAxis
 			}
 			for curF < MaxTracksPerAxis && !stop() {
-				if curC+spanC > occ.n[cross] {
+				if curC+spanC > cEnd() {
 					curF++
-					curC = 0
+					curC = cLo
 					continue
 				}
 				if occ.free(flow, curF, curF+spanF, curC, curC+spanC) {
@@ -544,7 +612,7 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 			}
 			// A search stopped past the budget may have left the cursor
 			// past the cross tracks.
-			curC = min(curC, max(occ.n[cross]-spanC, 0))
+			curC = min(curC, max(cEnd()-spanC, cLo))
 			if dense {
 				resume[key] = curF*MaxTracksPerAxis + curC
 			}
@@ -560,7 +628,20 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 	}
 	p.n = occ.n
 	for _, q := range ps {
+		for ax := range 2 {
+			if n := sub[ax]; n > 0 {
+				// An item past a subgrid's tracks is clamped into them as
+				// an overly large grid clamps it (CSS Grid 2, 9).
+				q.it.start[ax] = max(min(q.it.start[ax]-p.off[ax], n-1), 0)
+				q.it.end[ax] = max(min(q.it.end[ax]-p.off[ax], n), q.it.start[ax]+1)
+			}
+		}
 		p.items = append(p.items, q.it)
+	}
+	for ax := range 2 {
+		if sub[ax] > 0 {
+			p.n[ax], p.off[ax] = sub[ax], 0
+		}
 	}
 	return p, err
 }

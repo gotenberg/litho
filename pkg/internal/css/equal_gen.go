@@ -2127,6 +2127,9 @@ func equalTrackList(a, b *TrackList) bool {
 	if a.Auto != b.Auto {
 		return false
 	}
+	if a.Subgrid != b.Subgrid {
+		return false
+	}
 	return true
 }
 
@@ -2147,6 +2150,7 @@ func hashTrackList(h uint64, x *TrackList) uint64 {
 		h = hashTrackSize(h, &x.Sizes[i1])
 	}
 	h = mixBool(h, x.Auto != nil)
+	h = mixBool(h, x.Subgrid)
 	return h
 }
 

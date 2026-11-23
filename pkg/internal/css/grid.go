@@ -10,8 +10,8 @@ import (
 
 // This file parses the properties of grid layout (CSS Grid 1, 7 and 8)
 // and the justify-items and justify-self alignment properties that grid
-// items take (CSS Box Alignment 3, 6). Subgrid (CSS Grid 2) and masonry
-// are not parsed: subgrid makes a template declaration invalid.
+// items take (CSS Box Alignment 3, 6), and the subgrid keyword with its
+// line names (CSS Grid 2, 7.2 and 9). Masonry is not parsed.
 
 // TrackKind says what a [TrackBreadth] holds.
 type TrackKind uint8
@@ -64,10 +64,17 @@ type TrackSize struct {
 // Sizes[Auto.At], and Names holds one more entry, Names[Auto.At] being the
 // names written before the repeat() and Names[Auto.At+1] those after it.
 // Integer repeat() is expanded (7.2.3.1).
+//
+// Subgrid reports the subgrid keyword (CSS Grid 2, 9): the grid adopts
+// the tracks its grid area spans in its parent. Its <line-name-list> is
+// then in Names, one entry per line from the first, and Auto holds a
+// repeat(auto-fill) of names alone, at Names[Auto.At], Sizes being empty
+// (see [TrackList.SubgridNames]).
 type TrackList struct {
-	Names [][]string
-	Sizes []TrackSize
-	Auto  *TrackRepeat
+	Names   [][]string
+	Sizes   []TrackSize
+	Auto    *TrackRepeat
+	Subgrid bool
 }
 
 // TrackRepeat is the auto-repeated part of a track list (CSS Grid 1,
@@ -147,6 +154,36 @@ func (l TrackList) Expand(n int) (names [][]string, sizes []TrackSize, auto int)
 		names = append(names, name(i+2))
 	}
 	return names, sizes, auto
+}
+
+// SubgridNames returns the names of the lines of a subgrid that spans
+// lines-1 tracks, lines entries (CSS Grid 2, 7.2): the line name lists in
+// order, the repeat(auto-fill) among them repeated as many whole times as
+// the lines the other lists leave allow, lists past the last line
+// dropped.
+func (l TrackList) SubgridNames(lines int) [][]string {
+	out := make([][]string, 0, lines)
+	add := func(ns ...[]string) {
+		for _, n := range ns {
+			if len(out) < lines {
+				out = append(out, n)
+			}
+		}
+	}
+	if r := l.Auto; r != nil && len(r.Names) > 0 {
+		at := min(max(r.At, 0), len(l.Names))
+		add(l.Names[:at]...)
+		for range max(lines-len(l.Names), 0) / len(r.Names) {
+			add(r.Names...)
+		}
+		add(l.Names[at:]...)
+	} else {
+		add(l.Names...)
+	}
+	for len(out) < lines {
+		out = append(out, nil)
+	}
+	return out
 }
 
 // GridAreas is a grid-template-areas value (CSS Grid 1, 7.3): the
@@ -231,9 +268,10 @@ type trackSpec struct {
 
 // trackListSpec is a specified track list, its lengths not yet computed.
 type trackListSpec struct {
-	names [][]string
-	sizes []trackSpec
-	auto  *repeatSpec
+	names   [][]string
+	sizes   []trackSpec
+	auto    *repeatSpec
+	subgrid bool
 }
 
 // repeatSpec is a specified auto repeat.
@@ -414,6 +452,12 @@ func parseTrackList(v []token, explicit bool) (trackListSpec, bool) {
 	if len(v) == 0 {
 		return trackListSpec{}, false
 	}
+	if v[0].isIdent("subgrid") {
+		if explicit {
+			return trackListSpec{}, false
+		}
+		return parseSubgrid(v[1:])
+	}
 	var p trackListParser
 	for _, t := range v {
 		switch {
@@ -447,6 +491,69 @@ func parseTrackList(v []token, explicit bool) (trackListSpec, bool) {
 		}
 	}
 	return p.out, true
+}
+
+// parseSubgrid parses the <line-name-list> after the subgrid keyword
+// (CSS Grid 2, 7.2): <line-names> blocks, each naming the next line, and
+// repeat() of them, an integer count expanded at once and auto-fill once.
+// Names past [MaxGridTracks]+1 lines are dropped.
+func parseSubgrid(v []token) (trackListSpec, bool) {
+	out := trackListSpec{subgrid: true}
+	add := func(n []string) {
+		if len(out.names)+repeatNames(out.auto) <= MaxGridTracks {
+			out.names = append(out.names, n)
+		}
+	}
+	for _, t := range v {
+		switch {
+		case t.typ == tLBracket:
+			n, ok := parseLineNames(t)
+			if !ok {
+				return trackListSpec{}, false
+			}
+			add(n)
+		case t.typ == tFunction && eqFold(t.value, "repeat"):
+			args := splitCommas(significant(t.children))
+			if len(args) != 2 || len(args[0]) != 1 || len(args[1]) == 0 {
+				return trackListSpec{}, false
+			}
+			var inner [][]string
+			for _, c := range args[1] {
+				n, ok := parseLineNames(c)
+				if c.typ != tLBracket || !ok {
+					return trackListSpec{}, false
+				}
+				inner = append(inner, n)
+			}
+			c := args[0][0]
+			if c.typ == tIdent {
+				if !c.isIdent("auto-fill") || out.auto != nil {
+					return trackListSpec{}, false
+				}
+				out.auto = &repeatSpec{at: len(out.names), names: inner}
+				continue
+			}
+			n, ok := parseInteger(c)
+			if !ok || n < 1 {
+				return trackListSpec{}, false
+			}
+			for range min(n, MaxGridTracks+1) {
+				for _, names := range inner {
+					add(names)
+				}
+			}
+		default:
+			return trackListSpec{}, false
+		}
+	}
+	return out, true
+}
+
+func repeatNames(r *repeatSpec) int {
+	if r == nil {
+		return 0
+	}
+	return len(r.names)
 }
 
 // repeat parses a repeat() into the list (CSS Grid 1, 7.2.3): an integer
@@ -556,6 +663,13 @@ func (s *styler) computeTracks(l []trackSpec) []TrackSize {
 
 // computeTrackList computes a specified track list.
 func (s *styler) computeTrackList(l trackListSpec) TrackList {
+	if l.subgrid {
+		out := TrackList{Names: l.names, Subgrid: true}
+		if l.auto != nil {
+			out.Auto = &TrackRepeat{At: l.auto.at, Names: l.auto.names}
+		}
+		return out
+	}
 	out := TrackList{Names: l.names, Sizes: s.computeTracks(l.sizes)}
 	if l.auto != nil {
 		out.Auto = &TrackRepeat{Fit: l.auto.fit, At: l.auto.at, Names: l.auto.names, Sizes: s.computeTracks(l.auto.sizes)}
@@ -571,9 +685,6 @@ func trackListProp(name string, f func(*Style) *TrackList) propDef {
 	return propDef{
 		name: name,
 		parse: func(v []token, _ *declCtx) (any, bool) {
-			if hasSubgrid(v) {
-				return nil, false
-			}
 			l, ok := parseTrackList(v, false)
 			return l, ok
 		},
@@ -584,12 +695,6 @@ func trackListProp(name string, f func(*Style) *TrackList) propDef {
 		},
 		copyFrom: field(f),
 	}
-}
-
-// hasSubgrid reports a subgrid value, which CSS Grid 2 defines and litho
-// does not lay out: the declaration is invalid and the cascade falls back.
-func hasSubgrid(v []token) bool {
-	return len(v) > 0 && v[0].isIdent("subgrid")
 }
 
 // autoTracksProp defines grid-auto-rows or grid-auto-columns: one or more
@@ -1045,7 +1150,7 @@ func parseTemplate(v []token) (trackListSpec, trackListSpec, *GridAreas, bool) {
 	}
 	parts := splitSlash(v)
 	if !hasString {
-		if len(parts) != 2 || hasSubgrid(parts[0]) || hasSubgrid(parts[1]) {
+		if len(parts) != 2 {
 			return trackListSpec{}, trackListSpec{}, nil, false
 		}
 		rows, ok := parseTrackList(parts[0], false)
@@ -1165,7 +1270,7 @@ func expandGrid(v []token, _ *declCtx) ([]entry, bool) {
 	}
 	if f, rest, ok := flowOf(parts[1]); ok {
 		rows, ok := parseTrackList(parts[0], false)
-		if !ok || hasSubgrid(parts[0]) {
+		if !ok {
 			return nil, false
 		}
 		var auto any = wideInitial
@@ -1187,7 +1292,7 @@ func expandGrid(v []token, _ *declCtx) ([]entry, bool) {
 	}
 	if f, rest, ok := flowOf(parts[0]); ok {
 		cols, ok := parseTrackList(parts[1], false)
-		if !ok || hasSubgrid(parts[1]) {
+		if !ok {
 			return nil, false
 		}
 		var auto any = wideInitial

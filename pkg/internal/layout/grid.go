@@ -23,7 +23,7 @@ import (
 // Grid 1, 12). An absolutely positioned child whose containing block is
 // the grid container takes the grid area its placement names (9). Only
 // the horizontal writing mode is laid out, left to right or right to
-// left; subgrids and masonry are not.
+// left, and subgrids (CSS Grid 2, 9) in subgrid.go; masonry is not.
 
 // gridData is the grid layout state of a grid container.
 type gridData struct {
@@ -41,6 +41,11 @@ type gridData struct {
 	// its border box top, valid when hasFirst and hasLast.
 	first, last       float64
 	hasFirst, hasLast bool
+	// sub holds, per axis, the tracks the parent grid gives a subgrid,
+	// nil for an axis of its own (subgrid.go); rec the measurements of a
+	// subgrid's items in its last layout, by item.
+	sub [2]*subAxis
+	rec map[*box]itemRecord
 }
 
 // isItem reports a flex or grid item, which paints as an inline block
@@ -92,14 +97,21 @@ func (gridFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		repeatCount(st.GridTemplateRows, 0, false, minH, maxH, rowGap),
 		repeatCount(st.GridTemplateColumns, 0, false, mn, mx, gap),
 	}
+	if s := b.grid.sub[colAxis]; s != nil {
+		gap = s.gap
+	}
+	if s := b.grid.sub[rowAxis]; s != nil {
+		rowGap = s.gap
+	}
 	p := b.grid.placement(e, b, items, rep)
+	sized := axisItems(p.items, e.hoist(b, p, [2]float64{rowGap, gap}), colAxis)
 	out := [2]float64{}
 	for i, mode := range []sizing{sizeMin, sizeMax} {
 		tracks := p.tracks(colAxis, 0, false)
 		z := &gridSizer{tracks: tracks, gap: gap, mode: mode, ax: colAxis, contrib: func(it *gitem, k contribKind) float64 {
 			return e.colContrib(it, k, tracks)
 		}}
-		z.run(p.items, 0, false, 0, inf, false)
+		z.run(sized, 0, false, 0, inf, false)
 		out[i] = z.sum()
 	}
 	return out[0], max(out[1], out[0])
@@ -280,6 +292,15 @@ func (e *engine) colAutoMin(k *box) float64 {
 //     min-content block, inline block or flex container holding it to
 //     200.
 func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 {
+	if it.b == nil {
+		return it.extra(colAxis)
+	}
+	return e.itemColContrib(it, k, tracks) + it.extra(colAxis)
+}
+
+// itemColContrib returns colContrib for an item without its extra
+// margins.
+func (e *engine) itemColContrib(it *gitem, k contribKind, tracks []*gtrack) float64 {
 	b := it.b
 	switch r, _ := prefRatio(b); k {
 	case contribMinContent:
@@ -337,6 +358,9 @@ type gridLayout struct {
 	// shims are the baseline offsets of the items aligned on a shared
 	// baseline in their row (CSS Grid 1, 10.6).
 	shims map[*gitem]float64
+	// inherited reports an axis whose tracks a subgrid takes from its
+	// parent, their gutters then not all the gap.
+	inherited [2]bool
 }
 
 // layoutGrid lays out the grid container b's content in its content box
@@ -359,6 +383,11 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 	}
 	l.gap[colAxis] = gapOf(st.ColumnGap, cb.w, true)
 	l.gap[rowAxis] = gapOf(st.RowGap, pcb.h, pcb.hDefinite)
+	for ax, s := range g.sub {
+		if s != nil {
+			l.gap[ax] = s.gap
+		}
+	}
 	var items []*box
 	for _, k := range b.kids {
 		if e.err != nil {
@@ -386,46 +415,70 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 	p := g.placement(e, b, items, rep)
 	l.p = p
 	slices.SortStableFunc(p.items, gridOrder)
+	hoisted := e.hoist(b, p, l.gap)
 
-	// Columns (CSS Grid 1, 11.1, step 1), against the content box width.
-	cols := p.tracks(colAxis, cb.w, true)
-	l.tracks[colAxis] = cols
-	zc := &gridSizer{tracks: cols, gap: l.gap[colAxis], mode: sizeAvail, ax: colAxis, contrib: func(it *gitem, k contribKind) float64 {
-		return e.colContrib(it, k, cols)
-	}}
-	jc := st.JustifyContent.Keyword()
-	zc.run(p.items, cb.w, true, 0, inf, jc == css.BoxNormal || jc == css.BoxStretch)
+	// Columns (CSS Grid 1, 11.1, step 1), against the content box width;
+	// those of a subgrid from its parent (CSS Grid 2, 9).
+	var colPos []float64
+	if cols, pos, ok := g.sub[colAxis].inherited(); ok {
+		l.tracks[colAxis], colPos = cols, pos
+		l.inherited[colAxis] = true
+	} else {
+		cols := p.tracks(colAxis, cb.w, true)
+		l.tracks[colAxis] = cols
+		zc := &gridSizer{tracks: cols, gap: l.gap[colAxis], mode: sizeAvail, ax: colAxis, contrib: func(it *gitem, k contribKind) float64 {
+			return e.colContrib(it, k, cols)
+		}}
+		jc := st.JustifyContent.Keyword()
+		zc.run(axisItems(p.items, hoisted, colAxis), cb.w, true, 0, inf, jc == css.BoxNormal || jc == css.BoxStretch)
+		colPos = l.position(colAxis, st.JustifyContent, cb.w)
+	}
 	l.inner[colAxis] = cb.w
-	colPos := l.position(colAxis, st.JustifyContent, cb.w)
+	l.inherit(colAxis)
+	l.provisional(rowAxis)
 
 	// Rows (step 2), from the items laid out at their column widths.
-	rows := p.tracks(rowAxis, pcb.h, pcb.hDefinite)
+	inRows, inPos, inherited := g.sub[rowAxis].inherited()
+	rows := inRows
+	if !inherited {
+		rows = p.tracks(rowAxis, pcb.h, pcb.hDefinite)
+	}
 	l.tracks[rowAxis] = rows
+	l.inherited[rowAxis] = inherited
 	for _, it := range p.items {
 		if e.err != nil {
 			return top
 		}
 		l.measure(it, top)
 	}
+	l.record(hoisted)
 	l.baselineShims()
-	zr := &gridSizer{tracks: rows, gap: l.gap[rowAxis], mode: sizeAvail, ax: rowAxis, contrib: func(it *gitem, k contribKind) float64 {
-		return l.rowContrib(it, k)
-	}}
-	ac := st.AlignContent.Keyword()
-	zr.run(p.items, pcb.h, pcb.hDefinite, minH, maxH, ac == css.BoxNormal || ac == css.BoxStretch)
-	innerH := pcb.h
-	if !pcb.hDefinite {
-		innerH = max(min(zr.sum(), maxH), minH)
+	var rowPos []float64
+	if inherited {
+		rowPos = inPos
+		l.content = inPos[len(inPos)-1]
+		l.inner[rowAxis] = l.content
+	} else {
+		zr := &gridSizer{tracks: rows, gap: l.gap[rowAxis], mode: sizeAvail, ax: rowAxis, contrib: func(it *gitem, k contribKind) float64 {
+			return l.rowContrib(it, k)
+		}}
+		ac := st.AlignContent.Keyword()
+		zr.run(axisItems(p.items, hoisted, rowAxis), pcb.h, pcb.hDefinite, minH, maxH, ac == css.BoxNormal || ac == css.BoxStretch)
+		innerH := pcb.h
+		if !pcb.hDefinite {
+			innerH = max(min(zr.sum(), maxH), minH)
+		}
+		l.inner[rowAxis] = innerH
+		l.content = zr.sum()
+		if st.RowGap.HasPercent() && !pcb.hDefinite {
+			// A percentage gap of an indefinite height counts as 0 for the
+			// sizing, then resolves against the height laid out, as Chromium
+			// resolves it (CSS Box Alignment 3, 8.1).
+			l.gap[rowAxis] = gapOf(st.RowGap, innerH, true)
+		}
+		rowPos = l.position(rowAxis, st.AlignContent, innerH)
 	}
-	l.inner[rowAxis] = innerH
-	l.content = zr.sum()
-	if st.RowGap.HasPercent() && !pcb.hDefinite {
-		// A percentage gap of an indefinite height counts as 0 for the
-		// sizing, then resolves against the height laid out, as Chromium
-		// resolves it (CSS Box Alignment 3, 8.1).
-		l.gap[rowAxis] = gapOf(st.RowGap, innerH, true)
-	}
-	rowPos := l.position(rowAxis, st.AlignContent, innerH)
+	l.inherit(rowAxis)
 
 	end := l.place(top, colPos, rowPos)
 	l.baselines()
@@ -483,10 +536,16 @@ func (l *gridLayout) position(ax int, a css.BoxAlign, size float64) []float64 {
 // colArea returns the width of the item's column area from the sized
 // columns.
 func (l *gridLayout) colArea(it *gitem) float64 {
+	if it.sub != nil {
+		return it.sub.aw
+	}
 	t := l.tracks[colAxis]
 	s, e := it.start[colAxis], it.end[colAxis]
 	if s < 0 || e > len(t) || e <= s {
 		return 0
+	}
+	if l.inherited[colAxis] {
+		return t[e-1].start + t[e-1].base - t[s].start
 	}
 	sum := 0.0
 	n := 0
@@ -556,6 +615,11 @@ func (l *gridLayout) itemWidth(it *gitem, aw float64) float64 {
 	st := k.st
 	autoMargin := st.Margin[css.Left].Kind == css.Auto || st.Margin[css.Right].Kind == css.Auto
 	room := max(aw-hEdges(k)-nonAuto(k.m[css.Left], st.Margin[css.Left].Kind == css.Auto)-nonAuto(k.m[css.Right], st.Margin[css.Right].Kind == css.Auto), 0)
+	if subgridAxes(k)[colAxis] {
+		// A subgrid fills its area in a subgridded axis, whatever its
+		// width and alignment say (CSS Grid 2, 9).
+		return room
+	}
 	acb := cblock{w: aw}
 	var w float64
 	sw, set := specWidth(k, st.Width, aw)
@@ -687,6 +751,15 @@ func (l *gridLayout) usedHeight(it *gitem, ah float64, def bool) float64 {
 // its automatic minimum height or its min-height (CSS Grid 1, 11.5 and
 // 6.6). A baseline-aligned item adds its shim.
 func (l *gridLayout) rowContrib(it *gitem, kd contribKind) float64 {
+	if it.b == nil {
+		return it.extra(rowAxis)
+	}
+	return l.itemRowContrib(it, kd) + it.extra(rowAxis)
+}
+
+// itemRowContrib returns rowContrib for an item without its extra
+// margins.
+func (l *gridLayout) itemRowContrib(it *gitem, kd contribKind) float64 {
 	k := it.b
 	aw := l.colArea(it)
 	out := outerH(k, aw) + l.shims[it]
@@ -1027,7 +1100,13 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	if bl, _ := l.baselineAligned(it); bl {
 		stretch = false
 	}
-	if k.kind != kindReplaced && !hSet {
+	subRows := subgridAxes(k)[rowAxis]
+	if subRows {
+		// A subgrid fills its area in a subgridded axis, whatever its
+		// height, its auto margins and its alignment say (CSS Grid 2, 9).
+		stretch, hSet, tAuto, bAuto = true, false, false, false
+	}
+	if k.kind != kindReplaced && !hSet && !subRows {
 		if ratioH, byRatio := l.ratioItemHeight(it, w); byRatio {
 			// The ratio gives the height: the item does not stretch.
 			stretch, hSet, sh = false, true, ratioH
@@ -1035,6 +1114,9 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	}
 	if stretch {
 		h = constrainHeight(k, max(ah-vOut, 0), acb)
+		if subRows {
+			h = max(ah-vOut, 0)
+		}
 		if k.kind == kindReplaced && st.Width.Kind == css.Auto && !stretches(justifySelf(st, l.b.st), true) {
 			if r := ratioOf(k); r > 0 {
 				w = constrainWidth(k, h*r, aw)
