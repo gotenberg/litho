@@ -509,6 +509,12 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 	st := *n.Style
 	st.Display = css.ListItem
 	n.Style = &st
+	if strings.HasPrefix(n.Role, "H") {
+		// A heading that is a list item stays a heading inside the
+		// item's body: its level is what an outline and a reader follow
+		// (ISO 14289-1, 7.4).
+		n.ItemRole = n.Role
+	}
 	n.Role = "LI"
 	n.ListValue = max(item.value, 1)
 	marker := &layout.Node{Kind: layout.Element, Style: mst}

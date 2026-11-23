@@ -31,3 +31,26 @@ func TestConvert_ListIndentFromTheStyle(t *testing.T) {
 		t.Errorf("not drawn: %v", want)
 	}
 }
+
+// TestConvert_ListHeadingStaysAHeading locks the structure of a heading
+// that is a list item, numbered by its list: an LI whose Lbl holds the
+// number and whose LBody holds the heading at its outline level (ISO
+// 32000-1, 14.8.4.3.3; ISO 14289-1, 7.4.2), so that a reader meets the
+// document's headings in the order of their levels.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt layout/abi11870-2.odt: its numbered headings of
+//     levels 1 and 2 read as list items, its first heading left of level 3,
+//     which failed PDF/UA-1, 7.4.2.
+func TestConvert_ListHeadingStaysAHeading(t *testing.T) {
+	auto := `<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-format="1" style:num-suffix="."/>` +
+		`<text:list-level-style-number text:level="2" style:num-format="a" style:num-suffix=")"/></text:list-style>`
+	body := `<text:list text:style-name="L1"><text:list-item><text:h text:outline-level="1">Title</text:h>` +
+		`<text:list><text:list-item><text:h text:outline-level="2">Part</text:h></text:list-item></text:list></text:list-item></text:list>` +
+		`<text:p>Body</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	if got, want := roles(res.Structure), "Document,L,LI,Lbl,LBody,H1,L,LI,Lbl,LBody,H2,P"; got != want {
+		t.Errorf("structure %s, want %s", got, want)
+	}
+}

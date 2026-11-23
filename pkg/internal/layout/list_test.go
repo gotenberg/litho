@@ -272,7 +272,8 @@ func TestListMarkersDraw_Square(t *testing.T) {
 // TestListItems_HoldLblAndLBody locks the structure of list items: an LI
 // holds a Lbl and a LBody alone (ISO 32000-2, 14.8.4.8.3; ISO/TS 32005,
 // Table 5, which PDF/UA-2 tests), its content in the LBody whether a
-// marker draws or not.
+// marker draws or not; an item that is a heading holds it in its LBody
+// (Node.ItemRole).
 //
 // # Corpus evidence
 //
@@ -324,6 +325,10 @@ func TestListItems_HoldLblAndLBody(t *testing.T) {
 		"item holding a link and no marker": {
 			doc(role("L", el(sty(), item(css.ListNone, role("Link", el(in, txt(in, "a"))))))),
 			"Document[L[LI[LBody[Link#]]]]",
+		},
+		"item that is a heading": {
+			doc(role("L", el(sty(), func() *Node { n := item(css.Decimal, txt(in, "a")); n.ItemRole = "H2"; return n }()))),
+			"Document[L[LI[Lbl# LBody[H2#]]]]",
 		},
 		"item holding paragraphs and a list": {
 			doc(role("L", el(sty(), item(css.Decimal, role("P", el(sty(), txt(in, "a"))), role("L", el(sty(), item(css.Disc, txt(in, "b")))))))),

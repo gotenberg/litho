@@ -224,6 +224,14 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 				el.Kids = append(el.Kids, body)
 				out.elem, out.item = body, el
 				out.structDepth++
+				if n.ItemRole != "" && out.structDepth < maxStructDepth {
+					// The item's own element, a heading, names it as a
+					// link target.
+					inner := &typeset.StructElem{Role: n.ItemRole, Lang: n.Lang}
+					body.Kids = append(body.Kids, inner)
+					out.elem, own = inner, inner
+					out.structDepth++
+				}
 			}
 		}
 	}

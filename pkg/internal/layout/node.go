@@ -127,6 +127,15 @@ const MaxVectorDepth = 5
 type Node struct {
 	// Kind says what the node is.
 	Kind Kind
+	// Fieldset says which part of a fieldset element's boxes an Element
+	// is (HTML Standard, 15.3.13), FieldsetNone for none. See
+	// [FieldsetPart]. It and Generated, a byte each, sit in Kind's word,
+	// which keeps a Node in the allocator's size class.
+	Fieldset FieldsetPart
+	// Generated reports the box of a ::before or ::after pseudo-element,
+	// whose originating element is the node it is a child of: its implicit
+	// anchor element (CSS Anchor Positioning 1, 2.3.1).
+	Generated bool
 	// Style is the node's computed style. It is set on every node: a Text or
 	// LineBreak node shares its parent's, a Replaced node carries its own
 	// (its width, display and float are its own). The engine reads it and
@@ -147,6 +156,11 @@ type Node struct {
 	// structure tree from the roles in document order and hangs every
 	// fragment of the node's subtree from the nearest role.
 	Role string
+	// ItemRole is, for a node of Role LI, the role of the element the
+	// item's content hangs from inside its LBody: a heading that is a list
+	// item, which stays a heading (ISO 32000-1, 14.8.4.3.3, Table 336 lets
+	// a LBody hold one); "" hangs the content from the LBody itself.
+	ItemRole string
 	// Lang is the node's language as a BCP 47 tag, "" to inherit.
 	Lang string
 	// Alt describes a Replaced node, or a Role Figure or Link, for a reader
@@ -260,14 +274,6 @@ type Node struct {
 	// whose Style has a Note is a note: it goes to the page's note area
 	// ([PageBox.NoteArea]) by the same rule.
 	Footnote *Node
-	// Fieldset says which part of a fieldset element's boxes an Element
-	// is (HTML Standard, 15.3.13), FieldsetNone for none. See
-	// [FieldsetPart].
-	Fieldset FieldsetPart
-	// Generated reports the box of a ::before or ::after pseudo-element,
-	// whose originating element is the node it is a child of: its implicit
-	// anchor element (CSS Anchor Positioning 1, 2.3.1).
-	Generated bool
 }
 
 // FieldsetPart is the part a node plays in the boxes of a fieldset
