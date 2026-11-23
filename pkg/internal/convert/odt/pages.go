@@ -154,7 +154,16 @@ func (f *pageFlow) masterAt(mp *odf.MasterPage, offset int) *odf.MasterPage {
 }
 
 // pageFor is the layout's PageFor: the page box of the master page the
-// page shows, the instance its name says, at its offset in it.
+// page shows, the instance its name says, at its offset in it. A page
+// shows the first page's header and footer of its master page when it is
+// the first page in a row of that master page (ODF 1.3 Part 3, 16.11
+// style:header-first; LibreOffice's loext:footer-first).
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/tdf135338_firstLeftPageFooter.odt
+//     alternates two master pages that name each other as their next one;
+//     LibreOffice prints each one's first footer on every page.
 func (f *pageFlow) pageFor(info layout.PageInfo) layout.PageBox {
 	if f.opts.SinglePage {
 		return f.singleBox(info.Index)
@@ -192,12 +201,16 @@ func (f *pageFlow) pageFor(info layout.PageInfo) layout.PageBox {
 		number = inst.restart
 	}
 	left := number%2 == 0
-	g := f.geom(mp, left, offset == 0)
+	// A page is the first of its master page when the page before it
+	// shows another: the first page of an instance, or one that
+	// style:next-style-name moves to another master page.
+	first := offset == 0 || f.masterAt(inst.master, offset-1) != mp
+	g := f.geom(mp, left, first)
 	box := g.box
 	for len(f.entries) <= info.Index {
 		f.entries = append(f.entries, pageEntry{})
 	}
-	f.entries[info.Index] = pageEntry{inst: inst, master: mp, number: number, box: box, geom: g, left: left, first: offset == 0}
+	f.entries[info.Index] = pageEntry{inst: inst, master: mp, number: number, box: box, geom: g, left: left, first: first}
 	f.entries = f.entries[:info.Index+1]
 	return box
 }
