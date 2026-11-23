@@ -36,6 +36,10 @@ func TestBorderImage_Longhands(t *testing.T) {
 		{"width", "border-image-width: 2 10px auto 5%", with(func(b *BorderImage) {
 			b.Width = [4]Dimension{num(2), pts(7.5), {Kind: Auto}, pct(0.05)}
 		})},
+		{"width mixed calc", "border-image-width: calc(10% + 4px)", with(func(b *BorderImage) {
+			c := Dimension{Kind: Calc, Value: 3, Fraction: 0.1}
+			b.Width = [4]Dimension{c, c, c, c}
+		})},
 		{"outset", "border-image-outset: 1px 2", with(func(b *BorderImage) {
 			b.Outset = [4]Dimension{pts(0.75), num(2), pts(0.75), num(2)}
 		})},

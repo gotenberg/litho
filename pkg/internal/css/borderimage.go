@@ -119,7 +119,7 @@ func parseQuad(v []token, widths bool) (quadSpec, bool) {
 	}
 	kws, lf := kwNoKw, nonNeg
 	if widths {
-		kws, lf = kwAuto, allowPct|nonNeg
+		kws, lf = kwAuto, allowPct|nonNeg|allowMixed
 	}
 	vals := make([]dimSpec, len(v))
 	for i, t := range v {

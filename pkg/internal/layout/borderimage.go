@@ -242,7 +242,7 @@ func imageWidths(bi *css.BorderImage, src nineSource, slices, bd [4]float64, dra
 		switch d.Kind { //nolint:exhaustive // the other kinds do not occur
 		case css.Number:
 			w[s] = clamp(d.Value) * bd[s]
-		case css.Points, css.Percent:
+		case css.Points, css.Percent, css.Calc:
 			w[s] = resolve(d, ref)
 		case css.Auto:
 			w[s] = bd[s]

@@ -58,6 +58,7 @@ func TestBorderImage_Widths(t *testing.T) {
 	}{
 		{"numbers", [4]css.Dimension{{Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 2}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 0}}, all, [4]float64{1, 4, 1, 0}},
 		{"percent and auto", [4]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Auto}, css.Pts(1), {Kind: css.Percent, Value: 0.1}}, all, [4]float64{3, 1, 1, 1}},
+		{"mixed calc", [4]css.Dimension{{Kind: css.Calc, Value: 1, Fraction: 0.1}, {Kind: css.Calc, Value: 0.5, Fraction: 0.1}, css.Pts(1), css.Pts(1)}, all, [4]float64{1.6, 1.5, 1, 1}},
 		{"overlap scales down", [4]css.Dimension{css.Pts(6), css.Pts(1), css.Pts(6), css.Pts(1)}, all, [4]float64{3, 0.5, 3, 0.5}},
 		{"cut side", [4]css.Dimension{css.Pts(1), css.Pts(1), css.Pts(1), css.Pts(1)}, [4]bool{true, false, true, true}, [4]float64{1, 0, 1, 1}},
 	}
