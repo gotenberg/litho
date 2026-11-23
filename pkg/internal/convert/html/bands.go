@@ -293,7 +293,11 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	}
 	sheets = append(sheets, css.Sheet{Sheet: base, Origin: css.UserAgent})
 	before := len(env.c.warnings)
+	// A band is a document of its own, in no-quirks mode.
+	quirks := env.c.quirks
+	env.c.quirks = false
 	sheets = append(sheets, env.c.stylesheets(ctx, nil, sc.sheets)[1:]...)
+	env.c.quirks = quirks
 	if b.CSS != "" {
 		if sh := env.c.bandSheet(ctx, n, b.CSS); sh != nil {
 			sheets = append(sheets, css.Sheet{Sheet: sh, Origin: css.Author})
@@ -305,7 +309,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	env.c.warnings = env.c.warnings[:before]
 	r := css.NewResolver(env.media, sheets)
 	opts := env.opts
-	opts.Lang = sc.lang
+	opts.Lang, opts.Mode = sc.lang, css.NoQuirks
 	computed, err := r.Compute(ctx, doc, opts)
 	if err != nil {
 		return nil, fmt.Errorf("computing the styles of the %s: %w", b.edgeName(), err)

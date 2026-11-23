@@ -402,6 +402,11 @@ type ComputeOptions struct {
 	// which its descendants inherit (CSS Anchor Positioning 1, 5.4). nil
 	// chooses none.
 	PositionOption func(n *html.Node) *TryStyle
+	// Mode is the document's mode: in quirks mode its style attributes take
+	// quirky lengths and colours (see [ParseOptions.Quirks]) and its class
+	// and ID selectors match ASCII case-insensitively (Selectors 4, 6.6
+	// and 6.7).
+	Mode DocumentMode
 	// maxSteps lowers the step budget below maxComputeSteps, for tests;
 	// zero keeps it.
 	maxSteps int
@@ -1017,7 +1022,7 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 	// The style attribute of an HTML, SVG and MathML element (MathML Core,
 	// 2.1.4: the same syntax and semantics as on an HTML element).
 	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg" || n.Namespace == "math") {
-		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL})
+		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL, Quirks: cs.opts.Mode == Quirks})
 		for i := range decls {
 			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
 		}

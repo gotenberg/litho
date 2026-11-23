@@ -324,20 +324,32 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	if o.frame == nil {
 		res.pdf14 = o.Version == typeset.Version14
 	}
-	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
-	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
-	if scan.math {
-		// MathML Core, 2.2.2: a document holding MathML holds the rules of
-		// its user agent stylesheet, after HTML's.
-		sheets = slices.Insert(sheets, 1, css.Sheet{Sheet: css.MathMLUserAgent(), Origin: css.UserAgent})
+	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger, quirks: o.mode == css.Quirks}
+	docSheets := func() []css.Sheet {
+		sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
+		if scan.math {
+			// MathML Core, 2.2.2: a document holding MathML holds the rules
+			// of its user agent stylesheet, after HTML's.
+			sheets = slices.Insert(sheets, 1, css.Sheet{Sheet: css.MathMLUserAgent(), Origin: css.UserAgent})
+		}
+		if o.OmitBackgrounds {
+			sheets = append(sheets, exactColorsSheet(ctx))
+		}
+		return sheets
 	}
-	if o.OmitBackgrounds {
-		sheets = append(sheets, exactColorsSheet(ctx))
-	}
+	sheets := docSheets()
 	// The bands are documents of their own, in no-quirks mode: they take
-	// the source's sheets without the quirks mode user agent sheet.
-	docSheets := sheets
+	// the source's sheets parsed in that mode, without the quirks mode
+	// user agent sheet; the warnings of the second parse are the first's.
+	bandSheets := sheets
 	if o.mode == css.Quirks {
+		if len(o.Bands) > 0 {
+			before := len(c.warnings)
+			c.quirks = false
+			bandSheets = docSheets()
+			c.quirks = true
+			c.warnings = c.warnings[:before]
+		}
 		sheets = slices.Insert(slices.Clone(sheets), 1, css.Sheet{Sheet: css.QuirksUserAgent(), Origin: css.UserAgent})
 	}
 
@@ -379,7 +391,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: frameHints(rootHints(scan), scan, o.frame), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option}
+	computeOpts := css.ComputeOptions{Hints: frameHints(rootHints(scan), scan, o.frame), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option, Mode: o.mode}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -440,7 +452,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 
 	// The bands are built first: the source's builder records what their
 	// cross-references read at their targets.
-	env := bandEnv{o: o, scan: scan, sheets: docSheets, media: media, res: res, c: c, opts: computeOpts}
+	env := bandEnv{o: o, scan: scan, sheets: bandSheets, media: media, res: res, c: c, opts: computeOpts}
 	bands, bandBoxes, bandWarns, err := buildBands(ctx, env, rootStyle)
 	if err != nil {
 		return nil, err

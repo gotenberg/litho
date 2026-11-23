@@ -478,3 +478,19 @@ func TestBands_SpanTheWidthOfAVerticalSinglePage(t *testing.T) {
 		}
 	}
 }
+
+// TestBands_NoQuirkyValues gives a band, a document of its own in
+// no-quirks mode, the sheets of a quirks mode source as no-quirks mode
+// parses them: a unitless margin the source reads as pixels is invalid in
+// the band (CSS Values 4, Appendix C).
+func TestBands_NoQuirkyValues(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>.x { margin-left: 50 }</style><p class=x>body</p>`, bandOptions(Band{HTML: `<p class=x>H</p>`, CSS: `p { margin: 0 }`}))
+	pg := doc.Pages[0]
+	if h := find(t, pg, "H"); !approx(h.x, 30, 0.01) {
+		t.Errorf("band text at x %v, want 30", h.x)
+	}
+	if b := find(t, pg, "body"); !approx(b.x, 30+6+37.5, 0.01) {
+		t.Errorf("body text at x %v, want 73.5", b.x)
+	}
+}

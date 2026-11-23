@@ -348,7 +348,7 @@ func (cs *computeState) substituteDecl(d *Declaration, vars map[string][]token) 
 	if !ok {
 		return nil
 	}
-	c := &declCtx{baseURL: d.base}
+	c := &declCtx{baseURL: d.base, quirks: d.quirks}
 	entries, ok := c.expand(d.Property, v)
 	for _, w := range c.warns {
 		cs.warns.add(w)

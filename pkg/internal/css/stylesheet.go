@@ -29,6 +29,11 @@ type ParseOptions struct {
 	FetchCode func(err error) warn.Code
 	// Logger receives debug records of dropped imports; nil discards them.
 	Logger *slog.Logger
+	// Quirks parses the sheet of a document in quirks mode, whose
+	// properties of CSS Values 4, Appendix C take a number for a length in
+	// pixels and those of CSS Color 4, Appendix B a hex colour without its
+	// "#".
+	Quirks bool
 	// predefined parses the predefined counter styles, whose names no
 	// document rule may define.
 	predefined bool
@@ -220,7 +225,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 		sp.err = err
 		return
 	}
-	c := &declCtx{baseURL: base, userAgent: sp.opts.userAgent}
+	c := &declCtx{baseURL: base, userAgent: sp.opts.userAgent, quirks: sp.opts.Quirks}
 	defer sp.flush(c)
 	switch it.kind { //nolint:exhaustive // declarations and errors cannot reach the top level
 	case itemQualified:
@@ -615,7 +620,7 @@ func ParseDeclarations(src string, opts ParseOptions) []Declaration {
 	if len(src) > maxStylesheetBytes {
 		return nil
 	}
-	c := &declCtx{baseURL: opts.BaseURL}
+	c := &declCtx{baseURL: opts.BaseURL, quirks: opts.Quirks}
 	p := &parser{tz: newTokenizer(src, maxTokens)}
 	var out []Declaration
 	var pendingWarns []Warning

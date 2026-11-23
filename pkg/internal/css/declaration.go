@@ -98,6 +98,9 @@ type Declaration struct {
 	pending []token
 	// base is the URL a pending value's url() resolves against.
 	base string
+	// quirks reports a pending value of a sheet parsed in quirks mode,
+	// parsed so once substituted.
+	quirks bool
 	// revert marks a value of revert, whose entries hold unset: it takes
 	// the value the origins below its own give each longhand, the user
 	// and user agent origins' below the author origin, the user agent
@@ -125,6 +128,9 @@ type declCtx struct {
 	// writes an invalid value, as Chromium parses its own -internal-
 	// values in its user agent sheet alone.
 	userAgent bool
+	// quirks parses the quirky lengths and colours of a document in quirks
+	// mode ([quirkyValue]).
+	quirks bool
 }
 
 func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args ...any) {
@@ -329,7 +335,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 			c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for %q was ignored", name)
 			return d
 		}
-		d.pending, d.base = value, c.baseURL
+		d.pending, d.base, d.quirks = value, c.baseURL, c.quirks
 		return d
 	}
 	entries, ok := c.expand(name, value)
@@ -337,7 +343,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 		// attr() and env() substitute at computed-value time (CSS Values
 		// 5, 7.7; CSS Environment Variables 1, 3). content reads an
 		// untyped attr() itself, and only waits when it cannot.
-		d.pending, d.base = value, c.baseURL
+		d.pending, d.base, d.quirks = value, c.baseURL, c.quirks
 		return d
 	}
 	if v := significant(value); len(v) == 1 && v[0].typ == tIdent {
@@ -409,6 +415,9 @@ func (c *declCtx) expand(name string, value []token) ([]entry, bool) {
 		if t.typ == tBadString || t.typ == tBadURL || t.typ == tRParen || t.typ == tRBracket || t.typ == tRBrace {
 			return nil, false
 		}
+	}
+	if c.quirks {
+		v = quirkyValue(name, v)
 	}
 	if id, ok := longhandByName[name]; ok {
 		pv, ok := props[id].parse(v, c)

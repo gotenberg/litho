@@ -22,6 +22,10 @@ type collector struct {
 	res    *resources
 	base   string
 	logger *slog.Logger
+	// quirks parses the author's sheets of a document in quirks mode
+	// ([css.ParseOptions.Quirks]); a user sheet is parsed as it is
+	// written.
+	quirks bool
 
 	styles   int
 	warnings []typeset.Warning
@@ -75,7 +79,7 @@ func (c *collector) userSheet(ctx context.Context, n int, body string) *css.Styl
 	// The query keeps its key distinct from the document's own URL and
 	// from every <style> element's.
 	key := resolveRef(c.base, fmt.Sprintf("?litho-user-style=%d", n))
-	return c.parse(ctx, []byte(body), key, "", name)
+	return c.parse(ctx, []byte(body), key, "", name, false)
 }
 
 // bandSheet parses body, the CSS of the n-th band, as [collector.userSheet]
@@ -90,7 +94,7 @@ func (c *collector) bandSheet(ctx context.Context, n int, body string) *css.Styl
 		return nil
 	}
 	key := resolveRef(c.base, fmt.Sprintf("?litho-band-style=%d", n))
-	return c.parse(ctx, []byte(body), key, "", name)
+	return c.parse(ctx, []byte(body), key, "", name, false)
 }
 
 // styleElement parses a <style> element whose type is CSS (HTML Standard,
@@ -105,7 +109,7 @@ func (c *collector) styleElement(ctx context.Context, n *dom.Node) *css.Styleshe
 	// document's own URL and from every other style element's.
 	key := resolveRef(c.base, fmt.Sprintf("?litho-style=%d", c.styles))
 	media, _ := attr(n, "media")
-	return c.parse(ctx, []byte(textContent(n)), key, media, "")
+	return c.parse(ctx, []byte(textContent(n)), key, media, "", c.quirks)
 }
 
 // linkElement parses the stylesheet a <link rel=stylesheet href> names
@@ -149,15 +153,15 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 	media, _ := attr(n, "media")
 	// Its url() values and imports resolve against its own URL, the
 	// response's after redirects (CSS Values 4, 4.5.1).
-	return c.parse(ctx, f.data, f.url, media, "")
+	return c.parse(ctx, f.data, f.url, media, "", c.quirks)
 }
 
 // parse parses body, the stylesheet at u, under the media query list
-// media, "" for all. A warning names the sheet name, its URL when name is
-// empty. A media list is applied by importing the sheet under
+// media, "" for all, in quirks mode when quirks is set. A warning names the
+// sheet name, its URL when name is empty. A media list is applied by importing the sheet under
 // it, so its rules carry the condition as @import gives it (CSS Cascade 4,
 // 2) and its own imports stay valid.
-func (c *collector) parse(ctx context.Context, body []byte, u, media, name string) *css.Stylesheet {
+func (c *collector) parse(ctx context.Context, body []byte, u, media, name string, quirks bool) *css.Stylesheet {
 	fetch := func(ctx context.Context, target string) ([]byte, string, error) {
 		if target == u {
 			return body, u, nil
@@ -179,7 +183,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 		}
 		src, base = []byte(`@import url("`+cssString(u)+`") `+m+";"), ""
 	}
-	s, err := css.Parse(ctx, src, css.ParseOptions{BaseURL: base, Fetch: fetch, FetchCode: warningCode, Logger: c.logger})
+	s, err := css.Parse(ctx, src, css.ParseOptions{BaseURL: base, Fetch: fetch, FetchCode: warningCode, Logger: c.logger, Quirks: quirks})
 	if err != nil {
 		if errors.Is(err, css.ErrTooLarge) {
 			// The rules read before the cap still apply, as a browser
