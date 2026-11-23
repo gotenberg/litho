@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Release dashboard</title>
+    <style>
+      body {
+        font-family: "Liberation Sans", sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+        color: #1d2433;
+        margin: 0;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 0 0 12px;
+      }
+      app-shell::part(banner) {
+        background: #23395d;
+        color: #fff;
+      }
+      stat-card::part(value) {
+        color: #0b6e4f;
+      }
+      stat-card.warn::part(value) {
+        color: #b3261e;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin: 12px 0;
+      }
+      release-note p {
+        margin: 4px 0;
+      }
+      release-note:not(:defined) {
+        border-left: 4px solid #c7cbd4;
+      }
+    </style>
+  </head>
+  <body>
+    <app-shell>
+      <template shadowrootmode="open">
+        <style>
+          :host {
+            display: block;
+          }
+          header {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+          }
+          main {
+            padding: 16px;
+          }
+          ::slotted(h1) {
+            color: #23395d;
+          }
+          footer {
+            border-top: 1px solid #c7cbd4;
+            padding: 8px 16px;
+            font-size: 12px;
+            color: #5b6273;
+          }
+        </style>
+        <header part="banner"><slot name="brand">Untitled</slot><slot name="meta"></slot></header>
+        <main><slot></slot></main>
+        <footer><slot name="footer">No footer</slot></footer>
+      </template>
+      <strong slot="brand">Acme Release Center</strong>
+      <span slot="meta">Build 4.12 · 18 November</span>
+      <h1>Release 4.12 readiness</h1>
+      <div class="grid">
+        <stat-card>
+          <template shadowrootmode="open">
+            <style>
+              :host {
+                display: block;
+                border: 1px solid #c7cbd4;
+                border-radius: 8px;
+                padding: 10px 12px;
+              }
+              .label {
+                font-size: 12px;
+                text-transform: uppercase;
+                color: #5b6273;
+              }
+              .value {
+                font-size: 28px;
+                font-weight: bold;
+              }
+            </style>
+            <div class="label"><slot name="label"></slot></div>
+            <div class="value" part="value"><slot></slot></div>
+          </template>
+          <span slot="label">Tests passing</span>98.4%
+        </stat-card>
+        <stat-card>
+          <template shadowrootmode="open">
+            <style>
+              :host {
+                display: block;
+                border: 1px solid #c7cbd4;
+                border-radius: 8px;
+                padding: 10px 12px;
+              }
+              .label {
+                font-size: 12px;
+                text-transform: uppercase;
+                color: #5b6273;
+              }
+              .value {
+                font-size: 28px;
+                font-weight: bold;
+              }
+            </style>
+            <div class="label"><slot name="label"></slot></div>
+            <div class="value" part="value"><slot></slot></div>
+          </template>
+          <span slot="label">Open blockers</span>3
+        </stat-card>
+        <stat-card class="warn">
+          <template shadowrootmode="open">
+            <style>
+              :host {
+                display: block;
+                border: 1px solid #c7cbd4;
+                border-radius: 8px;
+                padding: 10px 12px;
+              }
+              :host(.warn) {
+                background: #fdf1f0;
+              }
+              .label {
+                font-size: 12px;
+                text-transform: uppercase;
+                color: #5b6273;
+              }
+              .value {
+                font-size: 28px;
+                font-weight: bold;
+              }
+            </style>
+            <div class="label"><slot name="label"></slot></div>
+            <div class="value" part="value"><slot></slot></div>
+          </template>
+          <span slot="label">Days late</span>2
+        </stat-card>
+      </div>
+      <release-note>
+        <template shadowrootmode="open">
+          <style>
+            :host {
+              display: block;
+              padding: 4px 12px;
+              margin: 12px 0;
+            }
+            h2 {
+              font-size: 16px;
+              margin: 0 0 4px;
+            }
+            ::slotted(ul) {
+              margin: 4px 0 0;
+              padding-left: 20px;
+            }
+          </style>
+          <h2><slot name="title">Notes</slot></h2>
+          <slot></slot>
+        </template>
+        <span slot="title">What changed</span>
+        <p>The importer reads archives of up to four gigabytes and keeps their folder names.</p>
+        <ul>
+          <li>Faster thumbnails for scanned pages.</li>
+          <li>Search finds words split across lines.</li>
+          <li>Exports keep the document language.</li>
+        </ul>
+      </release-note>
+      <release-note>
+        <template shadowrootmode="open">
+          <style>
+            :host {
+              display: block;
+              padding: 4px 12px;
+              margin: 12px 0;
+            }
+            h2 {
+              font-size: 16px;
+              margin: 0 0 4px;
+            }
+          </style>
+          <h2><slot name="title">Notes</slot></h2>
+          <slot></slot>
+        </template>
+        <p>A note without a title shows the component's own heading.</p>
+      </release-note>
+      <small slot="footer">Generated from the release tracker.</small>
+    </app-shell>
+  </body>
+</html>

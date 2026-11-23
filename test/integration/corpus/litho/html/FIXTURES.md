@@ -284,6 +284,14 @@ Chromium prints a `backdrop-filter` without filtering the backdrop, where its sc
 | ----------------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `vertical-sidebar-positioned` | 2     | none    | A relatively positioned `vertical-rl` float (Noto Sans CJK JP) as the containing block of absolutely positioned boxes by `top`, `right`, `bottom` and `left`; a `position: fixed` box inside it; a page break |
 
+## Web components
+
+`web-components` is a release dashboard built of server-rendered components, each a declarative shadow root (`<template shadowrootmode>`), which Chromium prints attached: the page is its own reference.
+
+| Source           | Pages | Options | Exercises                                                                                                                                                                                                                                                                   |
+| ---------------- | ----- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web-components` | 1     | none    | Declarative shadow roots on custom elements; named and default slots with fallback content; style sheets scoped to each shadow tree; `:host`, `:host()`, `::slotted()`; `::part()` from the document; `:not(:defined)` on components no script defines; nested shadow trees |
+
 ## Expected text
 
 Eight sources name `expectedText: "expected-text.txt"` in their `options.json`: Chromium writes their text wrong in its PDF, so their text score reads the file beside them, the page's text in reading order written from the source, and not Chromium's (see [Expected text](../../../FEATURES.md#expected-text)). Each file holds what the page prints: the headings, the paragraphs and the table cells in document order, the numbers of ordered list items (`1.`, `2.`), and no disc bullet, which both engines draw as a shape; the characters as the source holds them, joiners, non-joiners, zero width spaces and variation selectors included. Neither the key nor the file changes the reference. What Chromium's PDF holds, read by PDF.js:
