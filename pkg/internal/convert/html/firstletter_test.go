@@ -37,6 +37,13 @@ func TestFirstLetterSpan(t *testing.T) {
 		{"+plus", 0, "+", false},
 		{"éacute", 0, "é", false},
 		{"\U0001F1EC\U0001F1E7 UK", 0, "\U0001F1EC\U0001F1E7", false},
+		{"T(rail", 0, "T", false},
+		{"T\u00a0»est", 0, "T", false},
+		{"T\u3000.est", 0, "T", false},
+		{"T\u2009.est", 0, "T\u2009.", false},
+		{"T)rail", 0, "T)", false},
+		{"\u104e\u0300T\u0300\u104e\u0300est", 0, "\u104e\u0300T\u0300\u104e\u0300", false},
+		{"\U00010100T\U00010100est", 0, "\U00010100T\U00010100", false},
 		{"(", 0, "(", true},
 		{" “ ", 1, "“", true},
 	} {

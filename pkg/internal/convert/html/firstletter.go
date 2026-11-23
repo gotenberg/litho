@@ -202,19 +202,21 @@ func letterStyle(ps *css.Style) *css.Style {
 // firstLetterSpan returns the bytes of s, of white-space ws, its first
 // letter takes: the collapsible white space before it at [0, pre), then
 // the white space that stays, the punctuation before the letter, the
-// letter and the punctuation after it up to n (CSS Pseudo 4, 2.3.2, the
+// letter and the punctuation after it up to n (CSS Pseudo 4, 2.2.1, the
 // first typographic letter unit). The letter is the first grapheme
-// cluster that is no punctuation nor white space. n is -1 when s is white
-// space alone. punctOnly reports punctuation that runs to the end of s
-// with no letter, [pre, n) holding it. ended reports a line break ws
+// cluster that is no punctuation nor white space; a combining mark stays
+// with the punctuation before it, as with its letter. n is -1 when s is
+// white space alone. punctOnly reports punctuation that runs to the end
+// of s with no letter, [pre, n) holding it. ended reports a line break ws
 // keeps before any letter, which ends the first line.
 //
-// CSS Pseudo 4 takes the punctuation of the general categories Ps, Pe,
-// Pi, Pf and Po (CSS 2.2, 5.12.2 alike) and the typographic spaces (Zs)
-// between it and the letter. Chromium departs from it, and litho follows
-// Chromium: before the letter it takes every punctuation category, Pd and
-// Pc included, and any white space between; after it, Pc as well as the
-// five, and a space other than U+0020 only when punctuation follows it.
+// CSS Pseudo 4 takes every punctuation (P*) before the letter and every
+// punctuation but opening punctuation (Ps) and dashes (Pd) after it, with
+// the typographic spaces (Zs) between, but for U+3000 and, after the
+// letter, the word separators U+0020 and U+00A0 (CSS Text 3, 7.1).
+// Chromium departs from it before the letter, and litho follows Chromium:
+// it takes any white space there, U+3000 included. After the letter a
+// space counts only when punctuation follows it.
 //
 // # Corpus evidence
 //
@@ -226,6 +228,12 @@ func letterStyle(ps *css.Style) *css.Style {
 //     no-break spaces, the spaces and the tab white-space: pre and
 //     pre-wrap keep, and not the spaces pre-line collapses; under pre, a
 //     line break before the letter leaves the paragraph without one.
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 cuts "T" alone
+//     from "T(", "T\u00a0\u00bb" and "T\u3000.", and "T\u2009.",
+//     "T\u202f." and "T\u2007." whole.
+//   - wpt: css/css-pseudo/first-letter-004 (combining marks after the
+//     punctuation on either side) and first-letter-trailing-punctuation
+//     draw their references in Chromium's screen.
 func firstLetterSpan(s string, ws css.WhiteSpace) (pre, n int, punctOnly, ended bool) {
 	i := 0
 	for i < len(s) {
@@ -246,7 +254,7 @@ func firstLetterSpan(s string, ws css.WhiteSpace) (pre, n int, punctOnly, ended 
 	for i < len(s) {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if unicode.IsPunct(r) {
-			i += size
+			i = withMarks(s, i+size)
 			end = i
 			continue
 		}
@@ -269,10 +277,11 @@ func firstLetterSpan(s string, ws css.WhiteSpace) (pre, n int, punctOnly, ended 
 		r, size := utf8.DecodeRuneInString(s[j:])
 		j += size
 		if isTrailingPunct(r) {
+			j = withMarks(s, j)
 			i = j
 			continue
 		}
-		if r == ' ' || !unicode.Is(unicode.Zs, r) {
+		if r == ' ' || r == '\u00a0' || r == '\u3000' || !unicode.Is(unicode.Zs, r) {
 			break
 		}
 	}
@@ -337,8 +346,21 @@ func isFirstLetterSpace(r rune) bool {
 }
 
 // isTrailingPunct reports the punctuation a first letter takes after its
-// letter: the general categories Ps, Pe, Pi, Pf and Po of CSS Pseudo 4,
-// and Pc, as Chromium takes it (see [firstLetterSpan]).
+// letter: any but opening punctuation (Ps) and dashes (Pd) (CSS Pseudo 4,
+// 2.2.1).
 func isTrailingPunct(r rune) bool {
-	return unicode.In(r, unicode.Ps, unicode.Pe, unicode.Pi, unicode.Pf, unicode.Po, unicode.Pc)
+	return unicode.In(r, unicode.Pe, unicode.Pi, unicode.Pf, unicode.Po, unicode.Pc)
+}
+
+// withMarks returns i past the combining marks (M*) s holds from i on,
+// which stay with the character before them (CSS Pseudo 4, 2.2.1).
+func withMarks(s string, i int) int {
+	for i < len(s) {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if !unicode.Is(unicode.M, r) {
+			break
+		}
+		i += size
+	}
+	return i
 }
