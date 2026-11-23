@@ -37,3 +37,22 @@ func TestDiagramLinearOwnRatio(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramLinearSizesByPointType states that a linear layout's width
+// constraint for its children by point type alone sizes each kid of that
+// type (21.4.2.6 constr ptType): a transition a quarter of a node wide,
+// 2.25 nodes filling the box (the transition truncated to 249).
+func TestDiagramLinearSizesByPointType(t *testing.T) {
+	layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="node" refType="w"/>` +
+		`<dgm:constr type="w" for="ch" ptType="sibTrans" refType="w" refFor="ch" refForName="node" fact="0.25"/></dgm:constrLst>` +
+		`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/></dgm:layoutNode>` +
+		`<dgm:forEach axis="followSib" ptType="sibTrans" cnt="1"><dgm:layoutNode name="arrow"><dgm:alg type="sp"/><dgm:shape type="rightArrow"/></dgm:layoutNode></dgm:forEach></dgm:forEach>`
+	data := strings.ReplaceAll(diagramData("a", "b"), `presName="sibTrans"`, `presName="arrow"`)
+	d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(2250, 1000, nil))
+	want := []string{"background rect 0,0 2250x1000", "node rect 0,0 1000x1000", "arrow rightArrow 1000,0 249x1000", "node rect 1249,0 1000x1000"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}

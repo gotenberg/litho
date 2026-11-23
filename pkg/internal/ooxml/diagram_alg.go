@@ -3,6 +3,7 @@ package ooxml
 import (
 	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -756,6 +757,17 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			}
 		}
 	}
+	typed := e.byPointType(cons, s)
+	for _, c := range typed {
+		if _, ok := props.get(c.ForName, c.Type); ok || !setsLength(c) {
+			continue
+		}
+		side := s.W
+		if c.Type == "h" {
+			side = s.H
+		}
+		props.set(c.ForName, c.Type, min(e.lengthOf(c, cons, fl, side), side))
+	}
 	shrink := map[string]bool{}
 	for _, r := range rules {
 		shrink[r] = true
@@ -775,7 +787,7 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			count--
 			isDep := false
 			factor := 0.0
-			for _, c := range cons {
+			for _, c := range append(slices.Clone(cons), typed...) {
 				if c.ForName != k.Name {
 					continue
 				}
@@ -947,6 +959,49 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			s.Kids[i], s.Kids[j] = s.Kids[j], s.Kids[i]
 		}
 	}
+}
+
+// byPointType returns each width or height constraint of cons that a
+// layout node states for its children by point type alone (21.4.2.6
+// constr ptType: "for ch ptType sibTrans") stated again for the name of
+// each kid of that type: the kid takes the length unless a constraint
+// names it, and it spaces nothing else.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-accent-process's process3 sizes its
+//     transition 0.3333 of a composite wide by point type: Office prints
+//     two composites of 205.6 points and the transition between them in
+//     the 480-point frame (2.3333 composites).
+func (e *engine) byPointType(cons []DiagramConstraint, s *DiagramShape) []DiagramConstraint {
+	var out []DiagramConstraint
+	for _, c := range cons {
+		if c.ForName != "" || c.For != "ch" || (c.Type != "w" && c.Type != "h") || c.PtType == "" || c.PtType == "all" || c.PtType == "none" {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, k := range s.Kids {
+			if seen[k.Name] || e.pointType(k) != c.PtType {
+				continue
+			}
+			seen[k.Name] = true
+			n := c
+			n.ForName = k.Name
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// pointType returns the type of the data point a kid presents (21.4.7.51
+// ST_PtType): its transition type, else node.
+func (e *engine) pointType(k *DiagramShape) string {
+	if k.pt != nil {
+		if dp := e.d.byID[k.pt.PresAssocID]; dp != nil && (dp.Type == "sibTrans" || dp.Type == "parTrans") {
+			return dp.Type
+		}
+	}
+	return "node"
 }
 
 // spacerLength returns the length along a linear layout that the
