@@ -56,3 +56,24 @@ func TestDiagramLinearSizesByPointType(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramLinearNodesByPointType states venn3's row: nodes as wide as
+// the layout and as tall as wide by their point type, spaces -0.2 of a
+// node, scaled to the box: five circles of 1000 / 4.2 = 238, 191 apart
+// (the space truncated to -47), in the middle across.
+func TestDiagramLinearNodesByPointType(t *testing.T) {
+	layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" ptType="node" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" ptType="node" refType="w" refFor="ch" refPtType="node"/>` +
+		`<dgm:constr type="w" for="ch" forName="space" refType="w" refFor="ch" refPtType="node" fact="-0.2"/></dgm:constrLst>` +
+		`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="ellipse"/></dgm:layoutNode>` +
+		`<dgm:forEach axis="followSib" ptType="sibTrans" cnt="1"><dgm:layoutNode name="space"><dgm:alg type="sp"/><dgm:shape/></dgm:layoutNode></dgm:forEach></dgm:forEach>`
+	data := strings.ReplaceAll(diagramData("a", "b", "c", "d", "e"), `presName="sibTrans"`, `presName="space"`)
+	d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(1000, 600, nil))
+	want := []string{"background rect 0,0 1000x600",
+		"node ellipse 0,181 238x238", "node ellipse 191,181 238x238", "node ellipse 382,181 238x238", "node ellipse 573,181 238x238", "node ellipse 764,181 238x238"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}

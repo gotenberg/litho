@@ -757,10 +757,33 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			}
 		}
 	}
-	typed := e.byPointType(cons, s)
+	own, _ := e.own(a.Node, s.pt)
+	typed := e.byPointType(append(slices.Clone(cons), own...), s)
+	// A length a point type's constraint sets from the kid's own other
+	// length is a ratio, taken once the layout has sized the kid.
+	ratios := map[string][]DiagramConstraint{}
 	for _, c := range typed {
 		if _, ok := props.get(c.ForName, c.Type); ok || !setsLength(c) {
 			continue
+		}
+		if c.RefFor == "ch" {
+			ref := c.RefForName
+			if ref == "" {
+				for _, k := range s.Kids {
+					if e.pointType(k) == c.RefPtType {
+						ref = k.Name
+						break
+					}
+				}
+			}
+			if ref == c.ForName && c.RefType != c.Type {
+				ratios[c.ForName] = append(ratios[c.ForName], c)
+				continue
+			}
+			if v, ok := props.get(ref, c.RefType); ok && numeric.Finite(c.Factor) {
+				props.set(c.ForName, c.Type, trunc(float64(float64(v)*c.Factor)))
+				continue
+			}
 		}
 		side := s.W
 		if c.Type == "h" {
@@ -935,7 +958,7 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 			h = trunc(float64(h) * scaleH)
 		}
 		if !k.Group {
-			w, h = e.ownRatio(k, props, w, h, s, horizontal)
+			w, h = e.ownRatio(k, props, ratios[k.Name], w, h, s, horizontal)
 		}
 		k.W, k.H = w, h
 		// Each kid sits across the direction where nodeVertAlign or
@@ -973,6 +996,11 @@ func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrain
 //     transition 0.3333 of a composite wide by point type: Office prints
 //     two composites of 205.6 points and the transition between them in
 //     the 480-point frame (2.3333 composites).
+//   - openxmlsdk/pptx: O12_templates/CompanyMtg_TP10167121's venn3 sizes
+//     its five nodes by point type, as wide as the row and as tall as
+//     wide, spaced -0.2 of a node: Office prints five circles 145.4
+//     points wide, 116.6 apart; the walk had dropped those constraints
+//     and stacked the five in one place.
 func (e *engine) byPointType(cons []DiagramConstraint, s *DiagramShape) []DiagramConstraint {
 	var out []DiagramConstraint
 	for _, c := range cons {
@@ -1032,17 +1060,19 @@ func spacerLength(cons []DiagramConstraint, props layoutProps, name, along strin
 }
 
 // ownRatio returns a linear kid's width and height once its own layout
-// node's constraint sets its length across the layout from its length
-// along it (21.4.2.6 constr for self: a chevron's h refType w fact 0.4),
-// unless the layout's constraints set that length by the kid's name; the
-// length is cut to the layout's box.
+// node's constraint, or one typed of the layout's for its point type,
+// sets its length across the layout from its length along it (21.4.2.6
+// constr for self: a chevron's h refType w fact 0.4; venn3's h for ch
+// ptType node refType w refFor ch refPtType node), unless the layout's
+// constraints set that length by the kid's name; the length is cut to the
+// layout's box.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: smartart-chevron's chevron1 chevrons, h refType w
 //     fact 0.4, print 171.4 by 69.1 points in Office's page, in the middle
 //     of the 320-point frame; smartart-maxdepth's two print 252.7 by 101.5.
-func (e *engine) ownRatio(k *DiagramShape, props layoutProps, w, h int64, s *DiagramShape, horizontal bool) (int64, int64) {
+func (e *engine) ownRatio(k *DiagramShape, props layoutProps, typed []DiagramConstraint, w, h int64, s *DiagramShape, horizontal bool) (int64, int64) {
 	from, to := "w", "h"
 	if !horizontal {
 		from, to = "h", "w"
@@ -1051,8 +1081,9 @@ func (e *engine) ownRatio(k *DiagramShape, props layoutProps, w, h int64, s *Dia
 		return w, h
 	}
 	own, _ := e.own(k.atom, k.pt)
-	for _, c := range own {
-		if (c.For != "self" && c.For != "none" && c.For != "") || c.ForName != "" || c.Type != to || c.RefType != from || c.RefForName != "" || !setsLength(c) || !numeric.Finite(c.Factor) {
+	for _, c := range append(slices.Clone(typed), own...) {
+		self := c.For == "self" || c.For == "none" || c.For == "" || (c.For == "ch" && c.ForName == k.Name)
+		if !self || (c.ForName != "" && c.ForName != k.Name) || c.Type != to || c.RefType != from || (c.RefForName != "" && c.RefForName != k.Name) || !setsLength(c) || !numeric.Finite(c.Factor) {
 			continue
 		}
 		if horizontal {
