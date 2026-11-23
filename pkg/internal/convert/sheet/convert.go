@@ -492,7 +492,7 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 	if n := unevaluated(g); n > 0 {
 		b.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, unknown icon sets) are not applied", quote(sh.Name), n))
 	}
-	if sh.RightToLeft {
+	if sh.RightToLeft && !g.mirrored() {
 		b.warn(warn.ContentUnsupported, warn.Approximated, "a right-to-left sheet is laid out left to right")
 	}
 	if err := sp.plan(b.ctx); err != nil {
@@ -582,8 +582,12 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	if sp.g.doc.ExcelRules {
 		centring = excelCentring
 	}
-	if ps.CenterHorizontally {
+	switch {
+	case ps.CenterHorizontally:
 		ox += float64((areaW-float64(pb.dataW*z))/2) - centring
+	case sp.g.mirrored():
+		// The columns run from the area's right edge ([grid.mirrored]).
+		ox += areaW - float64(pb.dataW*z)
 	}
 	if ps.CenterVertically {
 		oy += float64((areaH-float64(pb.dataH*z))/2) - centring

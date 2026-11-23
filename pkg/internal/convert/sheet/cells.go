@@ -393,17 +393,23 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	cx0, cx1 := u.x, u.x+u.w
 	need := d.textW - avail
 	if !d.wrap && !d.shrink && !d.value && need > 0 && !u.merged && st.Align.Rotation == 0 && !st.Align.Stacked {
+		// The cells on the right follow the cell, or precede it when the
+		// columns run from the right.
+		right, rightStep, left, leftStep := u.lastC+1, 1, u.c-1, -1
+		if rg.rtl {
+			right, rightStep, left, leftStep = u.c-1, -1, u.lastC+1, 1
+		}
 		growRight := func(n float64) {
-			c := u.lastC + 1
-			for i := 0; n > 0 && i < maxOverflowScan && b.emptyAt(u.r, c); i, c = i+1, c+1 {
+			c := right
+			for i := 0; n > 0 && i < maxOverflowScan && b.emptyAt(u.r, c); i, c = i+1, c+rightStep {
 				w := g.colWidth(c)
 				cx1 += w
 				n -= w
 			}
 		}
 		growLeft := func(n float64) {
-			c := u.c - 1
-			for i := 0; n > 0 && i < maxOverflowScan && b.emptyAt(u.r, c); i, c = i+1, c-1 {
+			c := left
+			for i := 0; n > 0 && i < maxOverflowScan && b.emptyAt(u.r, c); i, c = i+1, c+leftStep {
 				w := g.colWidth(c)
 				cx0 -= w
 				n -= w
@@ -427,9 +433,13 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			if s := g.style(u.r, c, g.cell(u.r, c)); s.Align.Horizontal != HCenterContinuous {
 				break
 			}
-			cx1 += g.colWidth(c)
+			if rg.rtl {
+				cx0 -= g.colWidth(c)
+			} else {
+				cx1 += g.colWidth(c)
+			}
 		}
-		u = &unit{r: u.r, c: u.c, lastR: u.lastR, lastC: u.lastC, cell: u.cell, st: u.st, x: u.x, y: u.y, w: cx1 - u.x, h: u.h}
+		u = &unit{r: u.r, c: u.c, lastR: u.lastR, lastC: u.lastC, cell: u.cell, st: u.st, x: cx0, y: u.y, w: cx1 - cx0, h: u.h}
 		avail = u.w - left - right
 	}
 	f := d.font

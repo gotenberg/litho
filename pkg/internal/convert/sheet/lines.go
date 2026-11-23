@@ -94,7 +94,7 @@ func (b *pageBuilder) unitBorders(bs *borders, rg *region, u *unit) {
 		if g.colHidden(c) {
 			continue
 		}
-		x1, x2 := rg.x(g, c), rg.x(g, c+1)
+		x1, x2 := rg.edge(g, c), rg.edge(g, c+1)
 		bs.add(edgeKey{at: u.r, along: c}, st.Border[css.Top], x1, u.y, x2, u.y)
 		next := b.nextRow(u.lastR)
 		bs.add(edgeKey{at: next, along: c}, st.Border[css.Bottom], x1, u.y+u.h, x2, u.y+u.h)
@@ -104,9 +104,12 @@ func (b *pageBuilder) unitBorders(bs *borders, rg *region, u *unit) {
 			continue
 		}
 		y1, y2 := rg.y(g, r), rg.y(g, r+1)
-		bs.add(edgeKey{vertical: true, at: u.c, along: r}, st.Border[css.Left], u.x, y1, u.x, y2)
+		// The left and right borders sit at the start and end of the
+		// columns, swapped when they run from the right.
+		x0, x1 := rg.edge(g, u.c), rg.edge(g, u.lastC+1)
+		bs.add(edgeKey{vertical: true, at: u.c, along: r}, st.Border[css.Left], x0, y1, x0, y2)
 		next := b.nextCol(u.lastC)
-		bs.add(edgeKey{vertical: true, at: next, along: r}, st.Border[css.Right], u.x+u.w, y1, u.x+u.w, y2)
+		bs.add(edgeKey{vertical: true, at: next, along: r}, st.Border[css.Right], x1, y1, x1, y2)
 	}
 	if (st.DiagonalUp || st.DiagonalDown) && st.Diagonal.Line != LineNone {
 		if st.DiagonalDown {

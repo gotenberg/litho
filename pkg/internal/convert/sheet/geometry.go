@@ -20,6 +20,31 @@ func (g *grid) rowY(r int) float64 {
 	return rowSum(&g.rowPrefix, g.rowHeight, r)
 }
 
+// mirrored reports a sheet whose columns run from the right edge of its
+// pages, Calc's print of a right-to-left sheet (ODF 1.3 Part 3, 20.404
+// style:writing-mode rl-tb on the table): column A at the right edge of
+// the page's area, each cell's text, borders and fill moved with its
+// column, the drawings moved with the columns and not turned, the row
+// headings on the right. Where Calc puts a drawing anchored in a cell of
+// such a sheet is not decided: the one reference that holds some places
+// them elsewhere than their cells and offsets say.
+//
+// # Corpus evidence
+//
+//   - litho/ods: rtl-sheet prints its four columns from the right margin,
+//     column A rightmost, numbers right-aligned in their cells.
+//   - libreoffice/ods: sc/tdf137081_RTL_page_anchored.ods prints the label
+//     of its dimension line at the area's width less the line's offset,
+//     1.3 points from where litho puts it; its rotated polyline lies 17
+//     points further left, and its third shape is not printed.
+//   - libreoffice/ods: sc/tdf137082_RTL_cell_anchored.ods stores its two
+//     cell-anchored shapes 12.22 and 2.2 mm from the sheet's origin
+//     though they are anchored in columns C and G, and prints one of
+//     them 16 points left of where litho mirrors it.
+func (g *grid) mirrored() bool {
+	return g.sh.RightToLeft && !g.doc.ExcelRules
+}
+
 // layoutColX returns the x of column c's left edge from the sheet's
 // origin on the sum of the layout widths ([grid.layoutColWidth]), the
 // coordinates drawings take: Calc keeps a drawing in 1/100 mm on the

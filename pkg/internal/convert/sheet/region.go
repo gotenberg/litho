@@ -7,11 +7,35 @@ type region struct {
 	rows, cols band
 	x0, y0     float64
 	w, h       float64
+	// rtl lays the columns out from the region's right edge
+	// ([grid.mirrored]); heads is set on a region beside the row
+	// headings, whichever side they print on.
+	rtl, heads bool
 }
 
 // x returns the left edge of sheet column c in the region's page
 // coordinates; c may lie outside the region.
 func (rg *region) x(g *grid, c int) float64 {
+	return rg.left(g, c, c)
+}
+
+// left returns the left edge of the columns [a, b] in the region's page
+// coordinates: the edge of column a, or of column b when the columns run
+// from the right.
+func (rg *region) left(g *grid, a, b int) float64 {
+	if rg.rtl {
+		return rg.x0 + rg.w - (g.colX(b+1) - g.colX(rg.cols.first))
+	}
+	return rg.x0 + g.colX(a) - g.colX(rg.cols.first)
+}
+
+// edge returns the x of the boundary before column c in the order of the
+// columns: the left edge of column c, or its right edge when the columns
+// run from the right.
+func (rg *region) edge(g *grid, c int) float64 {
+	if rg.rtl {
+		return rg.x0 + rg.w - (g.colX(c) - g.colX(rg.cols.first))
+	}
 	return rg.x0 + g.colX(c) - g.colX(rg.cols.first)
 }
 
@@ -74,7 +98,7 @@ func (b *pageBuilder) units(rg *region, fn func(u *unit)) {
 			}
 			u.cell = g.cell(r0, c0)
 			u.st = g.style(r0, c0, u.cell)
-			u.x, u.y = rg.x(g, c0), rg.y(g, r0)
+			u.x, u.y = rg.left(g, c0, u.lastC), rg.y(g, r0)
 			u.w, u.h = g.spanW(c0, u.lastC), g.spanH(r0, u.lastR)
 			fn(&u)
 		}

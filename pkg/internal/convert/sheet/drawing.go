@@ -58,6 +58,11 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 		for _, rg := range regs {
 			// The drawing's box in the region's coordinates.
 			x := rg.x0 + rc.X - g.layoutColX(rg.cols.first)
+			if rg.rtl {
+				// The columns run from the right, and the drawing with
+				// them, unturned ([grid.mirrored]).
+				x = rg.x0 + rg.w - (rc.X + rc.Width - g.layoutColX(rg.cols.first))
+			}
 			y := rg.y0 + rc.Y - g.layoutRowY(rg.rows.first)
 			if x >= rg.x0+rg.w || y >= rg.y0+rg.h || before(x+rc.Width, rg.x0, rc.Width) || before(y+rc.Height, rg.y0, rc.Height) {
 				continue

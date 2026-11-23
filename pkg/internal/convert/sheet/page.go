@@ -91,6 +91,13 @@ func (b *pageBuilder) layoutRegions() []*region {
 	}
 	out = append(out, &region{rows: p.rows, cols: p.cols, x0: x0 + repW, y0: y0 + repH, w: bandW, h: bandH})
 	b.dataW, b.dataH = x0+repW+bandW, y0+repH+bandH
+	for _, rg := range out {
+		rg.heads = g.sh.Page.Headings && rg.x0 == headingWidth
+		if g.mirrored() {
+			rg.rtl = true
+			rg.x0 = b.dataW - rg.x0 - rg.w
+		}
+	}
 	return out
 }
 
@@ -312,23 +319,22 @@ func (b *pageBuilder) grid(rg *region, spans map[int][][2]float64) {
 			continue
 		}
 		y := rg.y(g, r)
-		x := rg.x0
 		for c := rg.cols.first; c <= rg.cols.last; c++ {
 			w := g.colWidth(c)
 			if w == 0 {
 				continue
 			}
 			if r > rg.rows.last || !inMerge(r, c, false) {
+				x := rg.x(g, c)
 				add(x, y, x+w, y)
 			}
-			x += w
 		}
 	}
 	for c := rg.cols.first; c <= rg.cols.last+1; c++ {
 		if c <= rg.cols.last && g.colHidden(c) {
 			continue
 		}
-		x := rg.x(g, c)
+		x := rg.edge(g, c)
 		y := rg.y0
 		for r := rg.rows.first; r <= rg.rows.last; r++ {
 			h := g.rowHeight(r)
@@ -382,10 +388,14 @@ func (b *pageBuilder) headings(regs []*region) []*layout.Node {
 				}
 			}
 		}
-		if rg.x0 == headingWidth {
+		if rg.heads {
+			x := 0.0
+			if rg.rtl {
+				x = b.dataW - headingWidth
+			}
 			for r := rg.rows.first; r <= rg.rows.last; r++ {
 				if h := g.rowHeight(r); h > 0 {
-					label(0, rg.y(g, r), headingWidth, h, strconv.Itoa(r+1))
+					label(x, rg.y(g, r), headingWidth, h, strconv.Itoa(r+1))
 				}
 			}
 		}
