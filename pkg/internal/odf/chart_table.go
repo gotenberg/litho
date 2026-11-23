@@ -22,6 +22,8 @@ type tableCell struct {
 // 11.3): the header row of series names, the header column of
 // categories, a column per series.
 type localTable struct {
+	// name is the table's table:name.
+	name string
 	rows [][]tableCell
 	// headerRows and firstData count the header rows and the header
 	// columns, the categories.
@@ -33,7 +35,7 @@ func readLocalTable(t *Element) *localTable {
 	if t == nil {
 		return nil
 	}
-	lt := &localTable{}
+	lt := &localTable{name: t.A(NSTable, "name")}
 	if t.Child(NSTable, "table-header-columns") != nil {
 		lt.firstData = 1
 	}
@@ -124,6 +126,53 @@ func (t *localTable) find(addr string) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// own returns the row and column of the first cell of the range addr
+// when addr names the table itself, as a chart whose document is not a
+// spreadsheet addresses its data ("local-table.$B$2:.$D$2"; ODF 1.3 Part
+// 3, 11.3 and 18.3.6): the table's own rows, its header row and header
+// column counted, are then the address's rows and columns.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd-data/fdo71075.odp's bar chart names its series
+//     "local-table.$B$2:.$D$2", a row of three values, and its categories
+//     the header row over them; LibreOffice draws three bars.
+//   - libreoffice/ods: chart2/tdf146066.ods's line chart names its
+//     categories and values down the local table's columns.
+func (t *localTable) own(addr string) (int, int, bool) {
+	from, _, _ := strings.Cut(addr, ":")
+	i := strings.LastIndexByte(from, '.')
+	if t.name == "" || i < 0 || strings.Trim(from[:i], "$'") != t.name {
+		return 0, 0, false
+	}
+	cell := cellRef(from)
+	if cell == nil || cell[1] >= len(t.rows) || cell[0] >= len(t.rows[cell[1]]) {
+		return 0, 0, false
+	}
+	return cell[1], cell[0], true
+}
+
+// span returns the cells of the range addr from its first cell (row,
+// col), the range's own rows and columns, for an address [localTable.own]
+// resolves.
+func (t *localTable) span(row, col int, addr string) chart.Data {
+	d := chart.Data{Cached: true}
+	cols, rows, ok := rangeShape(addr)
+	if !ok {
+		return d
+	}
+	for i := row; i < row+rows && i < len(t.rows); i++ {
+		for j := col; j < col+cols; j++ {
+			if j < len(t.rows[i]) {
+				d.Values = append(d.Values, t.rows[i][j].value)
+			} else {
+				d.Values = append(d.Values, chart.Value{})
+			}
+		}
+	}
+	return d
 }
 
 // run returns the cells of the range addr from its first cell (row, col):

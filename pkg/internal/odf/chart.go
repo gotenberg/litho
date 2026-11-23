@@ -1048,6 +1048,10 @@ func (r *chartReader) data(addr string, labels bool) chart.Data {
 	}
 	row, col, ok := r.table.find(addr)
 	if !ok {
+		if row, col, ok = r.table.own(addr); ok {
+			d = r.table.span(row, col, addr)
+			d.Ref = addr
+		}
 		return d
 	}
 	if labels && row < r.table.headerRows {

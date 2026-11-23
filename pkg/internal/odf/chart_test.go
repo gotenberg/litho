@@ -376,3 +376,25 @@ func TestChartFromDocument_ErrorIndicators(t *testing.T) {
 		t.Errorf("second = %+v", b)
 	}
 }
+
+// TestChartFromDocument_OwnTableAddresses reads series whose ranges name
+// the chart's own table, as a chart in a presentation or a text document
+// addresses its data (ODF 1.3 Part 3, 11.3): a series in a row, its
+// categories along the header row and its name in the header column.
+func TestChartFromDocument_OwnTableAddresses(t *testing.T) {
+	plot := `<chart:axis chart:dimension="x" chart:name="primary-x"><chart:categories table:cell-range-address="local-table.$B$1:.$C$1"/></chart:axis>` +
+		`<chart:axis chart:dimension="y" chart:name="primary-y"/>` +
+		`<chart:series chart:values-cell-range-address="local-table.$B$2:.$C$2" chart:label-cell-address="local-table.$A$2" chart:class="chart:bar"/>`
+	c := readODFChart(t, chartContent("", "bar", "", plot))
+	s := c.Groups[0].Series[0]
+	if s.Name != "Q1" || s.Values.Len() != 2 || s.Values.Values[0].Number != 10 || s.Values.Values[1].Number != 20 {
+		t.Errorf("series %q = %+v, want Q1 of 10 and 20", s.Name, s.Values.Values)
+	}
+	if s.Categories.Len() != 2 || s.Categories.Values[0].Text != "North" || s.Categories.Values[1].Text != "South" {
+		t.Errorf("categories = %+v, want North and South", s.Categories.Values)
+	}
+	other := readODFChart(t, chartContent("", "bar", "", strings.ReplaceAll(plot, "local-table.", "other-table.")))
+	if v := other.Groups[0].Series[0].Values; v.Len() == 2 && v.Values[1].Number == 20 {
+		t.Errorf("a range naming another table read the chart's: %+v", v.Values)
+	}
+}

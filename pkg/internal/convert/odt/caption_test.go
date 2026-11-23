@@ -82,7 +82,7 @@ func TestConvert_ChartObjectDescribed(t *testing.T) {
 		on         bool
 		alt, lang  string
 	}{
-		{"chart", "application/vnd.oasis.opendocument.chart", true, "Sales. Clustered column chart, 1 series, 2 categories", ""},
+		{"chart", "application/vnd.oasis.opendocument.chart", true, "Sales. Clustered column chart, 1 series (North), 2 categories (Q1 and Q2)", ""},
 		{"option off", "application/vnd.oasis.opendocument.chart", false, "", ""},
 		{"no chart", "application/vnd.oasis.opendocument.text", true, "", ""},
 	} {
