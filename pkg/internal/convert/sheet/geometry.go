@@ -25,14 +25,17 @@ func (g *grid) rowY(r int) float64 {
 // style:writing-mode rl-tb on the table): column A at the right edge of
 // the page's area, each cell's text, borders and fill moved with its
 // column, the drawings moved with the columns and not turned, the row
-// headings on the right. Where Calc puts a drawing anchored in a cell of
+// headings on the right, each cell's text set right to left (the
+// trailing period of a Hebrew cell at its left end, a percentage sign
+// at its number's left). Where Calc puts a drawing anchored in a cell of
 // such a sheet is not decided: the one reference that holds some places
 // them elsewhere than their cells and offsets say.
 //
 // # Corpus evidence
 //
 //   - litho/ods: rtl-sheet prints its four columns from the right margin,
-//     column A rightmost, numbers right-aligned in their cells.
+//     column A rightmost, numbers right-aligned in their cells, and
+//     "סעיף א." with its period at the left.
 //   - libreoffice/ods: sc/tdf137081_RTL_page_anchored.ods prints the label
 //     of its dimension line at the area's width less the line's offset,
 //     1.3 points from where litho puts it; its rotated polyline lies 17

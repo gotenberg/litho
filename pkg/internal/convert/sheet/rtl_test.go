@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -31,5 +32,22 @@ func TestConvert_RightToLeftSheet(t *testing.T) {
 	pg = convert(t, doc, office.Options{}).Pages[0]
 	if a, b := find(t, pg, "AAA"), find(t, pg, "BBB"); a.x > b.x {
 		t.Errorf("under Excel's rules AAA at %.2f right of BBB at %.2f", a.x, b.x)
+	}
+}
+
+// TestConvert_RightToLeftCellDirection locks that a cell of a
+// right-to-left sheet sets its text right to left (see [grid.mirrored]):
+// the period ending a Hebrew text is drawn at its left end.
+func TestConvert_RightToLeftCellDirection(t *testing.T) {
+	for _, rtl := range []bool{false, true} {
+		sh := &Sheet{Name: "S1", DefaultColumnWidth: 80, RightToLeft: rtl, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "אב גד.", nil)}}}}
+		var drawn strings.Builder
+		for _, r := range runs(convert(t, newDoc(sh), office.Options{}).Pages[0]) {
+			drawn.WriteString(r.text)
+		}
+		// The runs' text is in drawing order, left to right.
+		if got := strings.HasPrefix(drawn.String(), "."); got != rtl {
+			t.Errorf("right to left %v: drawn %q", rtl, drawn.String())
+		}
 	}
 }

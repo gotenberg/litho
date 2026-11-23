@@ -541,7 +541,10 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			b.textBottom = max(b.textBottom, u.y+u.h+shift)
 		}
 	}
-	para := b.paragraph(&d, f, pitch, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
+	// A cell of a sheet whose columns run from the right takes the
+	// sheet's direction as its paragraph's base direction, as Calc's
+	// cells take the direction of the sheet above them ([grid.mirrored]).
+	para := b.paragraph(&d, f, pitch, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft || rg.rtl})
 	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: padTop, bottom: padBottom, vertical: st.Align.Vertical, shift: shift}
 	var inner *css.Style
 	if !rotated {
