@@ -101,7 +101,9 @@ func computeFontSize(s *styler, st *Style, v any) {
 	if !ok {
 		return
 	}
-	parent := s.parent.FontSize
+	// The parent's size, grown by the element's own zoom (CSS Viewport 1,
+	// 4): a keyword size takes the element's effective zoom.
+	parent := float64(s.parent.FontSize * (st.UsedZoom() / s.parent.UsedZoom()))
 	var size float64
 	st.fontSizeKeyword, st.fontSizeAbsolute = 0, s.parent.fontSizeAbsolute
 	switch {
@@ -120,7 +122,7 @@ func computeFontSize(s *styler, st *Style, v any) {
 	case f.step < 0:
 		size = parent / fontSizeScale
 	default:
-		size = keywordSize(f.keyword, false)
+		size = float64(keywordSize(f.keyword, false) * st.UsedZoom())
 		st.fontSizeKeyword, st.fontSizeAbsolute = f.keyword, false
 	}
 	st.FontSize = math.Max(0, math.Min(size, maxFontSize))
@@ -154,7 +156,7 @@ func fixMonospaceSize(st, parent *Style) {
 	mono := isMonospace(st.FontFamilies)
 	switch {
 	case st.fontSizeKeyword > 0:
-		st.FontSize = keywordSize(st.fontSizeKeyword, mono)
+		st.FontSize = float64(keywordSize(st.fontSizeKeyword, mono) * st.UsedZoom())
 	case st.fontSizeAbsolute || mono == isMonospace(parent.FontFamilies):
 		// An absolute size, or no change of generic family: the size
 		// stays.

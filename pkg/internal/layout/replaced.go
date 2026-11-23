@@ -114,3 +114,22 @@ func constrainRatio(w, h, minW, maxW, minH, maxH float64) (float64, float64) {
 	}
 	return w, h
 }
+
+// zoomedPicture returns pic with its natural size multiplied by the
+// effective zoom z of the element that shows it (CSS Viewport 1, 4: zoom
+// multiplies the natural size of replaced elements and background
+// images); pic itself when z is 1 or pic is nil.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays out an SVG
+//     picture of 40 by 30 pixels under zoom: 2 at 80 by 60 pixels, with
+//     or without width: 40px.
+func zoomedPicture(pic *Picture, z float64) *Picture {
+	if pic == nil || z == 1 {
+		return pic
+	}
+	c := *pic
+	c.Width, c.Height = float64(c.Width*z), float64(c.Height*z)
+	return &c
+}

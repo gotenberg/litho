@@ -105,17 +105,26 @@ type lenCtx struct {
 	// dark reports a dark used colour scheme, which the colours a value
 	// holds resolve under (CSS Color Adjustment 1, 2.2).
 	dark bool
+	// zoom is the element's effective zoom, 0 standing for 1: an
+	// absolute length and a viewport unit take it (CSS Viewport 1, 4);
+	// the font-relative units measure the font size and line height,
+	// which hold it already.
+	zoom float64
 }
 
 // unitSizes returns the size of each unit in points.
 func (c *lenCtx) unitSizes() [numLenUnits]float64 {
 	var s [numLenUnits]float64
-	s[uPt] = 1
+	z := c.zoom
+	if !(z > 0) {
+		z = 1
+	}
+	s[uPt] = z
 	s[uEm] = c.fontSize
 	s[uRem] = c.rootFontSize
 	s[uEx], s[uCh], s[uCap], s[uIc] = c.font.sizes(c.fontSize * c.font.adjustFactor(c.adjust))
 	s[uRex], s[uRch], s[uRcap], s[uRic] = c.rootFont.sizes(c.rootFontSize * c.rootFont.adjustFactor(c.rootAdjust))
-	s[uVw], s[uVh] = c.width/100, c.height/100
+	s[uVw], s[uVh] = float64(c.width/100)*z, float64(c.height/100)*z
 	s[uVmin], s[uVmax] = math.Min(s[uVw], s[uVh]), math.Max(s[uVw], s[uVh])
 	s[uVi], s[uVb] = s[uVw], s[uVh]
 	if c.verticalRoot {
@@ -124,7 +133,7 @@ func (c *lenCtx) unitSizes() [numLenUnits]float64 {
 	s[uLh], s[uRlh] = c.lineHeight, c.rootLineHeight
 	s[uCqw], s[uCqh], s[uCqi], s[uCqb] = s[uVw], s[uVh], s[uVi], s[uVb]
 	if q := c.cq; q != nil {
-		s[uCqw], s[uCqh], s[uCqi], s[uCqb] = q.w/100, q.h/100, q.i/100, q.b/100
+		s[uCqw], s[uCqh], s[uCqi], s[uCqb] = float64(q.w/100)*z, float64(q.h/100)*z, float64(q.i/100)*z, float64(q.b/100)*z
 	}
 	s[uCqmin], s[uCqmax] = math.Min(s[uCqi], s[uCqb]), math.Max(s[uCqi], s[uCqb])
 	return s

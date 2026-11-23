@@ -1386,6 +1386,9 @@ type Style struct {
 	MathStyle MathStyle
 	MathShift MathShift
 	MathDepth int32
+	// Zoom is the effective zoom (CSS Viewport 1, 4), 0 standing for 1:
+	// read it with [Style.UsedZoom].
+	Zoom float64
 	// LetterSpacing and WordSpacing take Normal or Points.
 	LetterSpacing Dimension
 	WordSpacing   Dimension

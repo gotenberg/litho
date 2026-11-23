@@ -566,7 +566,7 @@ func (n *calcNode) eval(s *calcScope) float64 {
 	case opNum:
 		return n.v
 	case opLen:
-		if n.unit == uPt || s.units == nil {
+		if s.units == nil {
 			return n.v
 		}
 		return n.v * s.units[n.unit]
@@ -907,7 +907,7 @@ func (n *calcNode) linear(vars *channelVars) (l length, ok bool) {
 // percentage basis, known only at used-value time. A tree without a
 // relative length is returned as it is.
 func (n *calcNode) resolveUnits(units *[numLenUnits]float64) *calcNode {
-	if !n.relativeLength() {
+	if !n.relativeLength() && (units[uPt] == 1 || !n.holdsLength()) {
 		return n
 	}
 	if n.op == opLen {
@@ -919,6 +919,20 @@ func (n *calcNode) resolveUnits(units *[numLenUnits]float64) *calcNode {
 		c.kids[i] = k.resolveUnits(units)
 	}
 	return &c
+}
+
+// holdsLength reports whether the tree holds a length of any unit: under a
+// zoom, an absolute length resolves to points too.
+func (n *calcNode) holdsLength() bool {
+	if n.op == opLen {
+		return true
+	}
+	for _, k := range n.kids {
+		if k.holdsLength() {
+			return true
+		}
+	}
+	return false
 }
 
 // relativeLength reports whether the tree holds a relative length unit.

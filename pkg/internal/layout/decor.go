@@ -345,7 +345,7 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 			}
 			continue
 		}
-		pic := p.e.picture(l.Image, r.Y)
+		pic := zoomedPicture(p.e.picture(l.Image, r.Y), bg.b.st.UsedZoom())
 		if pic == nil {
 			return
 		}

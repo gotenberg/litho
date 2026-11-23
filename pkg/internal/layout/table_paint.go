@@ -351,7 +351,7 @@ func (p *painter) partBackground(b, c *box, clip typeset.Rect) {
 				}
 				continue
 			}
-			pic := p.e.picture(l.Image, clip.Y)
+			pic := zoomedPicture(p.e.picture(l.Image, clip.Y), b.st.UsedZoom())
 			if pic == nil {
 				break
 			}

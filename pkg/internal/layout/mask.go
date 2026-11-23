@@ -163,7 +163,7 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 		for _, pa := range p.e.gradientTiles(st, origin, clip, origin.Y) {
 			frags = append(frags, pa)
 		}
-	} else if pic := p.e.picture(l.Image, origin.Y); pic != nil {
+	} else if pic := zoomedPicture(p.e.picture(l.Image, origin.Y), b.st.UsedZoom()); pic != nil {
 		if pic.Vector == nil {
 			out.raster = true
 			return out

@@ -161,9 +161,10 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 	case css.ShapePath, css.ShapeShape:
 		// Path data is in CSS pixels from the reference box's top left.
 		data, _ := svg.PathData(shapePathData(s, w, h)) // a path cut short by an error clips with what it drew, as SVG 1.1, F.2 asks
+		k := s.PathPixel()
 		for _, op := range data {
 			for i := range op.P {
-				op.P[i] = typeset.Point{X: r.X + float64(op.P[i].X*css.Pt), Y: r.Y + float64(op.P[i].Y*css.Pt)}
+				op.P[i] = typeset.Point{X: r.X + float64(op.P[i].X*k), Y: r.Y + float64(op.P[i].Y*k)}
 			}
 			ops = append(ops, op)
 		}

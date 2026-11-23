@@ -834,12 +834,13 @@ func usedLineHeight(st *Style) float64 {
 // computeOrder is the order computeStyle computes the longhands in: the
 // font size and colour first, as [propID] says, then the font selection
 // and font-size-adjust, which the ex and ch units of every other length
-// resolve against, then the rest in propID order.
+// resolve against, then the rest in propID order. zoom is not among them:
+// the effective zoom comes before them all (computeInto).
 var computeOrder = func() []propID {
 	first := []propID{pMathDepth, pFontSize, pColorScheme, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
 	out := slices.Clone(first)
 	for id := range numProps {
-		if !slices.Contains(first, id) {
+		if !slices.Contains(first, id) && id != pZoom {
 			out = append(out, id)
 		}
 	}
@@ -1421,7 +1422,27 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 		rootFS = cs.root.FontSize
 	}
 	vw, vh := cs.r.media.viewport()
-	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh, dark: parent.DarkScheme}
+	// The effective zoom comes before every length (CSS Viewport 1, 4).
+	// f is the element's own factor: what it inherits, the parent's font
+	// size and line height its em, % and lh units measure, and the
+	// root's its rem and rlh units measure, grow by it from the zoom
+	// they hold.
+	zf := 1.0
+	if w, ok := winners[pZoom].(zoomSpec); ok {
+		zf = zoomFactor(w)
+	}
+	st.Zoom = effectiveZoom(parent.UsedZoom(), zf)
+	zoomed := st.Zoom != parent.UsedZoom()
+	f := st.Zoom / parent.UsedZoom()
+	toRoot := 1.0
+	if cs.root != nil {
+		toRoot = st.Zoom / cs.root.UsedZoom()
+		rootFS = float64(rootFS * toRoot)
+	}
+	if st.Zoom == 1 {
+		st.Zoom = 0
+	}
+	s.lc = lenCtx{fontSize: float64(parent.FontSize * f), rootFontSize: rootFS, width: vw, height: vh, dark: parent.DarkScheme, zoom: st.UsedZoom()}
 	s.lc.font = cs.fontUnits(parent, cs.parentLang)
 	s.lc.adjust = parent.FontSizeAdjust
 	s.lc.rootFont = cs.fontUnits(cs.root, cs.rootLang)
@@ -1431,13 +1452,13 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 	if cs.root != nil {
 		s.lc.verticalRoot = cs.root.WritingMode != HorizontalTB
 	}
-	s.lc.lineHeight = usedLineHeight(parent)
+	s.lc.lineHeight = float64(usedLineHeight(parent) * f)
 	if cs.containerUnits {
 		s.lc.cq = cs.containerUnitsOf(cs.node, cs.inPseudo)
 	}
 	s.lc.rootLineHeight = s.lc.lineHeight
 	if cs.root != nil {
-		s.lc.rootLineHeight = usedLineHeight(cs.root)
+		s.lc.rootLineHeight = float64(usedLineHeight(cs.root) * toRoot)
 	}
 	for _, id := range computeOrder {
 		def := &props[id]
@@ -1446,6 +1467,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 			switch {
 			case w == wideInherit, w == wideUnset && def.inherited:
 				def.copyFrom(st, parent)
+				if zoomed {
+					zoomInherited(id, st, f)
+				}
 				v = nil
 				if acceptedTry[id] && parent.Anchor != nil && len(parent.Anchor.Fallbacks) > 0 {
 					cs.inheritsTry = true
@@ -1459,6 +1483,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 		} else if v == nil {
 			if def.inherited {
 				def.copyFrom(st, parent)
+				if zoomed {
+					zoomInherited(id, st, f)
+				}
 			} else {
 				v = def.initial
 				if v == nil {

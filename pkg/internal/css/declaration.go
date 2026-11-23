@@ -155,7 +155,7 @@ var silentProperties = map[string]bool{
 	"scroll-behavior": true, "caret-color": true,
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
 	"scrollbar-gutter": true, "color-adjust": true,
-	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,
+	"text-rendering": true, "font-smooth": true, "speak": true,
 	// Chromium applies these to SVG text alone (baselineProps).
 	"alignment-baseline": true, "dominant-baseline": true, "baseline-shift": true,
 	// image-rendering picks a scaling filter (CSS Images 3, 5.4) and a PDF

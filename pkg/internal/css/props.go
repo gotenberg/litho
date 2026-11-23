@@ -303,6 +303,7 @@ const (
 	pPerspectiveOrigin
 	pTransformStyle
 	pBackfaceVisibility
+	pZoom
 	numProps
 )
 
@@ -1181,6 +1182,13 @@ func init() {
 	}
 	for id, def := range space3DProps() {
 		props[id] = def
+	}
+	// zoom (CSS Viewport 1, 4): the cascade computes the effective zoom
+	// before every length (computeInto), so the longhand's own compute
+	// does nothing more.
+	props[pZoom] = propDef{
+		name: "zoom", parse: parseZoom, compute: func(*styler, *Style, any) {},
+		copyFrom: field(func(s *Style) *float64 { return &s.Zoom }),
 	}
 	// field-sizing: fixed | content (CSS Form Control Styling 1, 7.1).
 	props[pFieldSizing] = enumProp("field-sizing", false, func(s *Style) *FieldSizing { return &s.FieldSizing }, map[string]FieldSizing{

@@ -261,7 +261,7 @@ func (e *engine) newFloatShape(f *box, so *css.ShapeOutside, cbw float64) *float
 		}
 		s.polys = [][]wrapPt{ring}
 	case so.Shape.Kind == css.ShapePath || so.Shape.Kind == css.ShapeShape:
-		s.polys = pathRings(shapePathData(so.Shape, ref.Width, ref.Height), ref)
+		s.polys = pathRings(shapePathData(so.Shape, ref.Width, ref.Height), ref, so.Shape.PathPixel())
 	default:
 		s.rect, s.radii = basicShapeRect(so.Shape, ref)
 	}
@@ -442,14 +442,14 @@ func ellipseOf(s *css.Shape, w, h float64) (float64, float64, float64, float64) 
 	return cx, cy, side(s.Radius[0], min(dx0, dx1), max(dx0, dx1), w), side(s.Radius[1], min(dy0, dy1), max(dy0, dy1), h)
 }
 
-// pathRings returns the subpaths of the path data d, in CSS pixels from
-// the top left of ref, as rings of points, curves flattened.
-func pathRings(d string, ref typeset.Rect) [][]wrapPt {
+// pathRings returns the subpaths of the path data d, in pixels of k
+// points from the top left of ref, as rings of points, curves flattened.
+func pathRings(d string, ref typeset.Rect, k float64) [][]wrapPt {
 	// A path cut short by an error keeps what it drew, as SVG 1.1, F.2
 	// asks.
 	ops, _ := svg.PathData(d)
 	return opsRings(ops, func(p typeset.Point) wrapPt {
-		return wrapPt{x: ref.X + float64(p.X*css.Pt), y: ref.Y + float64(p.Y*css.Pt)}
+		return wrapPt{x: ref.X + float64(p.X*k), y: ref.Y + float64(p.Y*k)}
 	})
 }
 

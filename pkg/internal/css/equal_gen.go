@@ -502,6 +502,9 @@ func equalStyle(a, b *Style) bool {
 	if a.MathDepth != b.MathDepth {
 		return false
 	}
+	if math.Float64bits(a.Zoom) != math.Float64bits(b.Zoom) {
+		return false
+	}
 	if !equalDimension(&a.LetterSpacing, &b.LetterSpacing) {
 		return false
 	}
@@ -1040,6 +1043,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.MathStyle))
 	h = mix(h, uint64(x.MathShift))
 	h = mix(h, uint64(x.MathDepth))
+	h = mix(h, math.Float64bits(x.Zoom))
 	h = hashDimension(h, &x.LetterSpacing)
 	h = hashDimension(h, &x.WordSpacing)
 	h = mix(h, uint64(x.WhiteSpace))

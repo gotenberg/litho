@@ -349,7 +349,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.float = st.Float
 		b.inline = b.float == css.FloatNone && isInlineLevel(st.Display)
 		if validPicture(n.Picture) {
-			b.picture = viewBoxPicture(n.Picture, st.ObjectViewBox)
+			b.picture = viewBoxPicture(zoomedPicture(n.Picture, st.UsedZoom()), st.ObjectViewBox)
 			if ctx.vertical && e.opts.BrowserRules && b.picture.view == nil {
 				b.turn = ctx.frame
 				b.picture = turnedPicture(b.picture)
@@ -752,7 +752,7 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		if m != nil && m.Style != nil {
 			st = m.Style
 		}
-		pic = e.picture(st.ListStyleImage, -1)
+		pic = zoomedPicture(e.picture(st.ListStyleImage, -1), st.UsedZoom())
 		label = MarkerText(st, ordinal)
 		alt = markerAlt(st, ordinal)
 	}

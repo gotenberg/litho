@@ -131,9 +131,10 @@ func offsetOps(m *css.MotionPath, r, f typeset.Rect, radii [4][2]float64) ([]typ
 	case s.Kind == css.ShapePath:
 		data, _ := svg.PathData(s.Path) // a path cut short by an error keeps what it drew, as SVG 1.1, F.2 asks
 		ops := make([]typeset.PathOp, 0, len(data))
+		k := s.PathPixel()
 		for _, op := range data {
 			for i := range op.P {
-				op.P[i] = typeset.Point{X: r.X + float64(op.P[i].X*css.Pt), Y: r.Y + float64(op.P[i].Y*css.Pt)}
+				op.P[i] = typeset.Point{X: r.X + float64(op.P[i].X*k), Y: r.Y + float64(op.P[i].Y*k)}
 			}
 			ops = append(ops, op)
 		}

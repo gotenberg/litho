@@ -238,6 +238,8 @@ func TestReplaced_Sizing(t *testing.T) {
 		{"max-width and max-height", []func(*css.Style){func(s *css.Style) {
 			s.MaxWidth, s.MaxHeight = css.Pts(px(30)), css.Pts(px(10))
 		}}, [2]float64{20, 10}},
+		// CSS Viewport 1, 4: zoom multiplies the natural size.
+		{"zoom", []func(*css.Style){func(s *css.Style) { s.Zoom = 2 }}, [2]float64{80, 40}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

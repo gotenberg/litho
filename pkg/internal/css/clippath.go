@@ -107,8 +107,11 @@ type Shape struct {
 	// points, 0 for sharp vertices (CSS Shapes 1, 3.1, polygon()).
 	Round float64
 	// Path is the SVG path data of a path, in pixels from the reference
-	// box's top left.
+	// box's top left; read its pixel's size with [Shape.PathPixel].
 	Path string
+	// zoom is the effective zoom of the element whose path it is, 0
+	// standing for 1.
+	zoom float64
 	// Commands are the commands of a shape(), the first a move to its
 	// from position.
 	Commands []ShapeCommand
@@ -414,9 +417,22 @@ func parsePathShape(args []token) (*shapeSpec, bool) {
 	return &shapeSpec{kind: ShapePath, evenOdd: evenOdd, path: parts[0][0].value}, true
 }
 
+// PathPixel returns the size in points of a pixel of a path() shape's
+// data: a CSS pixel times the element's effective zoom, which multiplies
+// the values inside a path() string too (CSS Viewport 1, 4).
+func (s *Shape) PathPixel() float64 {
+	if s.Kind == ShapePath && s.zoom > 0 {
+		return float64(Pt * s.zoom)
+	}
+	return Pt
+}
+
 // compute returns the computed shape of s.
 func (s *shapeSpec) compute(lc lenCtx) *Shape {
 	out := &Shape{Kind: s.kind, EvenOdd: s.evenOdd, Path: s.path, CenterSet: s.at}
+	if s.kind == ShapePath && lc.zoom > 0 && lc.zoom != 1 {
+		out.zoom = lc.zoom
+	}
 	for i := range 4 {
 		out.Inset[i] = s.inset[i].dim(lc, false)
 		out.Radii[i] = Radius{H: s.rh[i].dim(lc, true), V: s.rv[i].dim(lc, true)}
