@@ -280,6 +280,8 @@ Gotenberg's LibreOffice route saves an upload as `/tmp/<working folder>/<upload 
 
 PDF 1.7 is the plain conversion's version too. `v1.7` asks for it by name, so the default is held to its header and to the oracles as every other version is, and must match the base.
 
+A PDF/UA target (`ua1`, `ua2` and the two pairs) is remediated as a caller states what litho never writes on its own, a document's title and its language, so that it judges the tagging. The stage passes `pdf.WithLanguage("en")`, which the remediation writes only where the document states no valid language: every corpus is written in English but for the sources that state another language, and a converter takes a source's language from what most of its text states, so the rig's language reaches only a source whose text states none. When the remediation's report then lists the missing `dc:title` (ISO 14289-1, 7.1 test 9; ISO 14289-2, 8.11.1 test 1), the source states no title, and the target is converted again with the fixture's ID as its title, set through `Writer.SetMetadata` before the remediation. `ua_pass_stated` counts the fixtures that pass a PDF/UA target with the title or the language the rig stated (a report that lists the rig's language among its fixes): those pass only because the rig stated them.
+
 A target scores 1 on a fixture when all of this holds, else 0, and the reasons it failed land in the verdict's mismatch records:
 
 - it converts (a failure counts in `convert_error`, as a base that does not convert does, which scores every target 0), and the header declares the version the target implies;

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -211,6 +212,63 @@ func TestTargets_CatchesPlantedDefects(t *testing.T) {
 				if other != tc.target && !result(t, out, other).Pass {
 					t.Errorf("%s fails though nothing was planted there: %v", other, result(t, out, other).Reasons)
 				}
+			}
+		})
+	}
+}
+
+// TestTargets_StatesWhatTheSourceDoesNot checks what the cell states of a
+// source to its PDF/UA targets: the language always, which the remediation
+// writes only where the document states none, and the fixture's ID as the
+// title only when the report finds the document untitled; PDF/A and
+// version targets get neither. A source that states both passes on its own
+// and counts in no ua_pass_stated; one that states neither passes with
+// what the cell stated and counts there.
+func TestTargets_StatesWhatTheSourceDoesNot(t *testing.T) {
+	described := strings.Replace(targetsSource, `<img src`, `<img alt="A blue square" src`, 1)
+	for name, tc := range map[string]struct {
+		source string
+		titles []string
+		stated bool
+	}{
+		"stated by the source": {source: described, titles: []string{""}},
+		"stated by the cell": {
+			source: strings.NewReplacer(` lang="en"`, "", `<title>Targets</title>`, "").Replace(described),
+			titles: []string{"", "doc"},
+			stated: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newTestTargets(t)
+			var mu sync.Mutex
+			var titles []string
+			f.convert = func(ctx context.Context, src []byte, s htmlSettings, tg outputTarget) ([]byte, *models.RemediationReport, error) {
+				mu.Lock()
+				switch {
+				case tg.ID == "ua1":
+					titles = append(titles, tg.Title)
+					if tg.Lang != statedLanguage {
+						t.Errorf("ua1 converted with language %q, want %q", tg.Lang, statedLanguage)
+					}
+				case tg.Title != "" || tg.Lang != "":
+					t.Errorf("%q converted with title %q and language %q, want neither", tg.ID, tg.Title, tg.Lang)
+				}
+				mu.Unlock()
+				return convertTarget(ctx, src, s, tg)
+			}
+			dir := newTargetsSourceDir(t)
+			if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(tc.source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			v, out := runTargets(t, f, dir)
+			if r := result(t, out, "ua1"); !r.Pass || r.Stated != tc.stated {
+				t.Errorf("ua1: %+v, want a pass, stated %v", r, tc.stated)
+			}
+			if !slices.Equal(titles, tc.titles) {
+				t.Errorf("ua1 converted with titles %q, want %q", titles, tc.titles)
+			}
+			if got := v.Metrics[metricUAPassStated]; got != boolToInt(tc.stated) {
+				t.Errorf("%s = %d, want %d", metricUAPassStated, got, boolToInt(tc.stated))
 			}
 		})
 	}

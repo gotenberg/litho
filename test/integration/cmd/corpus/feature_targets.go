@@ -59,6 +59,11 @@ type outputTarget struct {
 	// 32000-1, written as 1.7; ISO 19005-4, 6.1.2 and ISO 14289-2, 6.1 for
 	// PDF 2.0).
 	Header string
+	// Title and Lang are what the cell states, as a caller would, of a
+	// source that states no title or no language: the title through
+	// [pdf.Writer.SetMetadata] before the remediation, the language
+	// through [pdf.WithLanguage], "" for none (see [targetsFeature.checkTarget]).
+	Title, Lang string
 }
 
 // options returns the conversion options of the target.
@@ -69,7 +74,8 @@ func (t outputTarget) options() []pdf.ConvertOption {
 	return []pdf.ConvertOption{pdf.WithConvertVersion(t.Version)}
 }
 
-// remediate remediates w to the target's profiles and returns the report.
+// remediate remediates w to the target's profiles, stating its Title and
+// Lang, and returns the report.
 func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 	var pdfa models.PDFAProfile
 	var pdfua models.PDFUAProfile
@@ -80,10 +86,16 @@ func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*models.Rem
 			pdfua = p.pdfua
 		}
 	}
-	if pdfa == "" {
-		return w.RemediatePDFUA(ctx, pdfua)
+	if t.Title != "" {
+		w.SetMetadata(models.Metadata{Title: t.Title})
 	}
 	var opts []pdf.RemediateOption
+	if t.Lang != "" {
+		opts = append(opts, pdf.WithLanguage(t.Lang))
+	}
+	if pdfa == "" {
+		return w.RemediatePDFUA(ctx, pdfua, opts...)
+	}
 	if pdfua != "" {
 		opts = append(opts, pdf.WithPDFUA(pdfua))
 	}
@@ -92,6 +104,49 @@ func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*models.Rem
 
 // versionOnly reports whether the target names a version and no profile.
 func (t outputTarget) versionOnly() bool { return len(t.Profiles) == 0 }
+
+// accessible reports whether the target names a PDF/UA profile.
+func (t outputTarget) accessible() bool {
+	for _, p := range t.Profiles {
+		if p.pdfua != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// statedLanguage is the language the cell states for a PDF/UA target of a
+// source that states none, in every corpus: its sources are written in
+// English but for the ones that state another language, and a converter
+// takes a source's language from what most of its text states (see
+// [pdf.WithDefaultLanguage]), so it reaches only a source whose text
+// states none at all.
+const statedLanguage = "en"
+
+// untitled reports whether a remediation report lists the dc:title a
+// PDF/UA file requires (ISO 14289-1, 7.1 test 9; ISO 14289-2, 8.11.1
+// test 1): the document states no title, and litho writes none of its
+// own.
+func untitled(report *models.RemediationReport) bool {
+	for _, v := range report.ResidualViolations() {
+		if (v.Specification == "ISO_14289_1" && v.Clause == "7.1" && v.TestNumber == 9) ||
+			(v.Specification == "ISO_14289_2" && v.Clause == "8.11.1" && v.TestNumber == 1) {
+			return true
+		}
+	}
+	return false
+}
+
+// languageStated reports whether the remediation wrote the language the
+// cell stated: the document states none of its own.
+func languageStated(report *models.RemediationReport) bool {
+	for _, fix := range report.Fixed {
+		if strings.Contains(fix, "catalog /Lang") && strings.HasSuffix(fix, `"`+statedLanguage+`"`) {
+			return true
+		}
+	}
+	return false
+}
 
 func pdfaProfile(p models.PDFAProfile, flavour string) outputProfile {
 	return outputProfile{pdfa: p, flavour: flavour}
@@ -160,6 +215,10 @@ const (
 	// metricOracleTargets counts the targets the oracles ran on, the
 	// sample's coverage.
 	metricOracleTargets = "oracle_targets"
+	// metricUAPassStated counts the fixtures that pass a PDF/UA target
+	// only with the title or the language the cell states for them:
+	// their source states none, and litho writes none of its own.
+	metricUAPassStated = "ua_pass_stated"
 )
 
 // targetsScoreTolerance is the drop a target's recorded score may take: the
@@ -402,6 +461,9 @@ type targetResult struct {
 	PopplerUnavailable bool `json:"poppler_unavailable,omitempty"`
 	StrictFailed       bool `json:"version_strict_failed,omitempty"`
 	PdfcpuUnavailable  bool `json:"pdfcpu_unavailable,omitempty"`
+	// Stated marks a PDF/UA target remediated with the title or the
+	// language the cell states.
+	Stated bool `json:"stated,omitempty"`
 
 	// litho holds, per veraPDF flavour of the target, litho's validator's
 	// verdict and the rules it fails, for the veraPDF comparison.
@@ -658,7 +720,7 @@ func (f *targetsFeature) prepareOne(ctx context.Context, fx Fixture, office bool
 			res.out.Error = err.Error()
 			return res
 		}
-		r := f.checkTarget(ctx, src, settings, t, base)
+		r := f.checkTarget(ctx, fx.ID, src, settings, t, base)
 		r.fixture = fx.ID
 		if sampled && !r.ConvertError {
 			if err := stageTarget(&r, staging, fmt.Sprintf("f%d-t%d", n, k)); err != nil {
@@ -680,9 +742,25 @@ type checkedTarget struct {
 }
 
 // checkTarget converts src to t and runs litho's checks against base.
-func (f *targetsFeature) checkTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarget, base *targetsDoc) checkedTarget {
+//
+// To a PDF/UA target it states what a caller states of a source that
+// states neither, so that the target judges the tagging: the language
+// [statedLanguage], which the remediation writes only where the document
+// states none, and, when the remediation then reports the document
+// untitled, the fixture's ID as its title, converting it again.
+func (f *targetsFeature) checkTarget(ctx context.Context, id string, src []byte, s htmlSettings, t outputTarget, base *targetsDoc) checkedTarget {
 	res := checkedTarget{targetResult: targetResult{ID: t.ID, Pass: true}}
+	if t.accessible() {
+		t.Lang = statedLanguage
+	}
 	data, report, err := f.convert(ctx, src, s, t)
+	if err == nil && report != nil && t.accessible() && untitled(report) {
+		t.Title = id
+		data, report, err = f.convert(ctx, src, s, t)
+	}
+	if err == nil && report != nil && t.accessible() {
+		res.Stated = t.Title != "" || languageStated(report)
+	}
 	if err != nil {
 		res.ConvertError = true
 		res.fail("conversion: %v", err)
@@ -823,7 +901,7 @@ func (f *targetsFeature) Compare(fixtureID string, output []byte) Verdict {
 	m := map[string]int{
 		metricConvertError: 0, metricReportDisagrees: 0, metricVeraPDFDisagrees: 0, metricVeraPDFUnavailable: 0,
 		metricRendererDisagrees: 0, metricPopplerUnavailable: 0, metricVersionStrictFailed: 0,
-		metricPdfcpuUnavailable: 0, metricOracleTargets: 0,
+		metricPdfcpuUnavailable: 0, metricOracleTargets: 0, metricUAPassStated: 0,
 	}
 	scores := make(map[string]float64, len(f.targets))
 	for _, t := range f.targets {
@@ -840,6 +918,9 @@ func (f *targetsFeature) Compare(fixtureID string, output []byte) Verdict {
 	for _, r := range out.Targets {
 		if _, known := scores[r.ID]; !known {
 			continue
+		}
+		if r.Pass && r.Stated {
+			m[metricUAPassStated] = 1
 		}
 		if r.Pass {
 			passed++
