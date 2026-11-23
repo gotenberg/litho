@@ -110,7 +110,8 @@ test/integration/
 │           ├── manifest.json   references: Microsoft's (OOXML) or LibreOffice's (ODF, CSV), built by corpus references into the testdata
 │           ├── documents.json  The documents fetched, by ID
 │           ├── files.sha256    Every fetched file, by LibreOffice core path and SHA-256
-│           └── FIXTURES.md     How the documents were chosen, the fonts
+│           ├── options/<id>/   A fetched document's expected text and the options.json naming it, by ID with / written __
+│           └── FIXTURES.md     How the documents were chosen, the fonts, the expected texts
 ├── fixture/                    Reads an html or Office source and its options.json (Go side)
 ├── testdata/fonts/             The Gotenberg image's fonts, the litho/text builder's, Ahem and the test fonts (gitignored)
 ├── testdata/wpt/               The fetched WPT files, with versions.json (gitignored)
@@ -368,7 +369,7 @@ A fixture that sets litho's own options and names no twin is converted by `targe
 
 A fixture that needs fonts no directory of the Gotenberg image holds names fixture font directories under `installedFonts` in its `options.json`: litho converts it with them, and `corpus references` converts it in a container that has them installed (see [Installed fonts](FEATURES.md#installed-fonts)). `go run ./test/integration/cmd/corpus fetch --corpus=fonts/<directory>` installs one such directory alone.
 
-A source whose reference engine writes the page's text wrong names, under `expectedText` in its `options.json`, a text file beside it holding the page's text in reading order, written by hand: `diff` then scores litho's text against that file and never reads the reference's (see [Expected text](FEATURES.md#expected-text)).
+A source whose reference engine writes the page's text wrong, or holds none where the page shows text, names, under `expectedText` in its `options.json`, a text file beside it holding the page's text in reading order, written by hand from the source: `diff` then scores litho's text against that file and never reads the reference's (see [Expected text](FEATURES.md#expected-text)). HTML, Markdown and Office sources take it alike, and the reference stays the one built without it. A document a corpus fetches names it in `options/<fixture ID with / written __>/` of the corpus's source directory, beside the lists.
 
 ## Manifest schema
 

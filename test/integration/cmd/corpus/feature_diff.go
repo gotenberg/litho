@@ -1068,8 +1068,8 @@ const uuidPattern = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // as "../" and its path below it, one beside that folder as "../../" and
 // its path, and the upload itself as a link inside the document, to its
 // first page: the reference links the document itself where its source
-// names a place in it LibreOffice cannot resolve, or the package itself
-// (".."). Any other link is returned as it is.
+// names a place in it LibreOffice cannot resolve. Any other link is
+// returned as it is.
 //
 // The rule does not reach a source link that climbs past the working
 // folder ("../../../x" names /tmp/x), one that names a file inside the
@@ -1092,7 +1092,8 @@ const uuidPattern = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 //   - libreoffice/ods sc/sheet_name_with_dots.ods: two links to
 //     "#'1.1.1.1'.C1" and "#'1.1.1.1'!C2", a sheet whose name holds dots,
 //     read file:///tmp/<working>/<upload folder>/<upload>.ods; litho/ods
-//     sheet-selection: a chart's xlink:href ".." reads the same.
+//     sheet-selection: "#Data.A1", a cell of a hidden sheet, reads the
+//     same.
 func statedLink(l diffLink) diffLink {
 	m := uploadLinkPattern.FindStringSubmatch(l.URI)
 	if m == nil {
