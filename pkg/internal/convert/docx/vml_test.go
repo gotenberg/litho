@@ -167,3 +167,19 @@ func TestVML_RotatedTextBox(t *testing.T) {
 		t.Errorf("unturned box writing mode %v, transform %+v, want its vertical flow and no turn", flat.Style.WritingMode, flat.Style.Transform)
 	}
 }
+
+// TestVML_LineFromItsEndPoints places a line positioned in the text at
+// the nearer of its end points (ECMA-376 Part 4, 14.1.2.12 from and to),
+// its box as large as the distance between them.
+func TestVML_LineFromItsEndPoints(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:pict><v:line style="position:absolute;margin-left:10pt" from="330pt,56pt" to="420pt,6pt" strokecolor="red"/></w:pict></w:r><w:r><w:t>x</w:t></w:r></w:p>`
+	lines := find(build(t, body, nil).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(lines) != 1 {
+		t.Fatalf("%d lines", len(lines))
+	}
+	st := lines[0].Style
+	if !near(st.Left, 340) || !near(st.Top, 6) || !near(st.Width, 90) || !near(st.Height, 50) {
+		t.Errorf("line at %v, %v, %v by %v; want 340, 6, 90 by 50", st.Left, st.Top, st.Width, st.Height)
+	}
+}

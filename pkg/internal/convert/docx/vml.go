@@ -123,9 +123,19 @@ func vmlRel(v string, vertical bool) string {
 }
 
 // vmlPlacement returns the placement of an absolutely positioned VML
-// shape: its margin-left and margin-top (with left and top) offsets, its
-// mso-position alignments and references, a negative z-index behind the
-// text, and its w10:wrap (none when absent: in front of the text).
+// shape: its margin-left and margin-top (with left and top) offsets, a
+// line's from the nearer of its end points (Part 4, 14.1.2.12 from and
+// to), its mso-position alignments and references, a negative z-index
+// behind the text, and its w10:wrap (none when absent: in front of the
+// text).
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-vml: Word prints a line from 330pt,6pt to
+//     420pt,56pt starting 330 pt right of the margin, 6 pt below its
+//     paragraph's top.
+//   - libreoffice/docx ooxmlimport/groupshape-line.docx: a line from
+//     75.3pt,9.6pt starts 75.3 pt right of the margin.
 func vmlPlacement(k *ooxml.Element, vs ooxml.VMLStyle, w, h float64) placement {
 	p := placement{w: w, h: h, wrap: "wrapNone"}
 	ml, _ := vs.Length("margin-left", pxPt)
@@ -133,6 +143,11 @@ func vmlPlacement(k *ooxml.Element, vs ooxml.VMLStyle, w, h float64) placement {
 	mt, _ := vs.Length("margin-top", pxPt)
 	t, _ := vs.Length("top", pxPt)
 	p.posH, p.posV = ml+l, mt+t
+	if k.Local == "line" {
+		x0, y0 := vmlPoint(attrOr(k, "from"))
+		x1, y1 := vmlPoint(attrOr(k, "to"))
+		p.posH, p.posV = p.posH+min(x0, x1), p.posV+min(y0, y1)
+	}
 	p.relH = vmlRel(vs["mso-position-horizontal-relative"], false)
 	p.relV = vmlRel(vs["mso-position-vertical-relative"], true)
 	if a := vs["mso-position-horizontal"]; a != "" && a != "absolute" {
