@@ -396,6 +396,9 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	if i, ok := axisIndex["primary-y"]; ok {
 		yAxis = i
 	}
+	if r.table != nil && xAxis >= 0 && c.Axes[xAxis].Format != "" {
+		r.table.numbered = true
+	}
 	var cats chart.Data
 	for _, ax := range pa.All(NSChart, "axis") {
 		if cat := ax.Child(NSChart, "categories"); cat != nil && ax.A(NSChart, "dimension") == "x" {

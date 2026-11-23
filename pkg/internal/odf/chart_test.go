@@ -398,3 +398,20 @@ func TestChartFromDocument_OwnTableAddresses(t *testing.T) {
 		t.Errorf("a range naming another table read the chart's: %+v", v.Values)
 	}
 }
+
+// TestChartFromDocument_NumericCategoriesTakeTheAxisFormat keeps numeric
+// categories numbers when the category axis states a number format, which
+// then writes them, and their cached text otherwise.
+func TestChartFromDocument_NumericCategoriesTakeTheAxisFormat(t *testing.T) {
+	styles := `<number:number-style style:name="N1"><number:number number:decimal-places="2" number:min-integer-digits="1" number:grouping="true"/></number:number-style>` +
+		`<style:style style:name="xa" style:family="chart" style:data-style-name="N1"><style:chart-properties chart:display-label="true"/></style:style>`
+	numeric := strings.Replace(chartContent(styles, "bar", "", `<chart:axis chart:dimension="x" chart:name="primary-x" chart:style-name="xa"/><chart:axis chart:dimension="y" chart:name="primary-y"/>`+series),
+		`office:value-type="string"><text:p>Q1</text:p>`, `office:value-type="float" office:value="41548"><text:p>41550</text:p>`, 1)
+	if v := readODFChart(t, numeric).Groups[0].Series[0].Categories.Values[0]; v.Kind != chart.Number || v.Number != 41548 {
+		t.Errorf("category under a formatted axis = %+v, want the number 41548", v)
+	}
+	plain := strings.Replace(numeric, ` chart:style-name="xa"`, "", 1)
+	if v := readODFChart(t, plain).Groups[0].Series[0].Categories.Values[0]; v.Kind != chart.Text || v.Text != "41550" {
+		t.Errorf("category under an unformatted axis = %+v, want the cached text 41550", v)
+	}
+}

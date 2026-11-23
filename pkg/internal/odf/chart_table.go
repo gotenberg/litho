@@ -28,6 +28,9 @@ type localTable struct {
 	// headerRows and firstData count the header rows and the header
 	// columns, the categories.
 	headerRows, firstData int
+	// numbered keeps the numeric categories numbers, which the category
+	// axis's number format then writes ([localTable.category]).
+	numbered bool
 }
 
 // readLocalTable reads a table:table, nil for none.
@@ -209,7 +212,11 @@ func (t *localTable) headers(row, col int, addr string) (string, chart.Data) {
 		cats := chart.Data{Cached: true}
 		if t.headerRows > 0 {
 			for j := col; j < col+cols && j < len(t.rows[0]); j++ {
-				cats.Values = append(cats.Values, chart.Str(t.rows[0][j].value.Text))
+				v := t.rows[0][j].value
+				if v.Kind != chart.Number {
+					v = chart.Str(v.Text)
+				}
+				cats.Values = append(cats.Values, t.category(v))
 			}
 		}
 		return name, cats
@@ -297,11 +304,30 @@ func (t *localTable) categories() chart.Data {
 	}
 	d := t.column(0)
 	for i, v := range d.Values {
-		if v.Kind == chart.Number && v.Text != "" {
-			d.Values[i] = chart.Str(v.Text)
-		}
+		d.Values[i] = t.category(v)
 	}
 	return d
+}
+
+// category returns the category label the cell value v makes: a number
+// as the text the table caches for it, unless the category axis states a
+// number format ([localTable.numbered]), which LibreOffice writes the
+// number in (ODF 1.3 Part 3, 19.15 style:data-style-name on the axis).
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/copy-merged-number-formats.ods caches its
+//     categories as 41550, 41580 and 41610 over the values 41548, 41579
+//     and 41609; its x axis names the date style "month, year", and
+//     LibreOffice labels them "Oct, 13", "Nov, 13" and "Dec, 13".
+func (t *localTable) category(v chart.Value) chart.Value {
+	switch {
+	case v.Kind == chart.Number && t.numbered:
+		return v
+	case v.Kind == chart.Number && v.Text != "":
+		return chart.Str(v.Text)
+	}
+	return v
 }
 
 // numberFormat translates the data style name (ODF 1.3 Part 3, 16.29)
