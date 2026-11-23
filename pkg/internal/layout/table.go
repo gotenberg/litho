@@ -249,6 +249,11 @@ func (e *engine) cellMeasure(td *tableData, c *box) (float64, float64) {
 	}
 	cd.min, cd.max = lo+edges, max(hi, lo)+edges
 	if w, ok := cellFixed(c); ok {
+		if c.node != nil && c.node.Quirks&QuirkyNowrap != 0 {
+			// The table cell nowrap minimum width calculation quirk
+			// (Quirks Mode Standard, 3.9).
+			cd.min = max(cd.min, w)
+		}
 		cd.max = max(cd.min, w)
 	}
 	return cd.min, cd.max

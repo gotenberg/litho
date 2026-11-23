@@ -664,10 +664,23 @@ func specHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
 		base = cb.quirk.h
 	}
 	h := resolve(d, base)
-	if b.st.BoxSizing == css.BorderBox {
+	if borderBoxHeight(b) {
 		h -= vEdges(b)
 	}
 	return max(h, 0), true
+}
+
+// borderBoxHeight reports whether the height properties of b size its
+// border box: its box-sizing is border-box, or it is a td or th cell of a
+// document in quirks mode (Quirks Mode Standard, 3.13).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays out a quirks
+//     mode td of height 50px and padding 10px with a 30 px content box,
+//     a 50 px one with <!DOCTYPE html>.
+func borderBoxHeight(b *box) bool {
+	return b.st.BoxSizing == css.BorderBox || b.tpart == partCell && b.node != nil && b.node.Quirks&QuirkyContainer != 0
 }
 
 // specMinHeight returns the used min-height d of b in cb: as
@@ -679,7 +692,7 @@ func specMinHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
 		return specHeight(b, d, cb)
 	}
 	h := resolve(d, 0)
-	if b.st.BoxSizing == css.BorderBox {
+	if borderBoxHeight(b) {
 		h -= vEdges(b)
 	}
 	return max(h, 0), true

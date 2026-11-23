@@ -1,6 +1,7 @@
 package html
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -144,6 +145,33 @@ func TestQuirksMode_MarksQuirkyMargins(t *testing.T) {
 			if got := byID(t, p.root, id).Quirks; got != w {
 				t.Errorf("quirks %v: #%s margin quirks %v, want %v", quirks, id, got, w)
 			}
+		}
+	}
+}
+
+// TestQuirksMode_TableCells sizes a td's border box by its height (Quirks
+// Mode Standard, 3.13) and makes the width of a td of a nowrap attribute a
+// minimum of its column (3.9) in quirks mode alone.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws a quirks
+//     mode td of height 50px and padding 10px 50 px tall, and a td nowrap
+//     width=200 in a table 1px wide 200 px wide; with <!DOCTYPE html> 70 px
+//     tall and as wide as its text.
+func TestQuirksMode_TableCells(t *testing.T) {
+	const body = `<style>@page { size: 400px 300px; margin: 0 } body { margin: 0 } .r { background: red } .g { background: lime }</style>` +
+		`<table cellspacing=0 cellpadding=0><tr><td class=r style="height: 50px; padding: 10px; width: 40px">x</td></tr></table>` +
+		`<table style="width: 1px" cellspacing=0 cellpadding=0><tr><td class=g nowrap width=200>a b c</td></tr></table>`
+	for _, quirks := range []bool{true, false} {
+		src := body
+		if !quirks {
+			src = "<!DOCTYPE html>" + body
+		}
+		got := pxBoxes(convertDoc(t, src, Options{PreferCSSPageSize: true}))[0]
+		cell, nowrap := strings.Split(got["r"], "x")[1], strings.Split(strings.Split(got["g"], "+")[1], "x")[0]
+		if quirks && (cell != "50" || nowrap != "200") || !quirks && (cell != "70" || nowrap == "200") {
+			t.Errorf("quirks %v: cell %s, nowrap cell %s", quirks, got["r"], got["g"])
 		}
 	}
 }

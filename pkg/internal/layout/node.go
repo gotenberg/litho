@@ -248,7 +248,9 @@ type Node struct {
 	// [QuirkyBottom] for a top or bottom margin of the user agent sheet
 	// that such a container drops at its content's start or end (HTML
 	// Standard, 15.3.3), [FillsViewport] for the html and body elements
-	// (Quirks Mode Standard, 3.6 and 3.7). Zero for every other node.
+	// (Quirks Mode Standard, 3.6 and 3.7), [QuirkyNowrap] for a cell of a
+	// nowrap attribute (3.9); a td or th also sizes its border box by its
+	// height (3.13). Zero for every other node.
 	Quirks Quirks
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
@@ -315,6 +317,9 @@ const (
 	// element's content box, less their margins, when their height is
 	// auto (Quirks Mode Standard, 3.6 and 3.7).
 	FillsViewport
+	// QuirkyNowrap makes the width of a td or th of a nowrap attribute a
+	// minimum of its column (Quirks Mode Standard, 3.9).
+	QuirkyNowrap
 )
 
 // Options parametrises one [Layout] call.

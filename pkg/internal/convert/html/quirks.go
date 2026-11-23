@@ -17,7 +17,9 @@ import (
 // the start or the end of their content; the top margin the user agent
 // sheet gives a p, pre, xmp, listing, plaintext, h1 to h6, ul, ol, dl,
 // menu, dir or blockquote is quirky, and the bottom one it gives a p, pre,
-// xmp, listing or plaintext. A margin an author sets is never quirky.
+// xmp, listing or plaintext. A margin an author sets is never quirky. A td
+// or th of a nowrap attribute and a width of a length other than zero takes
+// that width as its minimum (Quirks Mode Standard, 3.9).
 //
 // # Corpus evidence
 //
@@ -35,6 +37,9 @@ func quirksOf(n *dom.Node, st *css.Style) layout.Quirks {
 	switch n.DataAtom { //nolint:exhaustive // the other elements have no margin quirk
 	case atom.Td, atom.Th:
 		q = layout.QuirkyContainer
+		if _, ok := attr(n, "nowrap"); ok && st.Width.Kind == css.Points && st.Width.Value != 0 {
+			q |= layout.QuirkyNowrap
+		}
 	case atom.Html:
 		if n.Parent != nil && n.Parent.Type == dom.DocumentNode {
 			q = layout.FillsViewport
