@@ -3,6 +3,7 @@ package sheet
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
@@ -65,5 +66,33 @@ func TestConvert_OverflowPages(t *testing.T) {
 	}
 	if rs := runs(out.Pages[1]); len(rs) == 0 {
 		t.Error("the second page shows no text")
+	}
+}
+
+// TestConvert_ExcelShowsTheFirst1024Characters locks Excel's cut of a
+// cell's text that does not wrap to its first 1,024 characters, whose
+// overflow decides the pages printed; Calc keeps the whole text.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/cell-value.xlsx prints the first 1,024 of the
+//     2,507 characters of its C3 on 11 pages.
+func TestConvert_ExcelShowsTheFirst1024Characters(t *testing.T) {
+	long := strings.Repeat("abcdefghij ", 200)
+	for _, excel := range []bool{true, false} {
+		doc := newDoc(&Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, long, nil)}}}})
+		doc.ExcelRules = excel
+		out := convert(t, doc, office.Options{})
+		want := len(long)
+		if excel {
+			want = 1024
+		}
+		got := 0
+		for _, r := range runs(out.Pages[0]) {
+			got = max(got, utf8.RuneCountInString(r.text))
+		}
+		if got != want {
+			t.Errorf("excel %v: %d characters written, want %d", excel, got, want)
+		}
 	}
 }

@@ -21,6 +21,40 @@ import (
 // crosses a few dozen columns at most.
 const maxOverflowScan = 256
 
+// excelShownText is the most characters Excel shows of a cell's text
+// ("Excel specifications and limits": a cell holds 32,767 characters,
+// 1,024 of which display in the cell). Only a line that does not wrap is
+// cut: Excel's print of a wrapped one was not measured.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/cell-value.xlsx prints the first 1,024 of the
+//     2,507 characters of its unwrapped C3, overflowing empty columns on
+//     11 pages.
+const excelShownText = 1024
+
+// cutText returns the first n characters of text and of its runs.
+func cutText(text string, runs []Run, n int) (string, []Run) {
+	text = string([]rune(text)[:n])
+	if len(runs) == 0 {
+		return text, nil
+	}
+	var out []Run
+	left := n
+	for _, r := range runs {
+		if left <= 0 {
+			break
+		}
+		rs := []rune(r.Text)
+		if len(rs) > left {
+			rs = rs[:left]
+		}
+		left -= len(rs)
+		out = append(out, Run{Text: string(rs), Font: r.Font})
+	}
+	return text, out
+}
+
 // maxCellText caps the characters of a cell drawn. Anti-DoS guard, not
 // spec-mandated: Excel stops at 32,767 characters a cell.
 const maxCellText = 32767
@@ -229,6 +263,9 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 	if utf8.RuneCountInString(d.text) > maxCellText {
 		d.text = string([]rune(d.text)[:maxCellText])
 		d.runs = nil
+	}
+	if b.doc.ExcelRules && !d.value && !d.wrap && utf8.RuneCountInString(d.text) > excelShownText {
+		d.text, d.runs = cutText(d.text, d.runs, excelShownText)
 	}
 	if d.hAlign == HGeneral {
 		// Calc aligns values, booleans and errors included, right and text

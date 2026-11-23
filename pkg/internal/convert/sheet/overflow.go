@@ -44,14 +44,15 @@ func (b *builder) textNeed(g *grid) func(r, c int, cell *Cell) float64 {
 //
 // # Corpus evidence
 //
-//   - libreoffice/xlsx: sc/cell-value.xlsx, a 10,987-point text in D3 of 64.8-point
-//     columns on A4 at 7 columns a page, prints 8 pages, its print range
-//     ending 3,122 points past the text's start: 91,555 pixels at 600 dpi
-//     wrapped to 26,019.
+//   - libreoffice/xlsx: LibreOffice prints sc/cell-value.xlsx, a
+//     10,987-point text in D3 of 64.8-point columns on A4 at 7 columns a
+//     page, on 8 pages, its print range ending 3,122 points past the
+//     text's start: 91,555 pixels at 600 dpi wrapped to 26,019.
 const textWidthDPI = 600
 
 // textWidthCache returns the width w in points as Calc's cache of text
-// widths keeps it: in whole pixels at textWidthDPI, modulo 2^16.
+// widths keeps it: in whole pixels at textWidthDPI, modulo 2^16. Excel's
+// print range takes the width as it is.
 func textWidthCache(w float64) float64 {
 	px := int64(w * textWidthDPI / 72)
 	return float64(px&0xffff) * 72 / textWidthDPI
@@ -81,7 +82,11 @@ func (g *grid) overflowEnd(r, c int, cell *Cell) int {
 // reach measures how far the text of the cell at (r, c) overflows, as
 // overflowEnd says.
 func (g *grid) reach(r, c int, cell *Cell) int {
-	missing := textWidthCache(g.need(r, c, cell)) - g.colWidth(c)
+	need := g.need(r, c, cell)
+	if !g.doc.ExcelRules {
+		need = textWidthCache(need)
+	}
+	missing := need - g.colWidth(c)
 	if missing <= epsilon {
 		return c
 	}
