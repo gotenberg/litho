@@ -178,6 +178,15 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 // [WithMediaType]. No script runs: a document that holds one a browser
 // would run reports [models.WarningScriptNotRun].
 //
+// The document's DOCTYPE sets its mode as it does in a browser (HTML
+// Standard, 13.2.6.4.1): <!DOCTYPE html> lays it out in no-quirks mode;
+// a document without a DOCTYPE, an HTML fragment among them, or with an
+// old one, is laid out in quirks mode, with the quirks a printed page
+// shows (Quirks Mode Standard); the transitional and frameset DOCTYPEs
+// of HTML 4.01 with a system identifier and of XHTML 1.0 give the
+// limited-quirks mode. Bands and a frame's srcdoc document are always in
+// no-quirks mode.
+//
 //   - Layout covers the visual formatting model of CSS 2.1, flexbox, grid
 //     without subgrid, multi-column layout, positioning, transforms,
 //     generated content and counters, and bidirectional and CJK text.
