@@ -73,6 +73,9 @@ type builder struct {
 	// linkAnchors holds the anchor of the drawings of a draw:a that state
 	// none of their own: the link's ([builder.inlineFrame]).
 	linkAnchors map[*odf.Element]string
+	// cellStyle names the style of the table cell whose content is being
+	// built, "" outside a cell ([builder.cellLayers]).
+	cellStyle string
 	// boxed counts the table cells, text boxes and notes being built, in
 	// which a paragraph's frames keep floating.
 	boxed int
@@ -465,6 +468,9 @@ func (b *builder) paraStyleName(el *odf.Element) string {
 // paraText returns the text properties of the paragraph style name.
 func (b *builder) paraText(name string) textState {
 	t := b.foldText(newTextState(b.pkg.Flat), b.styles.Default(odf.FamilyParagraph, odf.TextProps), percentIgnored)
+	for _, l := range b.cellLayers(name, odf.TextProps) {
+		t = b.foldText(t, l, percentIgnored)
+	}
 	t.base = [3]float64{t.size, t.scripts[0].size, t.scripts[1].size}
 	for _, st := range b.styles.Chain(b.scope, odf.FamilyParagraph, name) {
 		t = b.foldText(t, st.Props(odf.TextProps), stylePercent(st))
@@ -475,11 +481,60 @@ func (b *builder) paraText(name string) textState {
 	return t
 }
 
+// cellLayers returns the property elements of kind, text or paragraph
+// properties, of the style of the table cell being built, in merge
+// order, for a paragraph of the style name in it: Writer sets a cell's
+// text and paragraph properties (ODF 1.3 Part 3, 16.4) on the paragraphs
+// of the cell whose common style is the default one, Standard, or none,
+// below their automatic style; a paragraph of another common style takes
+// none of them. Nil outside a cell.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/fdo60842.odt sets Liberation Sans 12 on
+//     cell styles; LibreOffice prints the unstyled paragraphs of the
+//     cells in it.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a cell style of
+//     Liberation Sans bold 8 pt, aligned to the end, prints an unstyled
+//     paragraph so, one of an automatic style of 20 pt in Liberation Sans
+//     bold 20 pt, a run of italic in Liberation Sans bold italic, and a
+//     paragraph of a common style of 20 pt Liberation Serif, aligned to
+//     the start, in Liberation Serif regular 20 pt at the start.
+func (b *builder) cellLayers(name, kind string) []odf.Props {
+	if b.cellStyle == "" {
+		return nil
+	}
+	common := name
+	if st := b.styles.Style(b.scope, odf.FamilyParagraph, name); st != nil && st.Auto {
+		common = st.Parent
+	}
+	if common != "" && common != "Standard" {
+		return nil
+	}
+	var out []odf.Props
+	for _, st := range b.styles.Chain(b.scope, odf.FamilyCell, b.cellStyle) {
+		if p := st.Props(kind); !p.Empty() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // paraProps returns the paragraph properties of the paragraph style name.
 func (b *builder) paraProps(name string) paraState {
 	p := paraState{joinBorder: true}
-	for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.ParagraphProps) {
-		p = foldPara(p, l)
+	if cell := b.cellLayers(name, odf.ParagraphProps); len(cell) > 0 {
+		p = foldPara(p, b.styles.Default(odf.FamilyParagraph, odf.ParagraphProps))
+		for _, l := range cell {
+			p = foldPara(p, l)
+		}
+		for _, st := range b.styles.Chain(b.scope, odf.FamilyParagraph, name) {
+			p = foldPara(p, st.Props(odf.ParagraphProps))
+		}
+	} else {
+		for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.ParagraphProps) {
+			p = foldPara(p, l)
+		}
 	}
 	for _, l := range b.builtinLayers(name, odf.ParagraphProps) {
 		p = foldPara(p, l)

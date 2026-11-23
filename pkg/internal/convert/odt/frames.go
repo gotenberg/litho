@@ -1271,7 +1271,10 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	}
 	restore := b.comments.apart()
 	b.boxed++
+	cell := b.cellStyle
+	b.cellStyle = ""
 	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
+	b.cellStyle = cell
 	b.boxed--
 	restore()
 	return n

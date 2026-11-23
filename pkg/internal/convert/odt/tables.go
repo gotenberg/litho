@@ -289,7 +289,10 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 		content = valueParagraph(c, text)
 	}
 	b.boxed++
+	saved := b.cellStyle
+	b.cellStyle = c.A(odf.NSTable, "style-name")
 	n.Children = b.wrapLists(b.blocks(content, tb.ctx), 0)
+	b.cellStyle = saved
 	b.boxed--
 	return n
 }

@@ -91,7 +91,10 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	b.hf = nil
 	restore := b.comments.apart()
 	b.boxed++
+	cell := b.cellStyle
+	b.cellStyle = ""
 	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
+	b.cellStyle = cell
 	b.boxed--
 	restore()
 	b.hf = saved
