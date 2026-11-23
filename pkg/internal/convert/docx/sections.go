@@ -42,15 +42,23 @@ type section struct {
 	// shares its pages.
 	name string
 	// id anchors the section's first block, to find its first page.
-	id               string
-	width, height    float64
-	margin           [4]float64
-	header, footer   float64
-	gutter           float64
-	cols             int
-	colSpace         float64
-	colSep           bool
-	colTracks        []columnTrack
+	id             string
+	width, height  float64
+	margin         [4]float64
+	header, footer float64
+	gutter         float64
+	cols           int
+	colSpace       float64
+	colSep         bool
+	colTracks      []columnTrack
+	// colWidth is the width of the one column a list of columns of
+	// different widths gives, in points, 0 for none.
+	colWidth float64
+	// inset is how far inside the text area of the pages it shares the
+	// section's own text area lies, left and right, in points: the
+	// difference of its side margins and those of the section whose pages
+	// it continues on.
+	inset            [2]float64
 	breakType        string
 	pageStart        *int
 	pageFormat       string
@@ -174,6 +182,9 @@ func (s *section) readColumns(c *ooxml.Element) {
 		if len(s.colTracks) > 1 {
 			s.cols = len(s.colTracks)
 		} else {
+			if len(s.colTracks) == 1 {
+				s.colWidth = s.colTracks[0].w
+			}
 			s.colTracks = nil
 		}
 	}
@@ -302,12 +313,37 @@ func (s *section) applyOptions(opts office.Options) {
 
 // samePage reports two sections whose pages have the same size and
 // orientation, so that a continuous break between them keeps the page
-// (17.18.77 ST_SectionMark continuous). The later section's margins,
-// gutter, headers and footers are not applied: the page and the pages
-// that follow keep the earlier section's setup, as LibreOffice lays a
-// DOCX document out.
+// (17.18.77 ST_SectionMark continuous). The page and the pages that
+// follow keep the earlier section's top and bottom margins, headers and
+// footers; the later section's text keeps its own side margins
+// ([sideInset]).
 func samePage(a, b *section) bool {
 	return a.width == b.width && a.height == b.height
+}
+
+// sideInset returns how far inside the text area of the pages of owner
+// the text area of the section s, which continues on them, lies on the
+// left and on the right: Word lays a continuous section's text out
+// between its own side margins on the page it shares (ECMA-376 Part 1,
+// 17.6.22 type continuous, 17.6.11 pgMar), at most as wide as the width
+// its single column states (17.6.3 col). Insets that would leave less
+// than [minPageArea] are none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo52208.docx: Word sets the text of a
+//     continuous section of side margins 1680 after one of 1460 and 1420
+//     at 84 points from the page's left edge, and breaks its lines at the
+//     100 points of its one w:col of w 2000.
+func sideInset(owner, s *section) [2]float64 {
+	in := [2]float64{
+		s.margin[css.Left] + s.gutter - owner.margin[css.Left] - owner.gutter,
+		s.margin[css.Right] - owner.margin[css.Right],
+	}
+	if owner.contentWidth()-in[0]-in[1] < minPageArea {
+		return [2]float64{}
+	}
+	return in
 }
 
 // pageFrame reads a w:pgBorders (17.6.10) into a page frame: inset by
@@ -486,6 +522,9 @@ func (d *document) body(root *ooxml.Element) []*section {
 				break
 			}
 		}
+		if owner != s && s.breakType == "continuous" {
+			s.inset = sideInset(owner, s)
+		}
 		// The drawings take the page of the section whose pages s
 		// shares, and the columns of s.
 		geo := *owner
@@ -533,6 +572,12 @@ func emptyParagraph(p *ooxml.Element) bool {
 func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	st := d.blockStyle()
 	st.Page = s.name
+	st.Margin[css.Left], st.Margin[css.Right] = css.Pts(s.inset[0]), css.Pts(s.inset[1])
+	if s.cols <= 1 && s.colWidth > 0 {
+		// A list of columns of different widths that holds one column
+		// sets the text's width (17.6.3 col).
+		st.MaxWidth = css.Pts(s.colWidth)
+	}
 	if s.cols > 1 {
 		st.Columns.Count = s.cols
 		st.ColumnGap = css.Pts(s.colSpace)

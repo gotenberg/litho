@@ -432,3 +432,29 @@ func TestSections_VerticalAlign(t *testing.T) {
 		}
 	}
 }
+
+// TestSections_ContinuousSideMargins lays a continuous section's text out
+// between its own side margins on the page it shares with the section
+// before, at most as wide as its single column states (ECMA-376 Part 1,
+// 17.6.22, 17.6.11, 17.6.3), where the page keeps the earlier section's
+// setup.
+func TestSections_ContinuousSideMargins(t *testing.T) {
+	t.Parallel()
+	first := `<w:p><w:pPr><w:sectPr><w:pgMar w:left="1440" w:right="1440" w:top="1440" w:bottom="1440"/></w:sectPr></w:pPr></w:p>`
+	last := `<w:p><w:r><w:t>second</w:t></w:r></w:p><w:sectPr><w:type w:val="continuous"/>` +
+		`<w:pgMar w:left="2440" w:right="1940" w:top="1440" w:bottom="1440"/><w:cols w:equalWidth="0"><w:col w:w="2000"/></w:cols></w:sectPr>`
+	b := build(t, first+last, nil)
+	if len(b.secs) != 2 || b.secs[1].name != b.secs[0].name {
+		t.Fatalf("sections %d, want the second on the first's pages", len(b.secs))
+	}
+	if got := b.secs[1].inset; got != [2]float64{50, 25} {
+		t.Errorf("inset %v, want 50 and 25 points", got)
+	}
+	st := b.d.sectionNode(b.secs[1], nil).Style
+	if st.Margin[css.Left] != css.Pts(50) || st.Margin[css.Right] != css.Pts(25) || st.MaxWidth != css.Pts(100) {
+		t.Errorf("section block margins %v %v, max width %v, want 50, 25 and 100 points", st.Margin[css.Left], st.Margin[css.Right], st.MaxWidth)
+	}
+	if b.secs[0].inset != [2]float64{} {
+		t.Errorf("first section inset %v", b.secs[0].inset)
+	}
+}
