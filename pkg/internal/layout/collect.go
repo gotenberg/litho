@@ -614,17 +614,21 @@ func (c *collector) trimSpace() {
 // transform applies text-transform t in language lang to s; prev is the
 // character before s, for capitalize, and is updated.
 func transform(s string, t css.TextTransform, lang string, prev *rune) string {
-	tag := language.Und
-	if lang != "" {
-		if tg, err := language.Parse(lang); err == nil {
-			tag = tg
+	// The language only changes how a case mapping maps: the tag is read
+	// for those alone, a parse costing allocations every run would pay.
+	tag := func() language.Tag {
+		if lang != "" {
+			if tg, err := language.Parse(lang); err == nil {
+				return tg
+			}
 		}
+		return language.Und
 	}
 	switch t {
 	case css.Uppercase:
-		s = cases.Upper(tag).String(s)
+		s = cases.Upper(tag()).String(s)
 	case css.Lowercase:
-		s = cases.Lower(tag).String(s)
+		s = cases.Lower(tag()).String(s)
 	case css.TransformNone:
 	case css.MathAuto:
 		// A text of one character found in the italic mappings is drawn as
