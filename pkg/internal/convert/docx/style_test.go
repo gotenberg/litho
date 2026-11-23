@@ -75,7 +75,7 @@ func TestRunProperties(t *testing.T) {
 			return s.TextTransform == css.Uppercase && s.BackgroundColor == css.Color{R: 1, G: 1, A: 1}
 		}},
 		{"small", func(s *css.Style) bool {
-			return s.FontVariant == css.SmallCaps && s.LetterSpacing == css.Pts(2) && s.TextScale == 1.5
+			return s.FontVariant == css.SmallCaps && s.WordSmallCaps && s.LetterSpacing == css.Pts(2) && s.TextScale == 1.5
 		}},
 		{"sup", func(s *css.Style) bool {
 			return s.VerticalAlign.Kind == css.AlignLength && s.VerticalAlign.Length.Value > 0 && s.FontSize < 10

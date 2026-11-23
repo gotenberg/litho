@@ -321,6 +321,11 @@ type Office struct {
 	// (ECMA-376 Part 1, 20.4.2.8 inline): a text box among them, where
 	// CSS takes the baseline of its last line (CSS 2.1, 10.8.1).
 	BaselineAtBottom bool
+	// WordSmallCaps draws the synthesised small capitals of the inline box
+	// that sets it at 0.8 of its font size rounded to the nearest half
+	// point, as Word draws the lowercase letters of a smallCaps run
+	// (ECMA-376 Part 1, 17.3.2.33), where CSS draws them at 0.7 em.
+	WordSmallCaps bool
 	// TextEffects are the effects drawn around the glyphs of the inline
 	// box that sets it, nil for none: the glow, shadow and reflection of
 	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,

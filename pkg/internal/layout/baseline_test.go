@@ -96,3 +96,19 @@ func TestBaseline_AtBottom(t *testing.T) {
 		}
 	}
 }
+
+// TestSmallCapsSize draws synthesised small capitals at 0.7 em, and at
+// 0.8 of the size rounded to the half point under
+// css.Office.WordSmallCaps, as Word draws them.
+func TestSmallCapsSize(t *testing.T) {
+	word := &css.Style{}
+	word.WordSmallCaps = true
+	for _, tc := range []struct {
+		st         *css.Style
+		size, want float64
+	}{{&css.Style{}, 20, 14}, {word, 20, 16}, {word, 11, 9}, {word, 12, 9.5}} {
+		if got := smallCapsSize(tc.st, tc.size); !near(got, tc.want) {
+			t.Errorf("WordSmallCaps %v at %v: %v, want %v", tc.st.WordSmallCaps, tc.size, got, tc.want)
+		}
+	}
+}

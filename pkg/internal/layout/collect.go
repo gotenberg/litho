@@ -2,6 +2,7 @@ package layout
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"unicode"
@@ -416,7 +417,7 @@ func (c *collector) text(k *box) {
 		for _, pc := range smallCaps(str, plan) {
 			st := style
 			if pc.small {
-				st.Size *= smallCapsScale
+				st.Size = smallCapsSize(k.st, st.Size)
 			}
 			if pc.features != nil {
 				fs := text.FontSettings{}
@@ -493,6 +494,27 @@ func (c *collector) text(k *box) {
 // fraction of the font size: Chromium's kSmallCapsFontSizeMultiplier, the
 // 0.7 em browsers use for a face without small capitals.
 const smallCapsScale = 0.7
+
+// wordSmallCapsScale is the size Word draws the lowercase letters of a
+// small capitals run at, a fraction of the font size, rounded to the
+// nearest half point (css.Office.WordSmallCaps).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf136588.docx: Word draws the small
+//     capitals of a 20-point Arial run at 16 points.
+//   - litho/docx run-effects: Word draws those of an 11-point Calibri run
+//     at 9 points, 0.8 of 11 rounded to the half point.
+const wordSmallCapsScale = 0.8
+
+// smallCapsSize returns the size the synthesised small capitals of a
+// box styled st, at size points, are drawn at.
+func smallCapsSize(st *css.Style, size float64) float64 {
+	if st.WordSmallCaps {
+		return math.Round(float64(size*wordSmallCapsScale)*2) / 2
+	}
+	return size * smallCapsScale
+}
 
 // visibleControl returns the visible glyph a control character other than
 // tab, line feed, carriage return and form feed draws as (CSS Text 3, 4.1:

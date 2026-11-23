@@ -194,6 +194,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	st.FontVariant = css.VariantNormal
 	if boolOf(r.smallCaps) && !boolOf(r.caps) {
 		st.FontVariant = css.SmallCaps
+		st.WordSmallCaps = true
 	}
 	st.FontVariantLigatures = runLigatures
 	st.LetterSpacing = css.Dimension{Kind: css.Normal}
