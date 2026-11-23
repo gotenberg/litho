@@ -165,6 +165,13 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		// 14.9.4): a node without a role takes a Span to carry it.
 		role = "Span"
 	}
+	if role == "" && n.Lang != "" && !strings.EqualFold(n.Lang, ctx.lang) && b != nil && (b.kind == kindInline || b.kind == kindText) {
+		// So is a language: an inline node in a language other than the
+		// text around it takes a Span stating it (ISO 32000-1, 14.9.2.2),
+		// or the structure would not say what language its text is in
+		// (ISO 14289-1, 7.2).
+		role = "Span"
+	}
 	if ctx.form {
 		// What a form control shows, a button's content, hangs from its
 		// Form element, which ISO/TS 32005, Table 5 lets hold no

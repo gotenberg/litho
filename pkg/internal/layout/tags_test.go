@@ -298,3 +298,22 @@ func TestTags_BlocksLeaveParagraphs(t *testing.T) {
 		}
 	}
 }
+
+// TestTags_LanguageOfARun locks that an inline node in a language other
+// than the text around it takes a Span stating it (ISO 32000-1, 14.9.2.2;
+// ISO 14289-1, 7.2), and one in the language around it takes none: a
+// presentation's runs each state their language, which the structure
+// would otherwise lose.
+func TestTags_LanguageOfARun(t *testing.T) {
+	in := inlineSty()
+	lang := func(l, s string) *Node { n := el(in, txt(in, s)); n.Lang = l; return n }
+	root := el(sty(), role("P", el(sty(), lang("fr", "bonjour "), lang("EN", "hello "), txt(in, "plain"))))
+	root.Role, root.Lang = "Document", "en"
+	res := run(t, root, page(400, 100))
+	if got := shape(res, res.Structure); got != "Document[P[Span# Span#]]" {
+		t.Fatalf("structure %s, want the French run in a Span and the rest in their P", got)
+	}
+	if sp := res.Structure.Kids[0].Kids[0]; sp.Role != "Span" || sp.Lang != "fr" {
+		t.Errorf("first kid %+v, want a Span stating fr", sp)
+	}
+}
