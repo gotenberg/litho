@@ -96,3 +96,49 @@ func TestConvert_DrawingLinks(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_ShapeTextOnThePagesItShows locks that a shape cut by a page
+// break writes on each page only the text that shows there: a run under a
+// clip that ends before the break is written on the first page alone, a
+// run at the shape's foot on the second alone. A run the page's clip
+// hides draws nothing, and a reader of that page must not find it.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx spreadsheet/56514.xlsx: a text box crossing the right edge
+//     of page 1 wrote its last letter, "t", on page 2 outside the cells
+//     the page shows; Excel's page 2 holds no text.
+//   - litho/xlsx groups_connectors: the "A" and "End" of shapes on page 1
+//     were written again on page 2, where Excel writes "B" and "Grouped
+//     shapes" alone.
+func TestConvert_ShapeTextOnThePagesItShows(t *testing.T) {
+	run := func(s string, x, y float64) *typeset.Text {
+		tx := &typeset.Text{Size: 12, Color: typeset.Black, Origin: typeset.Point{X: x, Y: y}}
+		for i, r := range s {
+			tx.Glyphs = append(tx.Glyphs, typeset.Glyph{GID: 1, X: float64(i) * 6, Text: string(r)})
+		}
+		return tx
+	}
+	pic := &layout.Picture{Width: 1, Height: 1, Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		return []typeset.Fragment{
+			&typeset.Group{
+				Transform: typeset.Identity, Opacity: 1,
+				Clip:    &typeset.Path{Ops: rectOps(r.X, r.Y, r.Width, 100), Fill: &typeset.Fill{}},
+				Content: []typeset.Fragment{run("Head", r.X+10, r.Y+50)},
+			},
+			run("Foot", r.X+10, r.Y+r.Height-20),
+		}
+	}}
+	sh := &Sheet{Name: "S", Drawings: []Drawing{{
+		From: Anchor{}, Width: 300, Height: 1200, Name: "Box", Alt: "Box", Picture: pic, Shape: true,
+	}}}
+	out := convert(t, excelDoc(sh), office.Options{})
+	if len(out.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(out.Pages))
+	}
+	for i, want := range [][]string{{"Head"}, {"Foot"}} {
+		if got := texts(out.Pages[i]); !slices.Equal(got, want) {
+			t.Errorf("page %d: text %q, want %q", i+1, got, want)
+		}
+	}
+}
