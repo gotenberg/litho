@@ -186,6 +186,15 @@ func (s *Shadows) Children(n *html.Node) iter.Seq[*html.Node] {
 	}
 }
 
+// treeScope returns the shadow root of the tree n is in, nil for the
+// document's.
+func treeScope(n *html.Node) *html.Node {
+	if r := treeRoot(n); isShadowRoot(r) {
+		return r
+	}
+	return nil
+}
+
 // treeRoot returns the root of n's node tree: the document node, a shadow
 // root, or the top of a detached subtree.
 func treeRoot(n *html.Node) *html.Node {

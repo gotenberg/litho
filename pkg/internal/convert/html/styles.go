@@ -34,8 +34,9 @@ type collector struct {
 // stylesheets returns the sheets of the cascade in order (CSS Cascade 4,
 // 6.2): the user agent stylesheet, the user stylesheets user in the order
 // given, then the author's <style> and <link rel=stylesheet> elements in
-// document order (HTML Standard, 4.2.6 and 4.6.7.18).
-func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom.Node) []css.Sheet {
+// document order (HTML Standard, 4.2.6 and 4.6.7.18), then those of each
+// shadow tree of shadows, scoped to it (CSS Scoping 1, 3.1).
+func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom.Node, shadows []treeSheets) []css.Sheet {
 	sheets := []css.Sheet{{Sheet: css.HTMLUserAgent(), Origin: css.UserAgent}}
 	for i, body := range user {
 		if ctx.Err() != nil {
@@ -57,6 +58,22 @@ func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom
 		}
 		if s != nil {
 			sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author})
+		}
+	}
+	for _, ts := range shadows {
+		for _, n := range ts.sheets {
+			if ctx.Err() != nil {
+				return sheets
+			}
+			var s *css.Stylesheet
+			if n.DataAtom == atom.Style {
+				s = c.styleElement(ctx, n)
+			} else {
+				s = c.linkElement(ctx, n)
+			}
+			if s != nil {
+				sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author, Scope: ts.root})
+			}
 		}
 	}
 	return sheets

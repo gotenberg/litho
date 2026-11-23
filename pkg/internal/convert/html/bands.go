@@ -296,7 +296,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	// A band is a document of its own, in no-quirks mode.
 	quirks := env.c.quirks
 	env.c.quirks = false
-	sheets = append(sheets, env.c.stylesheets(ctx, nil, sc.sheets)[1:]...)
+	sheets = append(sheets, env.c.stylesheets(ctx, nil, sc.sheets, nil)[1:]...)
 	env.c.quirks = quirks
 	if b.CSS != "" {
 		if sh := env.c.bandSheet(ctx, n, b.CSS); sh != nil {

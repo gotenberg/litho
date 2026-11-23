@@ -33,6 +33,11 @@ const (
 type Sheet struct {
 	Sheet  *Stylesheet
 	Origin Origin
+	// Scope is the shadow root of the shadow tree an author sheet belongs
+	// to, made by [NewShadowRoot]; nil for the document's. An author
+	// sheet's rules apply to the elements of its own tree alone (CSS
+	// Scoping 1, 3.1); a user agent or user sheet applies in every tree.
+	Scope *html.Node
 }
 
 // rank orders declarations by origin and importance (CSS Cascade 4, 6.2):
@@ -90,7 +95,10 @@ type Resolver struct {
 type resolvedRule struct {
 	rule   *styleRule
 	origin Origin
-	order  int
+	// scope is the shadow root of the tree an author rule applies in, nil
+	// for the document's.
+	scope *html.Node
+	order int
 	// layer is the position of the rule's cascade layer in its origin's
 	// layer order (see [orderLayers]).
 	layer int
@@ -196,6 +204,9 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		if sh.Sheet == nil {
 			continue
 		}
+		if sh.Origin != Author {
+			sh.Scope = nil
+		}
 		for _, x := range sh.Sheet.warns {
 			w.add(x)
 		}
@@ -206,7 +217,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				continue
 			}
 			idx := len(r.rules)
-			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
+			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, scope: sh.Scope, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
 			for _, s := range sr.selectors {
 				ref := selRef{rule: idx, sel: s, anc: ancestorFeatures(s)}
 				if s.pseudoElement == "" {
@@ -1340,10 +1351,17 @@ const linearClasses = 8
 // next call reuses.
 func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	matched := cs.matched[:0]
+	var scope *html.Node
+	if cs.opts.Shadows != nil {
+		scope = treeScope(n)
+	}
 	test := func(refs []selRef) {
 		for _, ref := range refs {
 			if cs.m.over {
 				return
+			}
+			if rr := &cs.r.rules[ref.rule]; rr.origin == Author && rr.scope != scope {
+				continue
 			}
 			if !cs.anc.admits(ref.anc) || !cs.m.matches(ref.sel, n) {
 				continue

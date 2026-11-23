@@ -148,3 +148,19 @@ func TestShadow_TopLevelIsNoRoot(t *testing.T) {
 		t.Errorf("shadow text %v, want blue: its top-level span is no :root", c)
 	}
 }
+
+func TestShadow_StylesStayInTheirTree(t *testing.T) {
+	t.Parallel()
+	// CSS Scoping 1, 3.1: a shadow tree's style sheets apply in it alone,
+	// and the document's do not reach into it; a slotted element is the
+	// document's, styled by the document's sheets.
+	src := `<!DOCTYPE html><style>span { color: red }</style>` +
+		`<div style="color: blue"><template shadowrootmode="open"><style>b { color: red }</style><span>INNER</span><slot></slot></template>` +
+		`<b>BOLD</b></div>`
+	doc := convertDoc(t, src, Options{})
+	for _, s := range []string{"INNER", "BOLD"} {
+		if c := textColor(t, doc.Pages[0], s); c != textBlue {
+			t.Errorf("%s: %v, want blue", s, c)
+		}
+	}
+}

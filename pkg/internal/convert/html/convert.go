@@ -328,7 +328,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	}
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger, quirks: o.mode == css.Quirks}
 	docSheets := func() []css.Sheet {
-		sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
+		sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets, scan.shadowSheets)
 		if scan.math {
 			// MathML Core, 2.2.2: a document holding MathML holds the rules
 			// of its user agent stylesheet, after HTML's.
@@ -650,6 +650,9 @@ type scan struct {
 	meta typeset.Metadata
 	// sheets lists the <style> and <link> elements in document order.
 	sheets []*dom.Node
+	// shadowSheets lists those of each shadow tree that has some, in the
+	// order of [css.Shadows.Roots].
+	shadowSheets []treeSheets
 	// ids holds every id attribute and a[name] of the document.
 	ids map[string]bool
 	// defs holds the first SVG clipPath, mask, filter or shape element of
@@ -750,11 +753,13 @@ func scanDocument(ctx context.Context, doc *dom.Node, shadows *css.Shadows, docU
 		}
 		return true
 	})
-	// The elements of the shadow trees count toward the cap.
+	// The elements of the shadow trees count toward the cap; their style
+	// sheets apply in their own tree (CSS Scoping 1, 3.1).
 	for r := range shadows.Roots() {
 		if walkErr != nil {
 			break
 		}
+		ts := treeSheets{root: r}
 		walk(r, func(n *dom.Node) bool {
 			if n.Type != dom.ElementNode || walkErr != nil {
 				return walkErr == nil
@@ -771,9 +776,18 @@ func scanDocument(ctx context.Context, doc *dom.Node, shadows *css.Shadows, docU
 			if n.Namespace != "" {
 				return true
 			}
-			// A template's content is inert (HTML Standard, 4.12.3).
-			return n.DataAtom != atom.Template
+			switch n.DataAtom { //nolint:exhaustive // every other element holds nothing the scan reads
+			case atom.Template:
+				// A template's content is inert (HTML Standard, 4.12.3).
+				return false
+			case atom.Style, atom.Link:
+				ts.sheets = append(ts.sheets, n)
+			}
+			return true
 		})
+		if len(ts.sheets) > 0 {
+			s.shadowSheets = append(s.shadowSheets, ts)
+		}
 	}
 	if walkErr != nil {
 		return nil, walkErr
@@ -785,6 +799,13 @@ func scanDocument(ctx context.Context, doc *dom.Node, shadows *css.Shadows, docU
 		return nil, errors.New("parsing the HTML source: no root element")
 	}
 	return s, nil
+}
+
+// treeSheets is a shadow tree's root and its <style> and <link> elements
+// in tree order.
+type treeSheets struct {
+	root   *dom.Node
+	sheets []*dom.Node
 }
 
 // rootHints returns the presentational hints of the document: HTML's, and
