@@ -1,6 +1,10 @@
 package ods
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+)
 
 // TestHyperlinkFormula locks the targets read from HYPERLINK formulas
 // (see [hyperlinkFormula]).
@@ -38,5 +42,24 @@ func TestSoleHyperlinkArgument(t *testing.T) {
 		if got := soleHyperlinkArgument(f); got != want {
 			t.Errorf("%s: %v, want %v", f, got, want)
 		}
+	}
+}
+
+// TestRead_LinkTextColour locks the look of a link's text in a cell (see
+// [linkColor]): #000080 and underlined, the text around it in the cell's
+// own font.
+func TestRead_LinkTextColour(t *testing.T) {
+	auto := `<style:style style:name="T1" style:family="text"><style:text-properties fo:color="#00aa00"/></style:style>`
+	cell := `<table:table-cell office:value-type="string"><text:p>before <text:a xlink:href="https://example.com/"><text:span text:style-name="T1">site</text:span></text:a></text:p></table:table-cell>`
+	doc, _ := read(t, flat{auto: auto, body: table("S", `<table:table-row>`+cell+`</table:table-row>`)}.bytes())
+	c := cellAt(doc.Sheets[0], 0, 0)
+	if c == nil || len(c.Runs) != 2 {
+		t.Fatalf("cell %+v, want two runs", c)
+	}
+	if f := c.Runs[0].Font; f != nil && f.Color == linkColor {
+		t.Errorf("the text before the link in the link's colour")
+	}
+	if f := c.Runs[1].Font; f == nil || f.Color != linkColor || f.Underline != sheet.Single {
+		t.Errorf("link run %+v, want #000080 underlined", f)
 	}
 }

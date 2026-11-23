@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -324,7 +325,23 @@ type textBuilder struct {
 	href  string
 	space bool
 	base  sheet.Font
+	// link is set inside a text:a, whose text takes [linkColor].
+	link bool
 }
+
+// linkColor is the colour Calc draws a link's text in, underlined, the
+// colour of an unvisited link in LibreOffice's application colours,
+// whatever the cell's, the span's or the link's own style says (ODF 1.3
+// Part 3, 6.1.8 text:a leaves its look to the application).
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/fdo79305.ods prints its linked cell in #000080
+//     underlined in the same colour.
+//   - probe, ods: through gotenberg/gotenberg:9.4.1 links in a plain cell,
+//     a cell of red text, a green span and a span of no underline all print
+//     #000080 underlined; the text around a link in its cell prints black.
+var linkColor = css.Color{R: 0, G: 0, B: 0x80 / 255.0, A: 1}
 
 // cellText reads the text:p children of a cell (ODF 1.3, Part 3, 9.1.4
 // and 5.1.3): the paragraphs joined by line feeds, with the spans
@@ -354,10 +371,19 @@ func (r *reader) cellText(el *odf.Element, st *sheet.Style) cellText {
 }
 
 // add appends s in the font f (nil for the cell's), merging it into the
-// last run when the font is the same.
+// last run when the font is the same; inside a link, in the link's colour,
+// underlined.
 func (tb *textBuilder) add(s string, f *sheet.Font) {
 	if s == "" || tb.b.Len()+len(s) > maxCellText {
 		return
+	}
+	if tb.link {
+		lf := tb.base
+		if f != nil {
+			lf = *f
+		}
+		lf.Color, lf.Underline = linkColor, sheet.Single
+		f = &lf
 	}
 	tb.b.WriteString(s)
 	if n := len(tb.runs); n > 0 && sameFont(tb.runs[n-1].Font, f) {
@@ -472,7 +498,10 @@ func (tb *textBuilder) inline(el *odf.Element, f *sheet.Font, depth int) {
 			if tb.href == "" {
 				tb.href = c.A(odf.NSXLink, "href")
 			}
+			link := tb.link
+			tb.link = true
 			tb.inline(c, f, depth+1)
+			tb.link = link
 		case c.Is(odf.NSText, "s"):
 			n := 1
 			if v, err := intconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
