@@ -219,12 +219,20 @@ func (d *document) computeField(s *story, instr string, locked bool) (string, bo
 	return formatNumber(n, format), true
 }
 
-// hiddenField reports a field whose result prints nothing: SET, which
-// assigns a bookmark (17.16.5, SET) and which LibreOffice imports as a
-// hidden variable setter, whatever result Word cached.
+// hiddenField reports a field whose result prints nothing, whatever
+// result Word cached: SET, which assigns a bookmark (17.16.5, SET) and
+// which LibreOffice imports as a hidden variable setter, and ASK, which
+// assigns the answer to a prompt to a bookmark (17.16.5.4), its answer
+// shown where a REF field names that bookmark.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/n751017.docx: Word prints "ABbarC" for
+//     A, an ASK field whose cached result is "bar", B, a REF to its
+//     bookmark and C.
 func hiddenField(instr string) bool {
 	args := fieldArgs(instr)
-	return len(args) > 0 && strings.EqualFold(args[0], "SET")
+	return len(args) > 0 && (strings.EqualFold(args[0], "SET") || strings.EqualFold(args[0], "ASK"))
 }
 
 // fieldLink returns the target a field's result links to, "" for none: a

@@ -32,3 +32,19 @@ func TestFields_ReferenceLinks(t *testing.T) {
 		}
 	}
 }
+
+// TestFields_HiddenResults prints nothing for an ASK or SET field, whatever
+// result Word cached, and the cached result of a REF to the bookmark
+// either assigns.
+func TestFields_HiddenResults(t *testing.T) {
+	t.Parallel()
+	field := func(instr, result string) string {
+		return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ` + instr + ` </w:instrText></w:r>` +
+			`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>` + result + `</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`
+	}
+	body := `<w:p><w:r><w:t>A</w:t></w:r>` + field(`ASK foo "What is foo?"`, "bar") + `<w:r><w:t>B</w:t></w:r>` +
+		field(`SET baz "qux"`, "qux") + field(`REF foo`, "bar") + `<w:r><w:t>C</w:t></w:r></w:p>`
+	if got := textOf(role(build(t, body, nil).root, "P")[0]); got != "ABbarC" {
+		t.Errorf("paragraph %q, want ABbarC", got)
+	}
+}
