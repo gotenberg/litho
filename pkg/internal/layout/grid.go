@@ -199,7 +199,7 @@ func outerH(k *box, cbw float64) float64 {
 // minimum is auto, it is not a scroll container, and it spans an auto
 // minimum track, crossing no flexible track when it spans more than one.
 func autoMinApplies(it *gitem, ax int, tracks []*gtrack, minAutoSet bool) bool {
-	if !minAutoSet || it.b.st.Overflow != css.OverflowVisible {
+	if !minAutoSet || scrollContainer(it.b.st) {
 		return false
 	}
 	autoMin, flex := false, false
@@ -283,7 +283,7 @@ func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 
 	b := it.b
 	switch r, _ := prefRatio(b); k {
 	case contribMinContent:
-		if r > 0 && b.st.Overflow != css.OverflowVisible {
+		if r > 0 && scrollContainer(b.st) {
 			// The min-content contribution of a scroll container with a
 			// preferred aspect ratio is its minimum contribution, as
 			// Chromium sizes grid columns: its width through the ratio

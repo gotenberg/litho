@@ -107,7 +107,7 @@ func (e *engine) applyRatio(b *box, st *css.Style, cb cblock, availH float64) bo
 	}
 	if ok {
 		w := widthOfHeight(constrainHeight(b, h, cb), r, ed)
-		if st.MinWidthAuto && st.Overflow == css.OverflowVisible {
+		if st.MinWidthAuto && !scrollContainer(st) {
 			lo, _ := e.contentIntrinsic(b)
 			if maxSet {
 				lo = min(lo, maxW)
@@ -150,10 +150,9 @@ func ratioHeight(b *box) (float64, bool) {
 
 // contentMinimum reports whether the automatic minimum height of b, whose
 // height its ratio gives, is its content's: min-height is auto and b is
-// not a scroll container (CSS Sizing 4, 4.3). overflow: clip computes to
-// hidden, and so takes no content minimum either.
+// not a scroll container (CSS Sizing 4, 4.3): overflow clip keeps it.
 func contentMinimum(b *box) bool {
-	return b.st.MinHeightAuto && b.st.Overflow == css.OverflowVisible
+	return b.st.MinHeightAuto && !scrollContainer(b.st)
 }
 
 // ratioIntrinsic applies the preferred aspect ratio of b to the min- and
@@ -208,7 +207,7 @@ func ratioIntrinsic(b *box, st *css.Style, pd, bd [4]float64, lo, hi float64) (f
 			h = min(h, mx)
 		}
 		w := widthOfHeight(h, r, ed)
-		if st.MinWidthAuto && st.Overflow == css.OverflowVisible {
+		if st.MinWidthAuto && !scrollContainer(st) {
 			// The automatic minimum width is the content's min-content
 			// width (CSS Sizing 4, 4.3).
 			w = max(w, lo)

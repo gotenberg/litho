@@ -755,7 +755,7 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		if mn, ok := mainSpec(minProp(sst, ax), pcb); ok {
 			it.minM = mn
 		}
-	case st.Overflow == css.OverflowVisible:
+	case !scrollContainer(st):
 		// The automatic minimum size (4.5): the content size
 		// suggestion, capped by a specified size suggestion and by the
 		// maximum main size.

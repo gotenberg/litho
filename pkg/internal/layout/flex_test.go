@@ -299,6 +299,25 @@ func TestFlex_AutoMinimumSize(t *testing.T) {
 	}
 }
 
+func TestFlex_AutoMinimumSizeUnderClip(t *testing.T) {
+	// The automatic minimum size applies to an item that is no scroll
+	// container (CSS Flexbox 1, 4.5): overflow clip keeps it, hidden
+	// drops it (CSS Overflow 3, 3.1).
+	word := func(mod func(*css.Style)) *Node {
+		return el(sty(width(60), mod), txt(sty(), "aaaa"))
+	}
+	clip := func(s *css.Style) { s.SetClipOnly() }
+	hidden := func(s *css.Style) { s.Overflow = css.OverflowHidden }
+	got := flexRects(t, doc(el(flexBox(width(50)), word(clip), word(clip))), 0, 0)
+	if want := [][4]float64{{0, 0, 40, 10}, {40, 0, 40, 10}}; !eqRects(got, want) {
+		t.Errorf("overflow clip %v, want %v", got, want)
+	}
+	got = flexRects(t, doc(el(flexBox(width(50)), word(hidden), word(hidden))), 0, 0)
+	if want := [][4]float64{{0, 0, 25, 10}, {25, 0, 25, 10}}; !eqRects(got, want) {
+		t.Errorf("overflow hidden %v, want %v", got, want)
+	}
+}
+
 func TestFlex_AnonymousItems(t *testing.T) {
 	// Text runs become anonymous items; white space between items does
 	// not (CSS Flexbox 1, 4).
