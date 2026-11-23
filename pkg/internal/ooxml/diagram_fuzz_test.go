@@ -50,6 +50,21 @@ func FuzzDiagram(f *testing.F) {
 		chain[i] = hierNode{"n", i - 1, false}
 	}
 	f.Add([]byte(hierData(chain, false)), []byte(hierLayout(`<dgm:alg type="hierRoot"/>`, `<dgm:alg type="hierChild"/>`, ``)))
+	// Office's cycle and the shapes' adjust values: a spacing of 1e300
+	// node widths either way, a node of no width, an adjust index past any
+	// preset's and a value of 1e308.
+	cyc := func(sibSp, w string) []byte {
+		return []byte(diagramLayout(`<dgm:alg type="cycle"><dgm:param type="ctrShpMap" val="fNode"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
+			`<dgm:constr type="w" for="ch" ptType="node" refType="w" fact="` + w + `"/>` +
+			`<dgm:constr type="sibSp" refType="w" refFor="ch" refPtType="node" fact="` + sibSp + `"/>` +
+			`<dgm:constr type="sp" refType="w" refFor="ch" refPtType="node" fact="` + sibSp + `"/></dgm:constrLst>` +
+			nodeList("pie", `<dgm:constrLst><dgm:constr type="h" refType="w"/></dgm:constrLst>`)))
+	}
+	f.Add([]byte(diagramData("a", "b", "c")), cyc("1e300", "1"))
+	f.Add([]byte(diagramData("a", "b", "c")), cyc("-1e300", "0"))
+	f.Add([]byte(diagramData("a", "b")), []byte(diagramLayout(`<dgm:alg type="lin"/><dgm:shape/>`+
+		`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="pie"><dgm:adjLst>`+
+		`<dgm:adj idx="99999" val="1"/><dgm:adj idx="1" val="1e308"/><dgm:adj idx="2" val="NaN"/></dgm:adjLst></dgm:shape></dgm:layoutNode></dgm:forEach>`)))
 	f.Fuzz(func(t *testing.T, data, layout []byte) {
 		dm, err := Parse(context.Background(), data, nil)
 		if err != nil {
@@ -69,6 +84,9 @@ func FuzzDiagram(f *testing.F) {
 		}
 		if calls > maxDiagramFits {
 			t.Fatalf("%d measurements, past %d", calls, maxDiagramFits)
+		}
+		for _, k := range root.Kids {
+			k.Element(NSDgm, k.Preset(), true)
 		}
 	})
 }
