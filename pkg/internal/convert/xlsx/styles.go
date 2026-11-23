@@ -392,6 +392,22 @@ func (r *reader) font(e *ooxml.Element) sheet.Font {
 	return f
 }
 
+// printedFamily returns the family Excel prints a font of family in:
+// Arial for DejaVu Sans, a family the Gotenberg image installs that Excel
+// has no font of; family itself otherwise.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: spreadsheet/52348.xlsx, libreoffice/xlsx:
+//     sc/ceiling-floor.xlsx, litho/xlsx: fonts and rtl_sheet print their
+//     cells of DejaVu Sans in Arial.
+func printedFamily(family string) string {
+	if strings.EqualFold(family, "DejaVu Sans") {
+		return "Arial"
+	}
+	return family
+}
+
 // fontProps applies the properties of a font record or a rich text run's
 // rPr (ECMA-376 Part 1, 18.4.7) to f. A font of the theme's major or
 // minor scheme takes the theme's face ([reader.schemeFace]).
@@ -407,7 +423,7 @@ func (r *reader) fontProps(e *ooxml.Element, f *sheet.Font) {
 			scheme = strings.TrimSpace(val)
 		case "name", "rFont":
 			if has && strings.TrimSpace(val) != "" {
-				f.Families = []string{scriptFace(strings.TrimSpace(val))}
+				f.Families = []string{printedFamily(scriptFace(strings.TrimSpace(val)))}
 			}
 		case "sz":
 			if v, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil && v > 0 {

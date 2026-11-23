@@ -72,8 +72,9 @@ func TestRead_NumberFormats(t *testing.T) {
 }
 
 // TestRead_Fonts checks the font records: Excel's Calibri 11 for
-// what a record leaves out, the attributes, the underline kinds and the
-// colours by rgb, theme with tint and palette index.
+// what a record leaves out, the attributes, the underline kinds, the
+// colours by rgb, theme with tint and palette index, and the face Excel
+// prints a family it has no font of in.
 func TestRead_Fonts(t *testing.T) {
 	t.Parallel()
 	doc := styledBook(t, "",
@@ -81,14 +82,17 @@ func TestRead_Fonts(t *testing.T) {
 			`<font><i val="1"/><strike/><u val="doubleAccounting"/><vertAlign val="superscript"/><sz val="9"/><name val="Arial"/><color rgb="00FF0000"/></font>`+
 			`<font><u/><color theme="4" tint="-0.5"/><name val="Arial"/></font>`+
 			`<font><u val="singleAccounting"/><color indexed="17"/><b val="0"/></font>`+
-			`<font><color theme="0" tint="0.5"/><color auto="1"/></font>`,
-		"", "", "", `<xf fontId="1"/><xf fontId="2"/><xf fontId="3"/><xf fontId="4"/><xf fontId="5"/>`, 5)
+			`<font><color theme="0" tint="0.5"/><color auto="1"/></font>`+
+			`<font><name val="DejaVu Sans"/></font>`,
+		"", "", "", `<xf fontId="1"/><xf fontId="2"/><xf fontId="3"/><xf fontId="4"/><xf fontId="5"/><xf fontId="6"/>`, 6)
 	for i, want := range []sheet.Font{
 		{Families: []string{"Calibri"}, Size: 11, Bold: true},
 		{Families: []string{"Arial"}, Size: 9, Italic: true, Strike: true, Underline: sheet.Double, Script: sheet.Superscript, Color: css.Color{R: 1, A: 1}},
 		{Families: []string{"Arial"}, Size: 11, Underline: sheet.Single, Color: tint(rgb(0x4472C4), -0.5)},
 		{Families: []string{"Calibri"}, Size: 11, Underline: sheet.Single, Color: rgb(0x008000)},
 		{Families: []string{"Calibri"}, Size: 11},
+		// Excel has no DejaVu Sans and prints it in Arial.
+		{Families: []string{"Arial"}, Size: 11},
 	} {
 		got := styleOf(t, doc, i).Font
 		if got.Families[0] != want.Families[0] || got.Size != want.Size || got.Bold != want.Bold || got.Italic != want.Italic ||
