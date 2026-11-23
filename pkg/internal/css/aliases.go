@@ -84,10 +84,94 @@ var legacyAliases = map[string]string{
 	"word-wrap":                          "overflow-wrap",
 }
 
+// chromiumAliases maps the prefixed names Chromium reads as another
+// property, and no standard lists, to that property. They resolve as the
+// standard's aliases do (CSS Cascade 5, 3.1): each parses, cascades and
+// warns as the property it names, and the later of two names wins. The
+// table holds the names Chromium declares as aliases of a standard
+// property and lays out as it: the multi-column properties, the margins,
+// paddings and borders named before, after, start and end (the block-start,
+// block-end, inline-start and inline-end sides), the logical sizes, text
+// emphasis, shapes, clip-path, opacity, font-feature-settings,
+// hyphenate-character, writing-mode, text-orientation and user-select.
+// The prefixed names Chromium reads with values or effects of their own
+// (-webkit-box-*, -webkit-text-combine, -webkit-ruby-position,
+// -webkit-border-image, the origin components) are not in it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints each name of the table as the
+//     property it names (columns, rules and gaps; margins, paddings and
+//     borders on the logical sides; logical widths and heights with their
+//     bounds; emphasis marks; vertical writing and upright orientation;
+//     opacity, clip-path and shape-outside; the hyphenation character).
+//     Every name parses (CSS.supports true); getComputedStyle lists
+//     -webkit-writing-mode and -webkit-text-orientation beside the
+//     standard names and none of the others.
+var chromiumAliases = map[string]string{
+	"-webkit-column-count":           "column-count",
+	"-webkit-column-gap":             "column-gap",
+	"-webkit-column-rule":            "column-rule",
+	"-webkit-column-rule-color":      "column-rule-color",
+	"-webkit-column-rule-style":      "column-rule-style",
+	"-webkit-column-rule-width":      "column-rule-width",
+	"-webkit-column-span":            "column-span",
+	"-webkit-column-width":           "column-width",
+	"-webkit-columns":                "columns",
+	"-webkit-margin-before":          "margin-block-start",
+	"-webkit-margin-after":           "margin-block-end",
+	"-webkit-margin-start":           "margin-inline-start",
+	"-webkit-margin-end":             "margin-inline-end",
+	"-webkit-padding-before":         "padding-block-start",
+	"-webkit-padding-after":          "padding-block-end",
+	"-webkit-padding-start":          "padding-inline-start",
+	"-webkit-padding-end":            "padding-inline-end",
+	"-webkit-border-before":          "border-block-start",
+	"-webkit-border-before-color":    "border-block-start-color",
+	"-webkit-border-before-style":    "border-block-start-style",
+	"-webkit-border-before-width":    "border-block-start-width",
+	"-webkit-border-after":           "border-block-end",
+	"-webkit-border-after-color":     "border-block-end-color",
+	"-webkit-border-after-style":     "border-block-end-style",
+	"-webkit-border-after-width":     "border-block-end-width",
+	"-webkit-border-start":           "border-inline-start",
+	"-webkit-border-start-color":     "border-inline-start-color",
+	"-webkit-border-start-style":     "border-inline-start-style",
+	"-webkit-border-start-width":     "border-inline-start-width",
+	"-webkit-border-end":             "border-inline-end",
+	"-webkit-border-end-color":       "border-inline-end-color",
+	"-webkit-border-end-style":       "border-inline-end-style",
+	"-webkit-border-end-width":       "border-inline-end-width",
+	"-webkit-logical-width":          "inline-size",
+	"-webkit-logical-height":         "block-size",
+	"-webkit-min-logical-width":      "min-inline-size",
+	"-webkit-min-logical-height":     "min-block-size",
+	"-webkit-max-logical-width":      "max-inline-size",
+	"-webkit-max-logical-height":     "max-block-size",
+	"-webkit-text-emphasis":          "text-emphasis",
+	"-webkit-text-emphasis-color":    "text-emphasis-color",
+	"-webkit-text-emphasis-position": "text-emphasis-position",
+	"-webkit-text-emphasis-style":    "text-emphasis-style",
+	"-webkit-shape-outside":          "shape-outside",
+	"-webkit-shape-margin":           "shape-margin",
+	"-webkit-shape-image-threshold":  "shape-image-threshold",
+	"-webkit-clip-path":              "clip-path",
+	"-webkit-opacity":                "opacity",
+	"-webkit-font-feature-settings":  "font-feature-settings",
+	"-webkit-hyphenate-character":    "hyphenate-character",
+	"-webkit-writing-mode":           "writing-mode",
+	"-webkit-text-orientation":       "text-orientation",
+	"-webkit-user-select":            "user-select",
+}
+
 // propertyName returns the property a lowercased declared name stands
-// for: the property a legacy name alias names, else the name itself.
+// for: the property a legacy name alias or a Chromium alias names, else
+// the name itself.
 func propertyName(name string) string {
 	if p, ok := legacyAliases[name]; ok {
+		return p
+	}
+	if p, ok := chromiumAliases[name]; ok {
 		return p
 	}
 	return name

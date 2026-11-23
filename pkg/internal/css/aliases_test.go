@@ -141,3 +141,64 @@ func TestLegacyAliases_SilentAsTheirProperty(t *testing.T) {
 		t.Errorf("unexpected warning: %v", ws)
 	}
 }
+
+// TestChromiumAliases_ResolveToKnownProperties checks the prefixed names
+// Chromium reads as standard properties: each resolves through the table
+// to a property litho parses, none is also a legacy name alias, and none
+// resolves by itself.
+func TestChromiumAliases_ResolveToKnownProperties(t *testing.T) {
+	t.Parallel()
+	for alias, target := range chromiumAliases {
+		if _, ok := legacyAliases[alias]; ok {
+			t.Errorf("%s is in both alias tables", alias)
+		}
+		if knownProperty(alias) {
+			t.Errorf("%s resolves by itself; it must resolve through %s", alias, target)
+		}
+		if !knownProperty(target) && !silentProperties[target] {
+			t.Errorf("%s names %s, which litho does not parse", alias, target)
+		}
+	}
+}
+
+// TestChromiumAliases_ParseAsTheirProperty checks that a prefixed name
+// Chromium reads as a standard property declares what that property
+// declares, and that the later of the two names wins.
+func TestChromiumAliases_ParseAsTheirProperty(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ alias, target, value string }{
+		{"-webkit-column-count", "column-count", "2"},
+		{"-webkit-columns", "columns", "3 10em"},
+		{"-webkit-column-rule", "column-rule", "3px solid red"},
+		{"-webkit-margin-before", "margin-block-start", "20px"},
+		{"-webkit-padding-start", "padding-inline-start", "4em"},
+		{"-webkit-border-end", "border-inline-end", "5px dashed green"},
+		{"-webkit-border-before-width", "border-block-start-width", "4px"},
+		{"-webkit-logical-width", "inline-size", "100px"},
+		{"-webkit-max-logical-height", "max-block-size", "30px"},
+		{"-webkit-text-emphasis", "text-emphasis", "filled dot red"},
+		{"-webkit-text-emphasis-position", "text-emphasis-position", "under left"},
+		{"-webkit-shape-outside", "shape-outside", "circle(50%)"},
+		{"-webkit-clip-path", "clip-path", "circle(20px at 30px 20px)"},
+		{"-webkit-opacity", "opacity", "0.3"},
+		{"-webkit-font-feature-settings", "font-feature-settings", `"smcp"`},
+		{"-webkit-hyphenate-character", "hyphenate-character", `"="`},
+		{"-webkit-writing-mode", "writing-mode", "vertical-rl"},
+		{"-webkit-text-orientation", "text-orientation", "upright"},
+	} {
+		got := styleOf(t, tc.alias+": "+tc.value)
+		want := styleOf(t, tc.target+": "+tc.value)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %s computes otherwise than %s", tc.alias, tc.value, tc.target)
+		}
+		if reflect.DeepEqual(got, styleOf(t, "")) {
+			t.Errorf("%s: %s declares nothing", tc.alias, tc.value)
+		}
+	}
+	if s := styleOf(t, "column-count: 3; -webkit-column-count: 2"); s.Columns.Count != 2 {
+		t.Errorf("a later -webkit-column-count: column-count = %v", s.Columns.Count)
+	}
+	if s := styleOf(t, "-webkit-column-count: 2; column-count: 3"); s.Columns.Count != 3 {
+		t.Errorf("a later column-count: column-count = %v", s.Columns.Count)
+	}
+}
