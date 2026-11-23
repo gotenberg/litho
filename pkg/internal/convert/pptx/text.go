@@ -530,15 +530,26 @@ func percentAny(v string) float64 {
 }
 
 // fieldOf maps a field type (ECMA-376 Part 1, 21.1.2.2.4 fld type) to
-// the model's field: slidenum, the datetime formats (datetime10 to
-// datetime13 being times), and anything else as the text the file saved.
+// the model's field: slidenum, the datetime formats the clause names
+// (datetime10 to datetime13 being times) with datetimeFigureOut, and
+// anything else as the text the file saved, a type that only starts as a
+// date's does among them, as PowerPoint prints it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf126324.pptx's field of a type made of
+//     "datetime" followed by quotes and digits prints in PowerPoint the
+//     "17" the file saved, not a date.
 func fieldOf(typ string) slides.Field {
-	switch {
-	case typ == "slidenum":
+	switch typ {
+	case "slidenum":
 		return slides.FieldSlideNumber
-	case typ == "datetime10", typ == "datetime11", typ == "datetime12", typ == "datetime13":
+	case "datetime10", "datetime11", "datetime12", "datetime13":
 		return slides.FieldTime
-	case strings.HasPrefix(typ, "datetime"):
+	case "datetimeFigureOut":
+		return slides.FieldDate
+	}
+	if _, ok := usDateFormats[typ]; ok {
 		return slides.FieldDate
 	}
 	return slides.FieldNone

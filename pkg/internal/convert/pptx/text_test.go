@@ -494,3 +494,24 @@ func TestText_Highlight(t *testing.T) {
 		t.Errorf("highlight %+v, want none", h)
 	}
 }
+
+// A field type the clause does not name keeps the text the file saved
+// (ECMA-376 Part 1, 21.1.2.2.4), one that only starts as a date's among
+// them.
+func TestFieldOf_UnknownTypeKeepsItsText(t *testing.T) {
+	t.Parallel()
+	for typ, want := range map[string]slides.Field{
+		"slidenum":          slides.FieldSlideNumber,
+		"datetime":          slides.FieldDate,
+		"datetime9":         slides.FieldDate,
+		"datetimeFigureOut": slides.FieldDate,
+		"datetime12":        slides.FieldTime,
+		"datetime'1''7'":    slides.FieldNone,
+		"datetime14":        slides.FieldNone,
+		"footer":            slides.FieldNone,
+	} {
+		if got := fieldOf(typ); got != want {
+			t.Errorf("fieldOf(%q) = %v, want %v", typ, got, want)
+		}
+	}
+}
