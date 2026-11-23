@@ -281,6 +281,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				}
 				c.Resolver = w.r.rangeValues
 				numericLabelsHidden(c)
+				generalLabelsFixed(c)
 				d.Chart = c
 				return true
 			case uriDiagram:
@@ -350,6 +351,40 @@ func numericLabelsHidden(c *chart.Chart) {
 		}
 	}
 }
+
+// generalLabelsFixed writes the General values of an Office 2016 chart's
+// data labels with six decimals, as Excel prints such a chart: a label
+// whose own format and whose data's format are General takes the format
+// 0.000000. A label of another format keeps it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/clusteredColumn.xlsx prints its labels as
+//     5.000000 and -6.000000.
+//   - litho/xlsx: charts_chartex prints its waterfall's labels as
+//     100.000000 and -15.000000, its histogram's counts as 7.000000 and
+//     its Pareto's as 42.000000.
+func generalLabelsFixed(c *chart.Chart) {
+	fixed := func(lb *chart.Labels, data string) {
+		if lb.Format == "" && data == "" {
+			lb.Format = generalLabelFormat
+		}
+	}
+	for _, g := range c.Groups {
+		for _, s := range g.Series {
+			fixed(&s.Labels, s.Values.Format)
+			for i := range s.Points {
+				if s.Points[i].HasLabels {
+					fixed(&s.Points[i].Labels, s.Values.Format)
+				}
+			}
+		}
+	}
+}
+
+// generalLabelFormat is the number format Excel prints the General values
+// of an Office 2016 chart's data labels in.
+const generalLabelFormat = "0.000000"
 
 // hidden reports a shape its non-visual properties hide (ECMA-376 Part 1,
 // 20.1.2.2.8 cNvPr hidden).

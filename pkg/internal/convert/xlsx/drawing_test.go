@@ -228,6 +228,23 @@ func TestNumericLabelsHidden(t *testing.T) {
 	}
 }
 
+// TestGeneralLabelsFixed checks that the General values of an Office 2016
+// chart's data labels take six decimals and that a stated format stays.
+func TestGeneralLabelsFixed(t *testing.T) {
+	t.Parallel()
+	general := &chart.Series{Labels: chart.Labels{ShowValue: true}, Points: []chart.Point{{HasLabels: true}}}
+	stated := &chart.Series{Labels: chart.Labels{ShowValue: true, Format: "0%"}}
+	cached := &chart.Series{Labels: chart.Labels{ShowValue: true}, Values: chart.Data{Format: "#,##0"}}
+	c := &chart.Chart{Groups: []*chart.Group{{Series: []*chart.Series{general, stated, cached}}}}
+	generalLabelsFixed(c)
+	if general.Labels.Format != "0.000000" || general.Points[0].Labels.Format != "0.000000" {
+		t.Errorf("General labels in %q and %q, want 0.000000", general.Labels.Format, general.Points[0].Labels.Format)
+	}
+	if stated.Labels.Format != "0%" || cached.Labels.Format != "" {
+		t.Errorf("stated labels in %q, cached-format labels in %q: want them kept", stated.Labels.Format, cached.Labels.Format)
+	}
+}
+
 // TestRead_TurnedShapeDrawnWhole locks that a turned shape is drawn whole
 // about the centre of its anchor's box, past that box, where an unturned
 // one is clipped to it ([leaf.whole]).
