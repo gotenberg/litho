@@ -571,9 +571,10 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	}()
 	var data []byte
 	if err == nil {
-		if settings.Office != nil && settings.Office.Options.Date == "" {
+		if settings.Office != nil && settings.Office.Options.Date == "" && settings.Format != fixture.FormatDOCX {
 			// An Office source that states no date converts at its
-			// reference's.
+			// reference's; a Word document keeps the results its fields
+			// saved, as Word for the web prints them.
 			if ref, err = openReference(g.pdf); err != nil {
 				return nil, err
 			}
@@ -781,7 +782,10 @@ func openReference(path string) (*pdf.Reader, error) {
 // read from its creation date: an Office source that states no date
 // converts at it, so that a field showing the current date or time shows
 // what the reference's shows, which is the day it was built and no
-// property of the source.
+// property of the source. PowerPoint and Excel for the web and
+// LibreOffice print such a field at the day they print; Word for the web
+// prints the result the document saved, so a Word document converts
+// without a date.
 func referenceDay(ctx context.Context, ref *pdf.Reader) (time.Time, bool) {
 	meta, err := ref.Metadata(ctx)
 	if err != nil {
