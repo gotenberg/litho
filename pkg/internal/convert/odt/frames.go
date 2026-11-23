@@ -215,8 +215,20 @@ type frameGeom struct {
 }
 
 // geometry reads a drawing element's geometry and graphic style.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/shape-with-hyperlink.odt anchors a
+//     linked custom shape to its paragraph on its draw:a alone, and
+//     LibreOffice prints it 4.1 cm and 5 cm from the paragraph.
 func (b *builder) geometry(c *odf.Element) frameGeom {
 	g := frameGeom{anchor: c.A(odf.NSText, "anchor-type")}
+	if g.anchor == "" {
+		// LibreOffice writes the anchor of a drawing that is a link on
+		// its draw:a, which ODF 1.3 Part 3, 10.4.12 gives no anchor, and
+		// places the drawing by it.
+		g.anchor = b.linkAnchors[c]
+	}
 	if n, err := intconv.Atoi(c.A(odf.NSText, "anchor-page-number")); err == nil && n > 0 && g.anchor == "page" {
 		g.page = n
 	}
@@ -382,7 +394,14 @@ func (b *builder) pageFill(st *css.Style, g frameGeom) {
 func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, depth int) {
 	if c.Is(odf.NSDraw, "a") {
 		var kids []*layout.Node
+		anchor := c.A(odf.NSText, "anchor-type")
 		for _, k := range c.Children {
+			if anchor != "" && k.A(odf.NSText, "anchor-type") == "" {
+				if b.linkAnchors == nil {
+					b.linkAnchors = map[*odf.Element]string{}
+				}
+				b.linkAnchors[k] = anchor
+			}
 			b.inlineFrame(k, &kids, ws, depth+1)
 		}
 		*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: c.A(odf.NSXLink, "href"), Role: "Link", Children: kids}))

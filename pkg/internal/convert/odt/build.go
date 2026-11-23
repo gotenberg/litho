@@ -70,6 +70,9 @@ type builder struct {
 	// anchored holds the geometry of the frames [builder.place] places at
 	// their offsets from their paragraph ([builder.anchorFrames]).
 	anchored map[*layout.Node]frameGeom
+	// linkAnchors holds the anchor of the drawings of a draw:a that state
+	// none of their own: the link's ([builder.inlineFrame]).
+	linkAnchors map[*odf.Element]string
 	// boxed counts the table cells, text boxes and notes being built, in
 	// which a paragraph's frames keep floating.
 	boxed int
