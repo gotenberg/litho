@@ -28,6 +28,13 @@ func FuzzChartFromElement(f *testing.F) {
 			`<c:serAx><c:axId val="3"/><c:title><c:tx><c:rich><a:p><a:r><a:t>Rows</a:t></a:r></a:p></c:rich></c:tx></c:title><c:majorTickMark val="out"/><c:crossAx val="2"/></c:serAx>`)))
 	f.Add([]byte(chartXML("", `<c:view3D><c:rotX val="90"/><c:hPercent val="5"/><c:rotY val="179"/><c:perspective val="0"/></c:view3D>`,
 		`<c:pie3DChart>`+ser(0, "P", "", "1", "2", "3")+`</c:pie3DChart>`)))
+	// A labelled pie of pie splitting at a huge percentage with a second
+	// plot past its range, and a stock chart with high-low lines and
+	// up-down bars of a huge gap width over values of extreme magnitude.
+	f.Add([]byte(chartXML("", "", `<c:ofPieChart><c:ofPieType val="pie"/>`+ser(0, "P", `<c:dLbls><c:showPercent val="1"/></c:dLbls>`, "1e300", "-2", "3", "0")+
+		`<c:splitType val="percent"/><c:splitPos val="1e300"/><c:secondPieSize val="100000"/><c:serLines/></c:ofPieChart>`)))
+	f.Add([]byte(chartXML("", "", `<c:stockChart>`+ser(0, "O", "", "1e-300", "2")+ser(1, "H", "", "1e300", "9")+ser(2, "C", "", "-1e300", "1")+
+		`<c:hiLowLines/><c:upDownBars><c:gapWidth val="1000000000"/><c:upBars/><c:downBars/></c:upDownBars><c:axId val="1"/><c:axId val="2"/></c:stockChart>`+axes)))
 	fonts, err := text.NewFonts(context.Background(), nil, []string{filepath.Join("..", "layout", "testdata")})
 	if err != nil {
 		f.Fatal(err)
