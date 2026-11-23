@@ -242,7 +242,9 @@ func TestWordAnchor_WriterStaysOnPage(t *testing.T) {
 
 // TestWordAnchor_WriterRise places a float of css.WordAnchor.Writer from
 // the top of its paragraph's area, Rise above its first line, and from
-// the page area's top when the paragraph starts the page.
+// the page area's top when the paragraph starts the page. The float
+// touches the line before its paragraph, which goes below it, finding no
+// room on its right.
 func TestWordAnchor_WriterRise(t *testing.T) {
 	rise := func(s *css.Style) { s.WordAnchor.Rise = px(10) }
 	spaced := func() *Node {
@@ -251,7 +253,7 @@ func TestWordAnchor_WriterRise(t *testing.T) {
 		return p
 	}
 	res := run(t, doc(wpara("a"), spaced()), page(100, 100))
-	if got, want := linePlaces(res, 1), "X@60,18 a@0,8 b@0,28 "; got != want {
+	if got, want := linePlaces(res, 1), "X@60,18 a@0,28 b@0,48 "; got != want {
 		t.Errorf("lines %s, want %s", got, want)
 	}
 	res = run(t, doc(spaced()), page(100, 100))

@@ -260,22 +260,39 @@ func clearOverlap(bc *bfc, x, y, w, h, right float64) (float64, float64) {
 // paragraph, in tree order, relative to their page's area. Seeding one
 // more float a pass places each where its paragraph lands once the
 // floats before it wrap the text, as Word places them one after the
-// other.
+// other. A Writer frame also reaches the content before its paragraph
+// when its border box starts within [writerTouch] of the bottom of the
+// block before the paragraph, Writer finding the two touching.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 3 by 2 cm frame
+//     at svg:y 0 of the second of two unspaced paragraphs, of right,
+//     dynamic or parallel wrap, placed from the top or at the top, moves
+//     the first paragraph's line right of itself; so does it when the
+//     second paragraph has a 0.5 cm top margin, and not when the first
+//     has a 0.5 cm bottom margin.
+//   - libreoffice/odt: layout/abi11870-2.odt sets a picture at the top
+//     of a heading 0.423 cm below its own top, the heading before it
+//     ending 0.212 cm above that: LibreOffice leaves that heading's line
+//     where it is.
 func (e *engine) collectWordWraps(b *box, out []wrapSeed) []wrapSeed {
 	added := false
-	var walk func(b *box)
-	walk = func(b *box) {
+	var walk func(b, before *box)
+	walk = func(b, before *box) {
+		var last *box
 		for _, k := range b.kids {
 			if k.float != css.FloatNone && k.laidOut && k.st.WordAnchor.Set && len(out) < maxFloats {
 				_, frozen := e.frozen[k.node]
 				r := wordRect(k)
-				reach := k.anchorTop
+				reach, touch := k.anchorTop, false
 				if r.writer {
 					// A Writer frame wraps the lines before its paragraph
 					// when it reaches above the paragraph's area.
 					reach = e.writerArea(k.st.WordAnchor, k.anchorTop)
+					touch = before != nil && k.y < before.y+before.borderH()+writerTouch-eps
 				}
-				if frozen || (!added && r.y0 < reach-eps) {
+				if frozen || (!added && (r.y0 < reach-eps || touch)) {
 					added = added || !frozen
 					p := e.pageOf(k.y + eps)
 					top := e.pageTop(p)
@@ -286,10 +303,13 @@ func (e *engine) collectWordWraps(b *box, out []wrapSeed) []wrapSeed {
 					})
 				}
 			}
-			walk(k)
+			walk(k, last)
+			if k.float == css.FloatNone && !k.abs && k.laidOut {
+				last = k
+			}
 		}
 	}
-	walk(b)
+	walk(b, nil)
 	return out
 }
 

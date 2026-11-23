@@ -119,11 +119,17 @@ func (b *builder) lineDrawing(c *odf.Element, p odf.Props) lineDrawing {
 	return d
 }
 
+// lineFloor is how far below the top of its paragraph's area the box of
+// a line anchored to the paragraph starts at the least: two twips, past
+// the twip within which Writer finds a frame touching the line before
+// the paragraph.
+const lineFloor = 0.1
+
 // lineOf returns the drawing of the line c placed by g. A line anchored
-// to a paragraph and placed from it keeps its box below the paragraph's
-// top, what it draws above that line overflowing the box: Writer wraps
-// the lines before a paragraph around a frame or a shape that reaches
-// above it, never around a line.
+// to a paragraph and placed from it keeps its box [lineFloor] below the
+// paragraph's top, what it draws above that overflowing the box: Writer
+// wraps the lines before a paragraph around a frame or a shape that
+// reaches above it or touches them, never around a line.
 //
 // # Corpus evidence
 //
@@ -136,9 +142,9 @@ func (b *builder) lineDrawing(c *odf.Element, p odf.Props) lineDrawing {
 //     line below itself.
 func (b *builder) lineOf(c *odf.Element, g frameGeom) lineDrawing {
 	d := b.lineDrawing(c, g.props)
-	if (g.anchor == "paragraph" || g.anchor == "char") && (g.vrel == "" || g.vrel == "paragraph" || g.vrel == "paragraph-content") && d.box.Y < 0 {
-		d.box.Height = math.Max(0, d.box.Y+d.box.Height)
-		d.box.Y = 0
+	if (g.anchor == "paragraph" || g.anchor == "char") && (g.vrel == "" || g.vrel == "paragraph" || g.vrel == "paragraph-content") && d.box.Y < lineFloor {
+		d.box.Height = math.Max(0, d.box.Y+d.box.Height-lineFloor)
+		d.box.Y = lineFloor
 	}
 	return d
 }

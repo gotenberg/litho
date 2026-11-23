@@ -123,3 +123,25 @@ func TestHeaderFrameWrapsNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestFrameTouchesLineBefore locks that a frame whose top meets the bottom
+// of the paragraph before its own wraps that paragraph's line, and that
+// one a bottom margin away from it does not (see
+// collectWordWraps in the layout, which holds the measurements).
+func TestFrameTouchesLineBefore(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties fo:margin="0cm" style:wrap="right" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>` +
+		`<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.2cm"/></style:style>`
+	frame := `<draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="paragraph" svg:x="0cm" svg:y="0cm" svg:width="3cm" svg:height="2cm"><draw:text-box><text:p>FRAME</text:p></draw:text-box></draw:frame>`
+	for _, tc := range []struct {
+		style string
+		x     float64
+	}{{"", 56.69 + 85.04}, {"PB", 56.69}} {
+		body := `<text:p text:style-name="` + tc.style + `">Before</text:p><text:p>` + frame + `After</text:p>`
+		pg := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+		for _, r := range runs(pg) {
+			if strings.TrimSpace(r.text) == "Before" && !near(r.x, tc.x, 0.1) {
+				t.Errorf("style %q: Before at x %.2f, want %.2f", tc.style, r.x, tc.x)
+			}
+		}
+	}
+}
