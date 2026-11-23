@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T08:31:57Z",
+  "captured_at": "2026-11-23T09:37:57Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -19000,8 +19000,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 151,
-          "mismatched": 19,
+          "matched": 152,
+          "mismatched": 18,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19451,12 +19451,12 @@
               "text_f1": 1
             },
             "sd/numfmt.odp": {
-              "layout": 0.7663,
+              "layout": 0.9633,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2593
+              "text_f1": 1
             },
             "sd/page_transparent_background.odp": {
               "layout": 1,
@@ -23986,8 +23986,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 227,
-          "mismatched": 29,
+          "matched": 231,
+          "mismatched": 25,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -24661,7 +24661,7 @@
               "text_f1": 1
             },
             "sc/external_hyperlink.ods": {
-              "layout": 0.8157,
+              "layout": 0.9957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24685,7 +24685,7 @@
               "text_f1": 0.9167
             },
             "sc/fdo43534test.ods": {
-              "layout": 0.6848,
+              "layout": 0.6904,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24709,7 +24709,7 @@
               "text_f1": 1
             },
             "sc/fdo64229b.ods": {
-              "layout": 0.9023,
+              "layout": 0.981,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24725,7 +24725,7 @@
               "text_f1": 0.9982
             },
             "sc/fdo79305.ods": {
-              "layout": 0.7374,
+              "layout": 0.9974,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24765,8 +24765,8 @@
               "text_f1": 1
             },
             "sc/functions.ods": {
-              "layout": 0.9918,
-              "link_recall": 0.6,
+              "layout": 0.9949,
+              "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
@@ -24821,7 +24821,7 @@
               "text_f1": 1
             },
             "sc/hyperlink_frame.ods": {
-              "layout": 0.8442,
+              "layout": 0.997,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25165,7 +25165,7 @@
               "text_f1": 1
             },
             "sc/rich-text-cells.ods": {
-              "layout": 0.9528,
+              "layout": 0.9754,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25198,8 +25198,8 @@
               "text_f1": 1
             },
             "sc/sheet_name_with_dots.ods": {
-              "layout": 0.7729,
-              "link_recall": 0,
+              "layout": 0.9731,
+              "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
@@ -25391,7 +25391,7 @@
               "text_f1": 1
             },
             "sc/tdf118086.ods": {
-              "layout": 0.9924,
+              "layout": 0.9969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25496,7 +25496,7 @@
               "text_f1": 0.9392
             },
             "sc/tdf122331.ods": {
-              "layout": 0.7904,
+              "layout": 0.8765,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25656,11 +25656,11 @@
               "text_f1": 1
             },
             "sc/tdf130108.ods": {
-              "layout": 0,
+              "layout": 0.993,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sc/tdf130132.ods": {
@@ -25800,7 +25800,7 @@
               "text_f1": 1
             },
             "sc/tdf137081_RTL_page_anchored.ods": {
-              "layout": 0.0545,
+              "layout": 0.2798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -25816,11 +25816,11 @@
               "text_f1": 1
             },
             "sc/tdf137082_RTL_cell_anchored.ods": {
-              "layout": 0.4415,
+              "layout": 0.1438,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
-              "strict": 0.5,
+              "strict": 0,
               "text_f1": 0.5
             },
             "sc/tdf137205_AutofillDatesInMergedCells.ods": {
@@ -31469,12 +31469,12 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 153,
-          "mismatched": 42,
+          "matched": 156,
+          "mismatched": 39,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 190,
+            "pages_equal": 191,
             "reference_fonts_missing": 0,
             "reference_undrawn": 0
           },
@@ -32088,7 +32088,7 @@
               "text_f1": 1
             },
             "odfexport/fdo86963.odt": {
-              "layout": 0.794,
+              "layout": 0.792,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32104,7 +32104,7 @@
               "text_f1": 1
             },
             "odfexport/footnote-collect-at-end-of-section.fodt": {
-              "layout": 0,
+              "layout": 0.5444,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32344,11 +32344,11 @@
               "text_f1": 1
             },
             "odfexport/shapes-hyperlink.odt": {
-              "layout": 0.4455,
+              "layout": 0.9693,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "odfexport/signatureline-properties.fodt": {
@@ -32456,11 +32456,11 @@
               "text_f1": 1
             },
             "odfexport/tdf104254_noHeaderWrapping.odt": {
-              "layout": 0.6277,
+              "layout": 0.8477,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "odfexport/tdf107292.odt": {
@@ -32873,7 +32873,7 @@
               "text_f1": 1
             },
             "odfimport/fdo82165.odt": {
-              "layout": 0.9182,
+              "layout": 0.9935,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32985,12 +32985,12 @@
               "text_f1": 0.8939
             },
             "odfimport/ooo32780-1.odt": {
-              "layout": 0.4443,
-              "link_recall": 0.5,
+              "layout": 0.8695,
+              "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0.4926
+              "text_f1": 1
             },
             "odfimport/ooo77837-1.odt": {
               "layout": 0.4311,
@@ -68877,8 +68877,8 @@
     "litho/ods": {
       "features": {
         "diff": {
-          "matched": 83,
-          "mismatched": 2,
+          "matched": 85,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -68888,7 +68888,7 @@
           },
           "scores": {
             "blank-pages-past-limit": {
-              "layout": 0.9537,
+              "layout": 0.991,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68920,7 +68920,7 @@
               "text_f1": 1
             },
             "hidden-sheets": {
-              "layout": 0.9724,
+              "layout": 0.9742,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68928,7 +68928,7 @@
               "text_f1": 1
             },
             "hidden-sheets-ref": {
-              "layout": 0.9724,
+              "layout": 0.9742,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69520,12 +69520,12 @@
               "text_f1": 1
             },
             "rtl-sheet": {
-              "layout": 0.3365,
+              "layout": 0.9603,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 0.9158
+              "strict": 1,
+              "text_f1": 1
             },
             "sheet-numbers": {
               "layout": 0.9971,
@@ -69544,15 +69544,15 @@
               "text_f1": 1
             },
             "sheet-selection": {
-              "layout": 0.9662,
-              "link_recall": 0.6667,
+              "layout": 0.9684,
+              "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
             "sheets-by-name": {
-              "layout": 0.9359,
+              "layout": 0.9339,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69560,7 +69560,7 @@
               "text_f1": 0.9717
             },
             "sheets-by-name-ref": {
-              "layout": 0.9359,
+              "layout": 0.9374,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
