@@ -800,3 +800,31 @@ func TestRead_LinkedPictureKeepsItsPlace(t *testing.T) {
 		t.Errorf("drawings %+v, want the frame without its picture", ds)
 	}
 }
+
+// TestRead_HeaderWhiteSpace locks the white space of a header part's text
+// (ODF 1.3, Part 3, 6.1.2): a run of spaces, tabs and line ends is one
+// space, none at the paragraph's start or end (see [trimTail]); a text:s
+// space stays.
+func TestRead_HeaderWhiteSpace(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="ta1" style:family="table" style:master-page-name="Ws"/>`,
+		master: "<style:master-page style:name=\"Ws\"><style:header><text:p>\n    <text:sheet-name>?</text:sheet-name>\n  </text:p></style:header>" +
+			"<style:footer><text:p>  a \t\n b  <text:s/></text:p></style:footer></style:master-page>",
+		body: `<table:table table:name="S" table:style-name="ta1"/>`,
+	}
+	doc, _ := read(t, f.bytes())
+	hf := doc.Sheets[0].HeaderFooter.Odd
+	var head, foot strings.Builder
+	for _, s := range hf.Header[1] {
+		if s.Field == sheet.FieldSheet {
+			head.WriteString("<sheet>")
+		}
+		head.WriteString(s.Text)
+	}
+	for _, s := range hf.Footer[1] {
+		foot.WriteString(s.Text)
+	}
+	if head.String() != "<sheet>" || foot.String() != "a b  " {
+		t.Errorf("header %q, footer %q; want %q and %q", head.String(), foot.String(), "<sheet>", "a b  ")
+	}
+}

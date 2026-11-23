@@ -346,6 +346,11 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 		tail.Reset()
 		tail.WriteString(s.Text)
 	}
+	// space marks white space written or a paragraph's start: a run of
+	// white space in the text is one space, none at a paragraph's start
+	// (ODF 1.3, Part 3, 6.1.2); collapsed marks such a space ending the
+	// text written so far.
+	space, collapsed := true, false
 	var walk func(e *odf.Element, f *sheet.Font, depth int)
 	walk = func(e *odf.Element, f *sheet.Font, depth int) {
 		if depth > maxTextDepth {
@@ -357,11 +362,24 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 				return
 			}
 			if c.IsText() {
-				if t := strings.Join(strings.FieldsFunc(c.Text, func(ch rune) bool { return ch == '\n' || ch == '\r' || ch == '\t' }), " "); t != "" {
-					add(sheet.Span{Text: t, Font: f})
+				var b strings.Builder
+				for _, ch := range c.Text {
+					if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+						if !space {
+							b.WriteByte(' ')
+							space, collapsed = true, true
+						}
+						continue
+					}
+					b.WriteRune(ch)
+					space, collapsed = false, false
+				}
+				if b.Len() > 0 {
+					add(sheet.Span{Text: b.String(), Font: f})
 				}
 				continue
 			}
+			space, collapsed = false, false
 			if c.Name.Space != odf.NSText {
 				continue
 			}
@@ -413,12 +431,33 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 			break
 		}
 		if i > 0 {
+			trimTail(&tail, collapsed)
 			add(sheet.Span{Text: "\n"})
 		}
+		space, collapsed = true, false
 		walk(p, nil, 0)
 	}
+	trimTail(&tail, collapsed)
 	settle()
 	return out
+}
+
+// trimTail drops the space ending the text tail collects when collapsed
+// says it is the white space of the file's text that ends a paragraph of a
+// header or footer part, which Calc does not print: a centred part is
+// centred on its text. A text:s space is kept.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/spreadsheet13e.ods centres its header, a
+//     text:sheet-name between the line ends and indents of the file's
+//     XML, exactly on the page.
+func trimTail(tail *strings.Builder, collapsed bool) {
+	t := tail.String()
+	if collapsed && strings.HasSuffix(t, " ") {
+		tail.Reset()
+		tail.WriteString(t[:len(t)-1])
+	}
 }
 
 // hfFont returns the font of a header span of the text style name, laid
