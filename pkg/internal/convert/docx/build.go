@@ -641,6 +641,23 @@ func holding(ns, set []*layout.Node) []*layout.Node {
 	return out
 }
 
+// ltrRun lays a run without w:rtl in a right-to-left paragraph out as
+// left-to-right text, embedded: Word gives its weak and neutral
+// characters, the punctuation and digits at its ends among them, the
+// direction of the run (ECMA-376 Part 1, 17.3.2.30 rtl), where the
+// Unicode Bidirectional Algorithm alone gives them the paragraph's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo43093b.docx: in paragraphs of
+//     w:bidi, runs without w:rtl ending "in M$" print the dollar sign
+//     right of the M.
+func ltrRun(st *css.Style, r runProps) {
+	if st.Direction == css.RTL && !boolOf(r.rtl) {
+		st.Direction, st.UnicodeBidi = css.LTR, css.Embed
+	}
+}
+
 // spacingOf returns the space before and after a paragraph in points
 // (17.3.1.33); automatic spacing takes the 14 points of HTML paragraphs,
 // as Word and LibreOffice size it.
@@ -1387,6 +1404,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 	hidden := boolOf(props.vanish)
 	rs := inlineOf(ps)
 	d.applyRun(&rs, props, lineMult)
+	ltrRun(&rs, props)
 	runBorder(&rs, props.border)
 	st := d.share(&rs)
 	var lang string
