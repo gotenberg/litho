@@ -386,6 +386,8 @@ func parseBgSize(v []token, _ *declCtx) (any, bool) { return bgList(v, sizeValue
 // 3.10): per layer, an image, a position with an optional size after a
 // slash, a repeat style, an attachment and one or two boxes, the origin
 // then the clip, in any order; the final layer may also name the colour.
+// The text keyword sets the clip alone, beside at most one box, the
+// origin (CSS Backgrounds 4, whose layer takes <visual-box> || <bg-clip>).
 // Each longhand's list holds one entry a layer, the initial value where
 // the layer leaves it out; a longhand no layer names is reset as the
 // initial keyword resets it.
@@ -406,7 +408,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 	var anyRepeat, anyPos, anySize, anyOrigin, anyAttach bool
 	for li, layer := range layers {
 		final := li == n-1
-		var hasColor, image, repeat, attach, pos bool
+		var hasColor, image, repeat, attach, pos, textClip bool
 		var boxes []BoxEdge
 		if len(layer) == 0 {
 			return nil, false
@@ -444,8 +446,17 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				continue
 			}
 			if t.typ == tIdent {
-				if e, ok := boxEdges[lower(t.value)]; ok && len(boxes) < 2 {
+				if e, ok := boxEdges[lower(t.value)]; ok && len(boxes) < 2 && (!textClip || len(boxes) != 1) {
 					boxes = append(boxes, e)
+					i++
+					continue
+				}
+				// A layer is <visual-box> || <bg-clip> among the rest
+				// (CSS Backgrounds 4, the background shorthand): text is
+				// a <bg-clip> and no <visual-box>, so it sets the clip
+				// alone.
+				if t.isIdent("text") && !textClip && len(boxes) < 2 {
+					textClip = true
 					i++
 					continue
 				}
@@ -493,6 +504,9 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 			origins[li], clips[li] = boxes[0], boxes[0]
 		case 2:
 			origins[li], clips[li] = boxes[0], boxes[1]
+		}
+		if textClip {
+			clips[li] = TextEdge
 		}
 		anyOrigin = anyOrigin || len(boxes) > 0
 	}

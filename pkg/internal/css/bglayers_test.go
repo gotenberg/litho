@@ -157,3 +157,31 @@ func TestBackgroundLayers_BlendModeTakesNoPlusModes(t *testing.T) {
 		}
 	}
 }
+
+// TestBackground_ShorthandTextClip checks the text keyword of the
+// background shorthand (CSS Backgrounds 4: a layer takes <visual-box> ||
+// <bg-clip>, and text is a <bg-clip>): it sets the clip alone, a box
+// beside it the origin, and a second box beside it is invalid.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 paints the gradient of background:
+//     linear-gradient(...) text through the text alone, its origin the
+//     padding box, and with content-box text from the content box.
+func TestBackground_ShorthandTextClip(t *testing.T) {
+	t.Parallel()
+	if s := styleOf(t, "background: linear-gradient(red, blue) text"); s.BackgroundClip != TextEdge || s.BackgroundOrigin != PaddingEdge || s.BackgroundGradient == nil {
+		t.Errorf("text: clip %v, origin %v", s.BackgroundClip, s.BackgroundOrigin)
+	}
+	if s := styleOf(t, "background: content-box text red"); s.BackgroundClip != TextEdge || s.BackgroundOrigin != ContentEdge {
+		t.Errorf("content-box text: clip %v, origin %v", s.BackgroundClip, s.BackgroundOrigin)
+	}
+	if s := styleOf(t, "background: text border-box"); s.BackgroundClip != TextEdge || s.BackgroundOrigin != BorderEdge {
+		t.Errorf("text border-box: clip %v, origin %v", s.BackgroundClip, s.BackgroundOrigin)
+	}
+	for _, v := range []string{"content-box padding-box text", "text text", "text content-box padding-box"} {
+		if s := styleOf(t, "background: "+v); s.BackgroundClip == TextEdge {
+			t.Errorf("%s: parsed", v)
+		}
+	}
+}
