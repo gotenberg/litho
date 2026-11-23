@@ -2449,6 +2449,9 @@ func equalWordAnchor(a, b *WordAnchor) bool {
 	if math.Float64bits(a.Rise) != math.Float64bits(b.Rise) {
 		return false
 	}
+	if a.FromFirstColumn != b.FromFirstColumn {
+		return false
+	}
 	return true
 }
 
@@ -2463,6 +2466,7 @@ func hashWordAnchor(h uint64, x *WordAnchor) uint64 {
 	h = mixBool(h, x.NoOverlap)
 	h = mixBool(h, x.Writer)
 	h = mix(h, math.Float64bits(x.Rise))
+	h = mixBool(h, x.FromFirstColumn)
 	return h
 }
 

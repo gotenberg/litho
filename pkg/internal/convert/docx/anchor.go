@@ -475,6 +475,10 @@ func (a pendingAnchor) resolveWord(s *section) {
 		st.WordAnchor = css.WordAnchor{Set: true, X: hPos(s, p) - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
 	}
 	st.WordAnchor.AlignX, st.WordAnchor.AlignY = ax, ay
+	// A position from the page or its margins stands where it says
+	// whatever column the drawing's paragraph lies in; one from the column
+	// counts from that column (20.4.3.4).
+	st.WordAnchor.FromFirstColumn = s.cols > 1 && (p.simple || fromPageH(p.relH))
 }
 
 // hPos returns the left edge, from the page's, of a drawing of placement
@@ -797,12 +801,21 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 // framePlaced reports whether the text frame of properties f (17.3.1.11
 // framePr) is placed as Word places a frame of the body
 // ([document.placeFrame]): a frame that is no drop cap, names its
-// horizontal and vertical anchors, has a position or an alignment, and wraps the text around it or keeps it above and below
-// (wrap around, auto, tight, through or notBeside), in the body outside
-// tables and text boxes, in a section of one column: the layout measures a
-// float's offset from its column.
+// horizontal and vertical anchors, has a position or an alignment, and
+// wraps the text around it or keeps it above and below (wrap around,
+// auto, tight, through or notBeside), in the body outside tables and text
+// boxes. In a section of several columns, a frame positioned from the
+// page or its margins counts from the first column
+// (css.WordAnchor.FromFirstColumn).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf135035.docx: in a section of three
+//     columns, Word sets the text of a frame of x 4569 from the page at
+//     228.6 points across, in the second column, and draws a frame of x
+//     4014 from the page a column wide from 200.7 points across.
 func (d *document) framePlaced(f *ooxml.Element) bool {
-	if f == nil || !d.pageAnchors() || d.columned || d.inCell > 0 || hasAttr(f, "dropCap") && attrOr(f, "dropCap") != "none" {
+	if f == nil || !d.pageAnchors() || d.inCell > 0 || hasAttr(f, "dropCap") && attrOr(f, "dropCap") != "none" {
 		return false
 	}
 	switch attrOr(f, "wrap") {

@@ -370,14 +370,23 @@ type Office struct {
 // before its paragraph only when it reaches above that area; a line beside
 // it is measured against it over the line's whole height; and a float that
 // ends below its page's area leaves its paragraph on its page.
+//
+// FromFirstColumn counts X from the start edge of the first column of the
+// multi-column container that is the root of the float's formatting
+// context, whatever column the float lands in, where X otherwise counts
+// from the column it lands in: a drawing or a text frame positioned from
+// the page or its margins in a section of several columns (ECMA-376 Part
+// 1, 20.4.3.4 ST_RelFromH; 17.3.1.11 framePr hAnchor), where a position
+// from the column counts from its own column.
 type WordAnchor struct {
-	Set            bool
-	X, Y           float64
-	AlignX, AlignY float64
-	FromPage       bool
-	NoOverlap      bool
-	Writer         bool
-	Rise           float64
+	Set             bool
+	X, Y            float64
+	AlignX, AlignY  float64
+	FromPage        bool
+	NoOverlap       bool
+	Writer          bool
+	Rise            float64
+	FromFirstColumn bool
 }
 
 // WrapPoint is a point of an [Office.WrapPolygon], in fractions of the

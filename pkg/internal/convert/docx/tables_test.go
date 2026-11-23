@@ -478,6 +478,29 @@ func TestFrames_Placed(t *testing.T) {
 	if w := frames[1].Style.Width; w.Kind != css.Auto {
 		t.Errorf("frame of one paragraph without a width: width %v, want auto", w)
 	}
+	// In a section of three columns 18 points apart, a frame positioned
+	// from the page counts from the first column whatever column it lands
+	// in, one positioned from its column from its own, and a frame of
+	// several paragraphs is a column wide.
+	cols := `<w:sectPr><w:cols w:num="3" w:space="360"/></w:sectPr>`
+	text := `<w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="text" w:x="200" w:y="200"/>`
+	b = build(t, para(f, "one")+para(f, "two")+para(text, "three")+para("", "flow")+cols, nil)
+	for _, a := range b.secs[0].pending {
+		a.resolve(b.secs[0])
+	}
+	frames = find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set })
+	if len(frames) != 2 {
+		t.Fatalf("columns: %d frames, want 2", len(frames))
+	}
+	if a := frames[0].Style.WordAnchor; !a.FromFirstColumn || math.Abs(a.X-78) > 1e-9 {
+		t.Errorf("columns: frame from the page %+v, want X 78 from the first column", a)
+	}
+	if a := frames[1].Style.WordAnchor; a.FromFirstColumn || math.Abs(a.X-10) > 1e-9 {
+		t.Errorf("columns: frame from its column %+v, want X 10 from its own column", a)
+	}
+	if w := frames[0].Style.Width; w != css.Pts(144) {
+		t.Errorf("columns: frame of several paragraphs: width %v, want the column's 144", w)
+	}
 }
 
 // TestTables_GridBefore holds the place of the grid columns a row's

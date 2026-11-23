@@ -121,14 +121,18 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	// The offset is from the column, the content box of the formatting
 	// context's root, whatever the indents of the paragraph.
 	left := cb.x
+	var root *box
 	for p := f.parent; p != nil; p = p.parent {
 		if p.establishesBFC() {
-			left = p.contentX()
+			left, root = p.contentX(), p
 			break
 		}
 	}
 	x, y := left+a.X, top+a.Y
 	page := e.pageOf(top + eps)
+	if a.FromFirstColumn {
+		x -= e.columnShift(root, page)
+	}
 	switch {
 	case a.FromPage:
 		y = e.pageTop(page) + a.Y
@@ -190,6 +194,20 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	}
 	bc.floats = append(bc.floats, wordRect(f))
 	return len(bc.floats) - 1
+}
+
+// columnShift returns how far right of the first column's start edge the
+// column i of the column set being laid out starts, when root is that
+// set's multi-column container; 0 otherwise. The column flow is laid out
+// at the first column's position and each column's slice moved by this
+// shift when painted, so a float of css.WordAnchor.FromFirstColumn takes
+// it off its offset to stand where its offset says on the page.
+func (e *engine) columnShift(root *box, i int) float64 {
+	c := e.cols
+	if c == nil || root == nil || c.owner != root || root.mc == nil || i < 0 || i >= len(c.frags) {
+		return 0
+	}
+	return root.mc.columnX(c.frags[i].col)
 }
 
 // writerArea returns the top of the area of the paragraph whose first line

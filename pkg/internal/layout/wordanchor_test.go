@@ -2,6 +2,7 @@ package layout
 
 import (
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -294,5 +295,27 @@ func TestWordAnchor_WriterIndents(t *testing.T) {
 				t.Errorf("lines %s, want %s", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestWordAnchor_FromFirstColumn places a float of css.Office.WordAnchor
+// in the second column of a multi-column container at its offset from
+// the first column under FromFirstColumn, as Word places a frame
+// positioned from the page, and from its own column without it.
+func TestWordAnchor_FromFirstColumn(t *testing.T) {
+	for _, tt := range []struct {
+		first bool
+		want  string
+	}{{false, "X@70,"}, {true, "X@10,"}} {
+		f := wordFloat(css.FrameWrapNone, 10, 0, 20, 10, func(s *css.Style) { s.WordAnchor.FromFirstColumn = tt.first })
+		mc := el(sty(width(100), height(20), func(s *css.Style) {
+			s.Columns.Count = 2
+			s.Columns.Fill = css.FillAuto
+			s.ColumnGap = css.Pts(px(20))
+		}), wpara("a"), wpara("b"), wpara("c", f))
+		res := run(t, doc(mc), page(200, 200))
+		if got := linePlaces(res, 1); !strings.HasPrefix(got, tt.want) && !strings.Contains(got, " "+tt.want) {
+			t.Errorf("FromFirstColumn %v: %s, want %s", tt.first, got, tt.want)
+		}
 	}
 }

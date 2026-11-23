@@ -120,6 +120,7 @@ func (d *document) pageOf(e *ooxml.Element) *section {
 	}
 	if e != nil {
 		s.readPage(e)
+		s.readColumns(e.Child(w, "cols"))
 	}
 	s.applyOptions(d.opts)
 	return s
@@ -145,6 +146,37 @@ func columned(e *ooxml.Element) bool {
 		return n > 1
 	}
 	return false
+}
+
+// readColumns reads the w:cols c of a section (17.6.4 cols, 17.6.3 col)
+// into s; nil leaves one column.
+func (s *section) readColumns(c *ooxml.Element) {
+	if c == nil {
+		return
+	}
+	if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
+		s.cols = min(v, maxColumns)
+	}
+	if v, ok := ooxml.Twips(attrOr(c, "space")); ok {
+		s.colSpace = max(0, v)
+	}
+	s.colSep = hasAttr(c, "sep") && ooxml.OnOff(attrOr(c, "sep"), true)
+	if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) {
+		// Columns of different widths list each column (17.6.3 col).
+		for _, col := range c.Kids() {
+			if !col.Is(w, "col") || len(s.colTracks) >= maxColumns {
+				continue
+			}
+			cw, _ := ooxml.Twips(attrOr(col, "w"))
+			sp, _ := ooxml.Twips(attrOr(col, "space"))
+			s.colTracks = append(s.colTracks, columnTrack{w: max(0, cw), space: max(0, sp)})
+		}
+		if len(s.colTracks) > 1 {
+			s.cols = len(s.colTracks)
+		} else {
+			s.colTracks = nil
+		}
+	}
 }
 
 // parseSection reads a w:sectPr (17.6.17), headers and footers it does not
@@ -175,31 +207,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		return s
 	}
 	s.readPage(e)
-	if c := e.Child(w, "cols"); c != nil {
-		if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
-			s.cols = min(v, maxColumns)
-		}
-		if v, ok := ooxml.Twips(attrOr(c, "space")); ok {
-			s.colSpace = max(0, v)
-		}
-		s.colSep = hasAttr(c, "sep") && ooxml.OnOff(attrOr(c, "sep"), true)
-		if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) {
-			// Columns of different widths list each column (17.6.3 col).
-			for _, col := range c.Kids() {
-				if !col.Is(w, "col") || len(s.colTracks) >= maxColumns {
-					continue
-				}
-				cw, _ := ooxml.Twips(attrOr(col, "w"))
-				sp, _ := ooxml.Twips(attrOr(col, "space"))
-				s.colTracks = append(s.colTracks, columnTrack{w: max(0, cw), space: max(0, sp)})
-			}
-			if len(s.colTracks) > 1 {
-				s.cols = len(s.colTracks)
-			} else {
-				s.colTracks = nil
-			}
-		}
-	}
+	s.readColumns(e.Child(w, "cols"))
 	if t := e.Child(w, "type"); t != nil {
 		s.breakType = attrOr(t, "val")
 	}
