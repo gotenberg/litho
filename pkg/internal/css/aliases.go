@@ -176,3 +176,56 @@ func propertyName(name string) string {
 	}
 	return name
 }
+
+// chromiumKeywordNames returns the prefixed names Chromium reads as a
+// standard property under keywords of their own, each a shorthand of that
+// property mapping its keywords onto the property's:
+//
+//   - -webkit-column-break-before and -after: auto, always as column and
+//     avoid as avoid-column (CSS Fragmentation 3, 3.1); -inside: auto,
+//     avoid as avoid-column (3.2).
+//   - -webkit-text-combine: none, horizontal as all (text-combine-upright,
+//     CSS Writing Modes 4, 9.1).
+//   - -webkit-ruby-position: before as over, after as under, and
+//     inter-character as over (ruby-position, CSS Ruby 1, 4.1).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 keeps a paragraph of
+//     -webkit-column-break-inside: avoid whole in the next column, sets
+//     the digits of -webkit-text-combine: horizontal upright in one em of
+//     a vertical line and those of none sideways, and sets the annotation
+//     of -webkit-ruby-position: after under its base, of before and of
+//     inter-character over it.
+func chromiumKeywordNames() map[string]shorthandDef {
+	return map[string]shorthandDef{
+		"-webkit-column-break-before": keywordAlias(pBreakBefore, map[string]string{"auto": "auto", "always": "column", "avoid": "avoid-column"}),
+		"-webkit-column-break-after":  keywordAlias(pBreakAfter, map[string]string{"auto": "auto", "always": "column", "avoid": "avoid-column"}),
+		"-webkit-column-break-inside": keywordAlias(pBreakInside, map[string]string{"auto": "auto", "avoid": "avoid-column"}),
+		"-webkit-text-combine":        keywordAlias(pTextCombineUpright, map[string]string{"none": "none", "horizontal": "all"}),
+		"-webkit-ruby-position":       keywordAlias(pRubyPosition, map[string]string{"before": "over", "after": "under", "inter-character": "over"}),
+	}
+}
+
+// keywordAlias is the shorthand of the longhand id that takes the
+// keywords of names alone, each as the keyword of id it maps to.
+func keywordAlias(id propID, names map[string]string) shorthandDef {
+	return shorthandDef{
+		longhands: []propID{id},
+		expand: func(v []token, c *declCtx) ([]entry, bool) {
+			k, ok := keyword(v)
+			if !ok {
+				return nil, false
+			}
+			to, ok := names[k]
+			if !ok {
+				return nil, false
+			}
+			pv, ok := props[id].parse([]token{{typ: tIdent, value: to}}, c)
+			if !ok {
+				return nil, false
+			}
+			return []entry{{id, pv}}, true
+		},
+	}
+}

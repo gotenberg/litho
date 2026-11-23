@@ -202,3 +202,29 @@ func TestChromiumAliases_ParseAsTheirProperty(t *testing.T) {
 		t.Errorf("a later column-count: column-count = %v", s.Columns.Count)
 	}
 }
+
+// TestChromiumKeywordNames_MapOntoTheirProperty checks the prefixed names
+// Chromium reads under keywords of their own: each keyword declares the
+// standard property's keyword it stands for, and any other value is
+// invalid.
+func TestChromiumKeywordNames_MapOntoTheirProperty(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, value, target string }{
+		{"-webkit-column-break-before", "always", "break-before: column"},
+		{"-webkit-column-break-before", "avoid", "break-before: avoid-column"},
+		{"-webkit-column-break-after", "always", "break-after: column"},
+		{"-webkit-column-break-inside", "avoid", "break-inside: avoid-column"},
+		{"-webkit-text-combine", "horizontal", "text-combine-upright: all"},
+		{"-webkit-ruby-position", "after", "ruby-position: under"},
+		{"-webkit-ruby-position", "inter-character", "ruby-position: over"},
+	} {
+		want := styleOf(t, tc.target)
+		if got := styleOf(t, tc.name+": "+tc.value); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %s alone does not compute as %s", tc.name, tc.value, tc.target)
+		}
+	}
+	c := compute(t, `<body><div id=t></div></body>`, `#t { -webkit-column-break-before: column; -webkit-text-combine: all }`)
+	if !hasWarning(c.c.Warnings(), warn.CSSInvalid, "-webkit-column-break-before") {
+		t.Errorf("-webkit-column-break-before: column did not warn: %v", c.c.Warnings())
+	}
+}

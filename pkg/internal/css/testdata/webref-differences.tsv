@@ -14,7 +14,12 @@ initial	outline-color	CSS UI 4 gives auto; Chromium 156 refuses outline-color: a
 initial	ruby-position	Chromium 156 parses over and under alone and computes the initial value to over; CSS Ruby 1, 4.1 gives alternate
 initial	text-autospace	CSS Text 4 gives normal; Chromium 156 computes no-autospace on a plain element, and litho's initial value is that
 unknown	-webkit-box-decoration-break	a legacy name Chromium 156 parses (CSS.supports true) that webref does not list as an alias of box-decoration-break
+unknown	-webkit-column-break-after	a legacy name Chromium 156 reads as break-after under keywords of its own (always as column, avoid as avoid-column), that webref does not list
+unknown	-webkit-column-break-before	a legacy name Chromium 156 reads as break-before under keywords of its own (always as column, avoid as avoid-column), that webref does not list
+unknown	-webkit-column-break-inside	a legacy name Chromium 156 reads as break-inside under keywords of its own (avoid as avoid-column), that webref does not list
 unknown	-webkit-print-color-adjust	a legacy name Chromium 156 reads as print-color-adjust (an element of -webkit-print-color-adjust: economy loses its background as one of print-color-adjust: economy) that webref does not list as an alias
+unknown	-webkit-ruby-position	a legacy name Chromium 156 reads as ruby-position under keywords of its own (before and inter-character as over, after as under), that webref does not list
+unknown	-webkit-text-combine	a legacy name Chromium 156 reads as text-combine-upright under keywords of its own (horizontal as all), that webref does not list
 unknown	app-region	ignored by design, without a warning: the legacy name of window-drag (CSS UI 4, 8.1, a note) that Chromium 156 parses (CSS.supports true) and webref does not list; a printed page has no window
 unknown	buffered-rendering	ignored by design, without a warning: a rendering hint of SVG Tiny 1.2, 11.10.5 that Chromium 156 parses (CSS.supports true) and prints nothing for, in no specification webref reads
 unknown	color-rendering	ignored by design, without a warning: a rendering hint of SVG 1.1, 11.7.2 that Chromium 156 parses (CSS.supports true) and prints nothing for, in no specification webref reads
