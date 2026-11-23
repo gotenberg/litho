@@ -1939,8 +1939,21 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 		mirrorRun(&c)
 	}
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
-	if !p.textPaint(it, l, page, &c, top, bottom) && !p.strokeText(it, l, page, &c, top, bottom) && c.Color.A > 0 {
-		p.emit(it.box, true, &c, top, bottom, page)
+	if !p.textPaint(it, l, page, &c, top, bottom) && !p.strokeText(it, l, page, &c, top, bottom) {
+		switch {
+		case c.Color.A > 0:
+			p.emit(it.box, true, &c, top, bottom, page)
+		case p.e.opts.BrowserRules:
+			// Text in a transparent colour paints nothing and is still
+			// the text of its element, which a reader reads and Chromium
+			// writes: it is written in text rendering mode 3, neither
+			// filled nor stroked (ISO 32000-1, 9.3.6), tagged as any text
+			// (ISO 14289-1, 7.1). Mode 3 paints no colour, and the page
+			// model takes no fully transparent one: the run states black.
+			// Office text of no fill keeps the rules of its converter.
+			c.Invisible, c.Stroke, c.Outline, c.Color = true, 0, nil, typeset.Color{A: 1}
+			p.emit(it.box, true, &c, top, bottom, page)
+		}
 	}
 	p.emphasisMarks(it, l, page)
 	p.textDecorations(it, l, page, css.LineThrough, nil)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func clipText(s *css.Style) { s.BackgroundClip = css.TextEdge }
@@ -57,4 +58,46 @@ func TestBackgroundClip_Text(t *testing.T) {
 func TestBackgroundClip_TextOnATableRow(t *testing.T) {
 	root := doc(table(nil, tr(mods(bg(lime), clipText), td(mods(transparent), "X X"))))
 	assertPixels(t, run(t, root, page(30, 20)), 1, rowsOf("GGGGGGGGGG__________GGGGGGGGGG", 10, 10))
+}
+
+// TestText_TransparentStaysText locks that under BrowserRules text in a
+// transparent colour, a heading whose background clips to its glyphs
+// among others, paints nothing and is still its element's text: written
+// invisible (ISO 32000-1, 9.3.6, text rendering mode 3) and tagged (ISO
+// 14289-1, 7.1), as Chromium writes it. Office rules write none.
+//
+// # Corpus evidence
+//
+//   - litho/html borders-cards: two headings of background-clip: text and
+//     a transparent colour lost their text, the first its H1, which left
+//     its first heading of level 2 and failed PDF/UA-1, 7.4.2; Chromium's
+//     PDF holds both texts.
+func TestText_TransparentStaysText(t *testing.T) {
+	st := sty(transparent, bg(lime), clipText)
+	for _, browser := range []bool{true, false} {
+		res := runWith(t, doc(role("H1", el(st, txt(st, "X")))), Options{Page: page(30, 20), BrowserRules: browser})
+		var texts []*typeset.Text
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch v := f.(type) {
+				case *typeset.Text:
+					texts = append(texts, v)
+				case *typeset.Group:
+					walk(v.Content)
+				}
+			}
+		}
+		walk(res.Pages[0].Content)
+		if !browser {
+			if len(texts) != 0 {
+				t.Errorf("Office rules wrote %d text runs, want none", len(texts))
+			}
+			continue
+		}
+		assertPixels(t, res, 1, rowsOf("GGGGGGGGGG____________________", 10, 10))
+		if len(texts) != 1 || !texts[0].Invisible || texts[0].Parent == nil || texts[0].Parent.Role != "H1" {
+			t.Fatalf("texts %+v, want the heading's text, invisible and tagged", texts)
+		}
+	}
 }
