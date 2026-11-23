@@ -149,6 +149,10 @@ type builder struct {
 	// scriptRuns records the runs of the paragraph being built, which
 	// [builder.splitScripts] cuts by script; nil outside a paragraph.
 	scriptRuns *[]scriptRun
+	// lastSpan holds the text properties of the last text:span met in
+	// the paragraph being built, nil before any: an empty paragraph's line
+	// takes them.
+	lastSpan *textState
 	// meta records the paragraph blocks' spacing properties.
 	meta map[*layout.Node]paraMeta
 	// listPath maps each block a list built to the lists it sits in,
@@ -584,11 +588,12 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	b.meta[n] = paraMeta{style: b.commonStyle(name), contextual: p.contextual, join: p.joinBorder}
 	ws := &wsState{space: true}
 	var kids []*layout.Node
-	outer, outerBreak := b.scriptRuns, b.lineBreak
+	outer, outerBreak, outerSpan := b.scriptRuns, b.lineBreak, b.lastSpan
 	var runs []scriptRun
-	b.scriptRuns, b.lineBreak = &runs, st.LineBreak
+	b.scriptRuns, b.lineBreak, b.lastSpan = &runs, st.LineBreak, nil
 	b.inline(el, t, &kids, ws, ctx.depth)
-	b.scriptRuns = outer
+	lastSpan := b.lastSpan
+	b.scriptRuns, b.lastSpan = outer, outerSpan
 	kids = b.splitScripts(kids, runs, strings.HasPrefix(p.writing, "rl"))
 	if b.comments != nil {
 		kids = b.wrapComments(kids, 0)
@@ -614,6 +619,11 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			st.Position = css.Relative
 			break
 		}
+	}
+	if lastSpan != nil && visible(kids) == 0 {
+		// Writer sets an empty paragraph's line in the text properties
+		// at its start, which its last empty span gives.
+		applyText(st, *lastSpan, false)
 	}
 	n.Style = b.share(st)
 	if lineBreak {
@@ -938,7 +948,9 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 	case odf.NSText:
 		switch c.Name.Local {
 		case "span":
-			b.inline(c, b.spanText(t, c.A(odf.NSText, "style-name")), out, ws, depth)
+			st := b.spanText(t, c.A(odf.NSText, "style-name"))
+			b.lastSpan = &st
+			b.inline(c, st, out, ws, depth)
 		case "s":
 			count := 1
 			if v, err := intconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {

@@ -899,3 +899,41 @@ func TestPageBackground_Area(t *testing.T) {
 		}
 	}
 }
+
+// TestEmptyParagraphTakesLastSpan locks that an empty paragraph's line
+// is set in the text properties of the last empty span it holds, as
+// Writer sets it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/empty_line_in_text_box.fodt sets the
+//     empty paragraph between two 10 pt lines, its one span empty and of
+//     10 pt, as a 10 pt line.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, the empty paragraph
+//     between two 12 pt Liberation Serif lines takes 27.6 pt with an
+//     empty 24 pt span, a 24 pt span holding a space or a bookmark then
+//     one, or a 10 pt span then a 24 pt one; 11.55 pt with a 10 pt span,
+//     or a 24 pt one then a 10 pt one; 13.8 pt with none.
+func TestEmptyParagraphTakesLastSpan(t *testing.T) {
+	auto := `<style:style style:name="T10" style:family="text"><style:text-properties fo:font-size="10pt"/></style:style>` +
+		`<style:style style:name="T24" style:family="text"><style:text-properties fo:font-size="24pt"/></style:style>`
+	for _, tc := range []struct {
+		spans string
+		want  float64
+	}{
+		{`<text:span text:style-name="T24"/>`, 27.6},
+		{`<text:span text:style-name="T10"/><text:span text:style-name="T24"/>`, 27.6},
+		{`<text:span text:style-name="T24"/><text:span text:style-name="T10"/>`, 11.5},
+		{`<text:span text:style-name="T24"> </text:span>`, 27.6},
+		{``, 13.8},
+	} {
+		body := `<text:p>A</text:p><text:p>` + tc.spans + `</text:p><text:p>B</text:p>`
+		ls := lines(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0])
+		if len(ls) != 2 {
+			t.Fatalf("%s: %d lines", tc.spans, len(ls))
+		}
+		if got := ls[1].y - ls[0].y - 13.8; !near(got, tc.want, 0.1) {
+			t.Errorf("%s: empty line %.2f, want %.2f", tc.spans, got, tc.want)
+		}
+	}
+}
