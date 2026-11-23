@@ -666,6 +666,8 @@ func (p *fparser) call(fn string) (fval, bool) {
 	}
 	switch fn {
 	case "SUM", "AVERAGE", "MIN", "MAX", "COUNT":
+	case "AND", "OR":
+		return p.logical(fn, args)
 	default:
 		if v, ok := p.scalarFunction(fn, args); ok {
 			return v, true
@@ -747,6 +749,74 @@ func (p *fparser) call(fn string) (fval, bool) {
 		out.v.Number, out.format = float64(len(nums)), ""
 	}
 	return out, true
+}
+
+// logical computes AND or OR of args (ECMA-376 Part 1, 18.17.7, AND and
+// OR; ODF 1.3 Part 4, 6.15, AND and OR): a number or a logical value of a
+// reference counts, its text and empty cells do not; another value counts
+// as a number, text that holds none failing with #VALUE!. The first error
+// met is the result, and so is #VALUE! when nothing counts.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf153767.xlsx fills, by the rule AND(A2:H2)
+//     over A2:H19, the cells of columns G and H in the rows whose G holds
+//     1 and H TRUE: the range moves with each cell, its text is passed
+//     over, and F's 0 makes the cells left of G false.
+func (p *fparser) logical(fn string, args []fval) (fval, bool) {
+	if len(args) == 0 {
+		return fval{}, false
+	}
+	and := fn == "AND"
+	out, counted := and, false
+	take := func(n float64) {
+		counted = true
+		if and {
+			out = out && n != 0
+		} else {
+			out = out || n != 0
+		}
+	}
+	for _, a := range args {
+		if a.rng != nil {
+			var errV *Value
+			p.e.eachCell(a.rng, p.depth, func(v fval) bool {
+				switch v.v.Kind {
+				case Number, Bool:
+					take(v.v.Number)
+				case Error:
+					e := v.v
+					errV = &e
+					return false
+				case Text, Empty:
+				}
+				return true
+			})
+			if errV != nil {
+				return fval{v: *errV}, true
+			}
+			continue
+		}
+		switch a.v.Kind {
+		case Error:
+			return fval{v: a.v}, true
+		case Empty:
+			continue
+		case Number, Text, Bool:
+		}
+		n, errV := number(a.v)
+		if errV != nil {
+			return fval{v: *errV}, true
+		}
+		take(n)
+	}
+	if !counted {
+		return fval{v: Value{Kind: Error, Text: errValue}}, true
+	}
+	if out {
+		return fval{v: Value{Kind: Bool, Number: 1}}, true
+	}
+	return fval{v: Value{Kind: Bool}}, true
 }
 
 // eachCell calls fn with the value of each cell of rg holding something,
@@ -1088,7 +1158,7 @@ func (e *formulaEval) volatile(fn string, args int) (fval, bool) {
 
 // scalarFunction computes the functions of scalar arguments the
 // evaluator knows besides the aggregates: ROW and COLUMN of the cell or of
-// a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR, NOT,
+// a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, NOT,
 // HOUR, MINUTE, SECOND and SWITCH, as Calc defines them; false for
 // another function or a wrong count of arguments.
 //
@@ -1234,23 +1304,6 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 			return fval{v: *err}, true
 		}
 		return boolean(x == 0)
-	case "AND", "OR":
-		if len(args) == 0 {
-			return fval{}, false
-		}
-		out := fn == "AND"
-		for i := range args {
-			x, err := num(i)
-			if err != nil {
-				return fval{v: *err}, true
-			}
-			if fn == "AND" {
-				out = out && x != 0
-			} else {
-				out = out || x != 0
-			}
-		}
-		return boolean(out)
 	case "IF":
 		if len(args) < 1 || len(args) > 3 {
 			return fval{}, false

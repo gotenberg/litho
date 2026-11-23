@@ -60,6 +60,10 @@ func TestApplyFormulas(t *testing.T) {
 		// the formula's: T holds 10 in A1 and nothing below, S holds 2 and 3.
 		{"of:=SUM([$T.A1:.A2])", num(10), ""},
 		{"A1+", num(-1), ""},
+		// AND and OR read the numbers of a range and pass its text over.
+		{"AND(A1:B3)", Value{Kind: Bool, Number: 1}, ""},
+		{"AND(A1:A3,0)", Value{Kind: Bool}, ""},
+		{"OR(B1:B3)", Value{Kind: Error, Text: "#VALUE!"}, ""},
 	}
 	var formulas []string
 	for _, tt := range tests {
