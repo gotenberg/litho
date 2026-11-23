@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/xml"
 	"fmt"
 	"image"
 	"image/color"
@@ -212,6 +213,9 @@ type frameGeom struct {
 	// text:anchor-page-number).
 	page  int
 	props odf.Props
+	// bare marks a text frame Writer paints as a shape: see
+	// [builder.bareFrame].
+	bare bool
 }
 
 // geometry reads a drawing element's geometry and graphic style.
@@ -1207,7 +1211,7 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			}
 			return b.imageNode(pic, g, alt)
 		case k.Is(odf.NSDraw, "text-box"):
-			n := b.textBox(k, g, depth)
+			n := b.textBox(k, b.bareFrame(c, g), depth)
 			if hasText(n.Children) {
 				n.Role, n.Alt = "Figure", alt
 				if alt == "" {
@@ -1298,6 +1302,87 @@ func cropped(pic *layout.Picture, clip string) *layout.Picture {
 	return out
 }
 
+// bareFrame returns g, the geometry of the text frame c, with the fill
+// and outline Writer draws for a frame whose graphic style is an
+// automatic style of no parent: such a frame is painted as a shape,
+// filled with the default graphic style's draw:fill-color, else the
+// application's #729fcf, whatever its fo:background-color and the
+// default style's draw:fill say, unless its own style sets draw:fill
+// none or another kind of fill, and outlined in the default style's
+// svg:stroke-color, else #3465a4, unless draw:stroke is none
+// ([bareOutline]), its fo:border never drawn. A frame
+// whose style has a parent, even one the document does not define, or
+// that names no style, keeps no fill and no outline of its own. ODF 1.3,
+// Part 3, 20.142 and 20.148 give no default; the colours are Writer's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/empty_line_in_text_box.fodt prints its
+//     frame of the parentless style gr1 filled #729fcf and outlined
+//     #3465a4.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, 4 by 2 cm text
+//     frames of parentless automatic styles print filled #729fcf and
+//     outlined #3465a4, also with fo:background-color transparent or
+//     #00ff00, a padding, a shadow or draw:fill solid; draw:fill none
+//     leaves the page's colour and the outline, draw:stroke none the
+//     fill alone, draw:fill-color #00ff00 fills green, svg:stroke-color
+//     red outlines red; a default graphic style of draw:fill-color red
+//     and svg:stroke-color green fills red and outlines green, one of
+//     draw:fill none and draw:stroke none still fills #729fcf and draws
+//     no outline, one of draw:fill solid and yellow fills yellow; frames
+//     of styles whose parent is Frame, a common style of no parent or a
+//     style the document does not define, and frames that name no
+//     style, print neither; one of fo:border red under a default style
+//     of draw:stroke none prints no line at all.
+func (b *builder) bareFrame(c *odf.Element, g frameGeom) frameGeom {
+	chain := b.styles.Chain(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"))
+	if len(chain) != 1 || !chain[0].Auto || chain[0].Parent != "" {
+		return g
+	}
+	var attrs []xml.Attr
+	set := func(space, local, v string) {
+		attrs = append(attrs, xml.Attr{Name: xml.Name{Space: space, Local: local}, Value: v})
+	}
+	switch chain[0].Props(odf.GraphicProps).Get("draw:fill") {
+	case "none", "gradient", "bitmap", "hatch":
+	default:
+		set(odf.NSDraw, "fill", "solid")
+		if _, ok := odf.ParseColor(g.props.Get("draw:fill-color")); !ok {
+			set(odf.NSDraw, "fill-color", "#729fcf")
+		}
+	}
+	g.bare = true
+	for _, side := range []string{"border", "border-top", "border-bottom", "border-left", "border-right"} {
+		set(odf.NSFO, side, "none")
+	}
+	g.props = g.props.Over(odf.PropsOf(&odf.Element{Attr: attrs}))
+	return g
+}
+
+// bareOutline gives st, the box of a frame of geometry g that Writer
+// paints as a shape, the line it draws around it: centred on the frame's
+// edge, taking no room from its text, in svg:stroke-color, else #3465a4,
+// at svg:stroke-width, else a hairline; none under draw:stroke none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/empty_line_in_text_box.fodt prints the
+//     first line of its outlined frame at the frame's top.
+func bareOutline(st *css.Style, g frameGeom) {
+	if g.props.Get("draw:stroke") == "none" {
+		return
+	}
+	bd := css.Border{Width: css.MinBorderStroke, Style: css.Solid, Color: css.Color{R: 0x34 / 255.0, G: 0x65 / 255.0, B: 0xa4 / 255.0, A: 1}}
+	if col, ok := odf.ParseColor(g.props.Get("svg:stroke-color")); ok {
+		bd.Color = cssColor(col)
+	}
+	if w, ok := odf.Length(g.props.Get("svg:stroke-width")); ok && w > bd.Width {
+		bd.Width = w
+	}
+	st.Border = [4]css.Border{}
+	st.Outline, st.OutlineOffset = bd, -bd.Width/2
+}
+
 // rectOps returns the path of the rectangle r.
 func rectOps(r typeset.Rect) []typeset.PathOp {
 	return []typeset.PathOp{
@@ -1319,6 +1404,9 @@ func rectOps(r typeset.Rect) []typeset.PathOp {
 func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	st := b.frameBox(g)
 	rounded := frameOutline(st, k, g)
+	if g.bare {
+		bareOutline(st, g)
+	}
 	b.pageFill(st, g)
 	applyWritingMode(st, g.props.Get("style:writing-mode"))
 	st.Display = css.InlineBlock

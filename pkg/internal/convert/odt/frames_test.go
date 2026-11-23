@@ -14,7 +14,7 @@ import (
 // a frame without a fill of its own is filled with the page's colour
 // ([builder.pageFill]).
 func TestDuplicateFrames(t *testing.T) {
-	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+	auto := `<style:style style:name="fr" style:family="graphic" style:parent-style-name="Frame"><style:graphic-properties style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
 	frame := func(name, x, text string) string {
 		return `<draw:frame draw:style-name="fr" draw:name="` + name + `" text:anchor-type="page" text:anchor-page-number="1" svg:x="` + x +
 			`" svg:y="5cm" svg:width="5cm" svg:height="2cm"><draw:text-box><text:p>` + text + `</text:p></draw:text-box></draw:frame>`
@@ -181,6 +181,66 @@ func TestPageFrameInParagraph(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("number %q: no FRAME on page %d", tc.number, tc.page+1)
+		}
+	}
+}
+
+// pathColours returns the fill and stroke colours of the paths of frags,
+// groups walked.
+func pathColours(frags []typeset.Fragment) map[typeset.Color]bool {
+	out := map[typeset.Color]bool{}
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Path:
+				if v.Fill != nil {
+					out[v.Fill.Color] = true
+				}
+				if v.Stroke != nil {
+					out[v.Stroke.Color] = true
+				}
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(frags)
+	return out
+}
+
+// TestBareFrame locks the fill and outline Writer paints a text frame
+// whose style is an automatic style of no parent with (see
+// [builder.bareFrame], which holds the measurements).
+func TestBareFrame(t *testing.T) {
+	rgb := func(r, g, b int) typeset.Color {
+		return typeset.Color{R: float64(r) / 255, G: float64(g) / 255, B: float64(b) / 255, A: 1}
+	}
+	fill, line, red := rgb(0x72, 0x9f, 0xcf), rgb(0x34, 0x65, 0xa4), rgb(255, 0, 0)
+	for _, tc := range []struct {
+		name, parent, props string
+		want, not           []typeset.Color
+	}{
+		{"bare", "", "", []typeset.Color{fill, line}, nil},
+		{"background ignored", "", `fo:background-color="#ff0000"`, []typeset.Color{fill, line}, []typeset.Color{red}},
+		{"border ignored", "", `fo:border="1pt solid #ff0000"`, []typeset.Color{fill, line}, []typeset.Color{red}},
+		{"no fill", "", `draw:fill="none"`, []typeset.Color{line}, []typeset.Color{fill}},
+		{"no stroke", "", `draw:stroke="none"`, []typeset.Color{fill}, []typeset.Color{line}},
+		{"own colours", "", `draw:fill-color="#ff0000" svg:stroke-color="#00ff00"`, []typeset.Color{red, rgb(0, 255, 0)}, []typeset.Color{fill, line}},
+		{"parent", ` style:parent-style-name="Frame"`, "", nil, []typeset.Color{fill, line}},
+	} {
+		auto := `<style:style style:name="fr" style:family="graphic"` + tc.parent + `><style:graphic-properties ` + tc.props + ` style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+		body := `<text:p><draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="page" text:anchor-page-number="1" svg:x="3cm" svg:y="5cm" svg:width="4cm" svg:height="2cm"><draw:text-box><text:p>A</text:p></draw:text-box></draw:frame></text:p>`
+		got := pathColours(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0].Content)
+		for _, c := range tc.want {
+			if !got[c] {
+				t.Errorf("%s: no path of %v in %v", tc.name, c, got)
+			}
+		}
+		for _, c := range tc.not {
+			if got[c] {
+				t.Errorf("%s: a path of %v", tc.name, c)
+			}
 		}
 	}
 }

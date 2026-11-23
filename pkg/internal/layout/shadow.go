@@ -384,6 +384,10 @@ func (p *painter) outline(b *box) {
 	for s := range st.Border {
 		st.Border[s] = o
 	}
+	// An Office box that strokes its borders strokes its outline too: a
+	// Writer frame painted as a shape draws its line as one
+	// (css.Office.StrokeBorders).
+	st.StrokeBorders = b.st.StrokeBorders
 	frags, columns := p.fragments(b)
 	for _, r := range frags {
 		outer, oradii := outlineRect(r, radiiOf(b, r.Width, r.Height), clamp(b.st.OutlineOffset)+w)
