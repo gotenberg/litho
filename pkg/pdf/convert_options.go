@@ -692,7 +692,7 @@ func WithFinishedAnimations(finished bool) HTMLOption {
 //
 //	pdf.WithHeader(models.PageBand{HTML: header, Pages: models.PagesFrom(2)}),
 //
-// In a Markdown source, a band shows the title, its first heading, with
+// In a Markdown source, a band shows the title its template states with
 // string(document-title), and the current section once a user stylesheet
 // names it:
 //
@@ -856,9 +856,11 @@ func WithUserStylesheet(css string) HTMLOption {
 }
 
 // DefaultMarkdownTemplate is the template a Markdown source renders into
-// without [WithMarkdownTemplate]: a document without a stylesheet, whose
-// title is the first heading of the source.
-const DefaultMarkdownTemplate = `<!doctype html><html><head><meta charset="utf-8"><title>{{ .Title }}</title></head><body>{{ toHTML }}</body></html>`
+// without [WithMarkdownTemplate]: a document without a stylesheet or a
+// title. Markdown states no title, and its first heading names a part of
+// the document, not the document: a template that writes
+// <title>{{ .Title }}</title> titles the document with it.
+const DefaultMarkdownTemplate = `<!doctype html><html><head><meta charset="utf-8"></head><body>{{ toHTML }}</body></html>`
 
 // WithMarkdownTemplate sets the HTML document a Markdown source renders
 // into, as a template of html/template. {{ toHTML }} is replaced by the
