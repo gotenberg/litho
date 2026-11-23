@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
@@ -48,10 +49,24 @@ const (
 // PowerPoint 2010 extension, takes its Fallback.
 var understood = append([]string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.NSChart, nsA14}, chartExChoices...)
 
-// maxSlides caps the slides of a presentation. Anti-DoS guard, not
-// spec-mandated: every slide is a page, and real decks hold a few hundred
-// at most.
-const maxSlides = 10_000
+// printableSlides returns the most slides the conversion's pages can
+// print: one a page, two pages a slide with notes pages, a handout's
+// count a page. Reading stops with limits.ErrTooManyPages past it, so a
+// deck too long for its pages fails before its slides are all laid out,
+// and no slide is ever dropped.
+func printableSlides(opts office.Options) int {
+	limit := opts.MaxPages
+	if limit <= 0 {
+		limit = layout.DefaultMaxPages
+	}
+	switch {
+	case opts.Handouts > 0:
+		return min(limit, math.MaxInt/opts.Handouts) * opts.Handouts
+	case opts.NotesPages:
+		return limit / 2
+	}
+	return limit
+}
 
 // maxFirstSlideNumber caps the number of the first slide. Anti-DoS guard,
 // not spec-mandated: firstSlideNum is an xsd:int (ECMA-376 Part 1,
@@ -165,8 +180,9 @@ func isMalformed(err error) bool {
 // read reads the presentation pkg holds into the slide model, with the
 // fonts to lay it out with (fonts and the faces the presentation embeds),
 // the warnings of what it left out or approximated, and its handout master
-// when handouts asks for it.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, *text.Fonts, []typeset.Warning, error) {
+// when opts asks for handouts. It fails with limits.ErrTooManyPages when
+// the slides opts prints need more pages than opts allows.
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*slides.Document, *text.Fonts, []typeset.Warning, error) {
 	main, err := pkg.MainPart(ctx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -215,23 +231,20 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	r.slideAt = map[string]int{}
 	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
-		if rel, ok := pkg.RelationshipByID(ctx, main, rid); ok && id.Is(nsP, "sldId") && !rel.External && rel.Type == relSlide && pkg.Has(rel.Target) && r.slideCount < maxSlides {
+		if rel, ok := pkg.RelationshipByID(ctx, main, rid); ok && id.Is(nsP, "sldId") && !rel.External && rel.Type == relSlide && pkg.Has(rel.Target) {
 			r.slideCount++
 			if _, dup := r.slideAt[rel.Target]; !dup {
 				r.slideAt[rel.Target] = r.slideCount
 			}
 		}
 	}
+	printable, printed := printableSlides(opts), 0
 	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
 		if !id.Is(nsP, "sldId") {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, err
-		}
-		if len(doc.Slides) >= maxSlides {
-			r.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
-			break
 		}
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
 		rel, ok := pkg.RelationshipByID(ctx, main, rid)
@@ -258,10 +271,15 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 			prevSection = -1
 		}
 		doc.Slides = append(doc.Slides, s)
+		if !s.Hidden || opts.HiddenSlides {
+			if printed++; printed > printable {
+				return nil, nil, nil, fmt.Errorf("%w: the presentation prints more than %d slides", limits.ErrTooManyPages, printable)
+			}
+		}
 	}
 	uniqueNames(doc.Slides)
 	doc.NotesSlideBox, doc.NotesTextBox, doc.NotesShapes = r.notesSlideBox, r.notesTextBox, r.notesShapes
-	if handouts {
+	if opts.Handouts > 0 {
 		if err := r.handoutMaster(root, doc); err != nil {
 			return nil, nil, nil, err
 		}

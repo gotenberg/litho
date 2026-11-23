@@ -70,5 +70,5 @@ func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Opt
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
-	return read(ctx, pkg, fonts, opts.Handouts > 0)
+	return read(ctx, pkg, fonts, opts)
 }
