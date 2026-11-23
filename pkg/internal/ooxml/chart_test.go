@@ -763,3 +763,34 @@ func TestChartFromElement_InvertIfNegative(t *testing.T) {
 		}
 	}
 }
+
+// TestChartFromElement_StockLines reads a stock chart's high-low lines and
+// up-down bars (ECMA-376 Part 1, 21.2.2.80 hiLowLines, 21.2.2.218
+// upDownBars) with Office's automatic formats, and warns of neither.
+func TestChartFromElement_StockLines(t *testing.T) {
+	two := ser(0, "Open", "", "1", "2") + ser(1, "Close", "", "3", "1")
+	c := readChart(t, chartXML("", "", `<c:stockChart>`+two+
+		`<c:hiLowLines><c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="404040"/></a:solidFill></a:ln></c:spPr></c:hiLowLines>`+
+		`<c:upDownBars><c:gapWidth val="80"/><c:upBars><c:spPr><a:solidFill><a:srgbClr val="70AD47"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln></c:spPr></c:upBars><c:downBars/></c:upDownBars>`+
+		`</c:stockChart>`), false)
+	g := c.Groups[0]
+	if g.HighLow == nil || g.HighLow.Width != 0.75 || g.HighLow.None {
+		t.Errorf("high-low lines = %+v", g.HighLow)
+	}
+	ud := g.UpDown
+	if ud == nil || ud.GapWidth != 80 {
+		t.Fatalf("up-down bars = %+v", ud)
+	}
+	if ud.Up.Fill == nil || ud.Up.Border == nil || ud.Up.Border.Width != upDownOutline || ud.Up.Border.Color.R != 1 {
+		t.Errorf("up bars = %+v %+v, want the file's fill and red outline %v wide", ud.Up.Fill, ud.Up.Border, upDownOutline)
+	}
+	if ud.Down.Fill == nil || ud.Down.Fill.Color.R != 0 || ud.Down.Border == nil || ud.Down.Border.Width != upDownOutline {
+		t.Errorf("down bars = %+v %+v, want black outlined in black", ud.Down.Fill, ud.Down.Border)
+	}
+	for _, w := range c.Warnings {
+		t.Errorf("warning %q", w.Message)
+	}
+	if plain := readChart(t, chartXML("", "", `<c:lineChart>`+two+`</c:lineChart>`), false).Groups[0]; plain.HighLow != nil || plain.UpDown != nil {
+		t.Errorf("a line chart without them = %+v %+v", plain.HighLow, plain.UpDown)
+	}
+}

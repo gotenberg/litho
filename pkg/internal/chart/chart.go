@@ -286,6 +286,26 @@ type Group struct {
 	Series       []*Series
 	// Labels are the data labels the group's series inherit.
 	Labels Labels
+	// HighLow, when set, draws a line group's high-low lines: at each
+	// category, a line from the lowest of its series' values to the
+	// highest (ECMA-376 Part 1, 21.2.2.80 hiLowLines).
+	HighLow *Stroke
+	// UpDown, when set, draws a line group's up-down bars: at each
+	// category, a bar from the first series' value to the last's
+	// (21.2.2.218 upDownBars).
+	UpDown *UpDownBars
+}
+
+// UpDownBars are the up-down bars of a line group (ECMA-376 Part 1,
+// 21.2.2.218 upDownBars).
+type UpDownBars struct {
+	// GapWidth is the space between two categories' bars as a percentage
+	// of a bar's width, 150 by default (21.2.2.75 gapWidth).
+	GapWidth float64
+	// Up is the frame of a bar whose last value is not below its first
+	// (21.2.2.219 upBars), Down of one whose last value is below it
+	// (21.2.2.51 downBars).
+	Up, Down Frame
 }
 
 // Series is one data series.

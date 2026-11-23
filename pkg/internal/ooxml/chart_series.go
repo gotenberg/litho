@@ -54,7 +54,6 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		p.read3D(e, g)
 	}
 	if e.Local == "stockChart" {
-		p.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
 		g.Stock = true
 	}
 	switch childVal(e, "grouping") {
@@ -110,8 +109,8 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		}
 	}
 	g.Labels = p.labels(e.Child(NSChart, "dLbls"), chart.Labels{})
-	if e.Child(NSChart, "hiLowLines") != nil {
-		p.warn(warn.ContentUnsupported, warn.Omitted, "a chart's high-low lines are not drawn")
+	if g.Kind == chart.Line {
+		p.stockLines(e, g)
 	}
 	scatterLines := true
 	if g.Kind == chart.Scatter {
@@ -798,3 +797,46 @@ func (p *chartReader) invertFill(e *Element) *chart.Paint {
 	}
 	return &chart.Paint{Color: typeset.Color{R: 1, G: 1, B: 1, A: 1}}
 }
+
+// stockLines reads the high-low lines and up-down bars of the line group
+// element e into g (ECMA-376 Part 1, 21.2.2.80 hiLowLines, 21.2.2.218
+// upDownBars). Their automatic formats are Office's: the theme's line for
+// high-low lines; up bars filled white and down bars black, each outlined
+// in black 0.5 pt wide, the width an outline the file states without one
+// takes too. A three-dimensional group draws neither.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: chart-stock's up-down bars, whose shape properties state
+//     fills alone, print outlined in black 0.5 pt in PowerPoint.
+//   - litho/xlsx: charts_radar_stock_surface's up bars, whose line states
+//     a colour and no width, and its down bars, which state no line, print
+//     outlined in black 0.5 pt in Excel.
+func (p *chartReader) stockLines(e *Element, g *chart.Group) {
+	hl, ud := e.Child(NSChart, "hiLowLines"), e.Child(NSChart, "upDownBars")
+	if hl == nil && ud == nil {
+		return
+	}
+	if g.ThreeD {
+		p.warn(warn.ContentUnsupported, warn.Omitted, "the high-low lines and up-down bars of a 3-D chart are not drawn")
+		return
+	}
+	if hl != nil {
+		g.HighLow = p.lineOf(hl.Child(NSChart, "spPr"), p.autoLine())
+	}
+	if ud == nil {
+		return
+	}
+	b := &chart.UpDownBars{GapWidth: 150}
+	if v := percentVal(ud, "gapWidth", 150); !math.IsNaN(v) {
+		b.GapWidth = v
+	}
+	outline := &chart.Stroke{Color: typeset.Black, Width: upDownOutline}
+	b.Up = p.frame(ud.Child(NSChart, "upBars").Child(NSChart, "spPr"), chart.Frame{Fill: &chart.Paint{Color: typeset.Color{R: 1, G: 1, B: 1, A: 1}}, Border: outline})
+	b.Down = p.frame(ud.Child(NSChart, "downBars").Child(NSChart, "spPr"), chart.Frame{Fill: &chart.Paint{Color: typeset.Black}, Border: outline})
+	g.UpDown = b
+}
+
+// upDownOutline is the width of the automatic outline of Office's up-down
+// bars, in points (stockLines).
+const upDownOutline = 0.5

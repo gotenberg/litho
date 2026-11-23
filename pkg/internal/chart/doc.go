@@ -59,8 +59,9 @@
 // projected. A pie is a tilted ellipse on a rim.
 //
 // Not drawn: lighting, surface charts, trendlines and error bars of a 3D
-// group, the equations of trendlines, high-low lines and up-down bars,
-// leader lines, multi-level categories (their levels join on one label).
+// group, the equations of trendlines, the high-low lines and up-down bars
+// of a 3D group, leader lines, multi-level categories (their levels join
+// on one label).
 //
 // # The description
 //

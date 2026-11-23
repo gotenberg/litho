@@ -159,7 +159,10 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		return rd.areas(g, x, y)
 	case Unsupported, Treemap, Sunburst:
 		return nil
-	case Line, Pie, Doughnut, Radar:
+	case Line:
+		rd.highLow(g, x, y)
+		rd.upDown(g, x, y)
+	case Pie, Doughnut, Radar:
 	}
 	return rd.lines(g, x, y)
 }
