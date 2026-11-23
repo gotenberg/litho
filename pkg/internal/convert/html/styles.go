@@ -57,7 +57,7 @@ func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom
 			s = c.linkElement(ctx, n)
 		}
 		if s != nil {
-			sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author})
+			sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author, Owner: n})
 		}
 	}
 	for _, ts := range shadows {
@@ -72,7 +72,7 @@ func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom
 				s = c.linkElement(ctx, n)
 			}
 			if s != nil {
-				sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author, Scope: ts.root})
+				sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.Author, Scope: ts.root, Owner: n})
 			}
 		}
 	}

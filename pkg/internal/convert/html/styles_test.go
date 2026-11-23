@@ -7,6 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -285,5 +286,34 @@ func TestPrepare_EvaluatesTheMediaFeaturesGiven(t *testing.T) {
 	o := Options{MediaFeatures: map[string]string{"Prefers-Color-Scheme": "dark"}}
 	if _, err := o.withDefaults(); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("a feature name that is not lowercase: got %v, want typeset.ErrInvalidOptions", err)
+	}
+}
+
+// TestStylesheets_ScopeByOwner scopes an @scope rule without a prelude to
+// the parent of its style element, in the document and in a shadow tree
+// (CSS Cascade 6, 2.5.1): in a shadow tree the host is the root, as
+// Chromium 156 prints it.
+func TestStylesheets_ScopeByOwner(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<!DOCTYPE html><div><style>@scope { p { color: rgb(0, 0, 20) } }</style><p id=in>in</p></div><p id=out>out</p>`+
+		`<x-card id=h><template shadowrootmode=open><style>@scope { p { color: rgb(0, 0, 21) } :scope { color: rgb(0, 0, 22) } }</style><p>shadow</p></template></x-card>`, Options{})
+	for id, want := range map[string]float64{"in": 20, "out": 0, "h": 22} {
+		if got := byID(t, p.root, id).Style.Color; got != (css.Color{B: want / 255, A: 1}) {
+			t.Errorf("%s: colour %v, want blue %v", id, got, want)
+		}
+	}
+	var shadow *layout.Node
+	var find func(n *layout.Node)
+	find = func(n *layout.Node) {
+		if n.Kind == layout.Text && n.Text == "shadow" {
+			shadow = n
+		}
+		for _, c := range n.Children {
+			find(c)
+		}
+	}
+	find(p.root)
+	if shadow == nil || shadow.Style.Color != (css.Color{B: 21.0 / 255, A: 1}) {
+		t.Errorf("shadow paragraph %+v, want blue 21", shadow.Style.Color)
 	}
 }

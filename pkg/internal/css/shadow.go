@@ -225,18 +225,36 @@ func treeRoot(n *html.Node) *html.Node {
 	return n
 }
 
-// matchShadow adds, through add, the rules of other trees that match the
-// element n, or its pseudo-element of index x: a host's own shadow
-// tree's rules that match it as a featureless host (CSS Scoping 1,
-// 3.2.1), and for an element the ::slotted() rules of the trees of the
-// slots it is assigned to, through slots assigned to slots (3.2.2), and
-// the ::part() rules of the trees its part names reach through its hosts'
-// exportparts (CSS Shadow Parts 1, 4.1 and 5).
-func (cs *computeState) matchShadow(n *html.Node, x *selIndex, add func(selRef)) {
+// matchShadow adds, through addAt at their scope proximity, the rules of
+// other trees that match the element n, or its pseudo-element of index
+// x: a host's own shadow tree's rules that match it as a featureless host
+// (CSS Scoping 1, 3.2.1), the rules of an @scope rule without a prelude,
+// whose root it is, among them, and for an element the ::slotted() rules
+// of the trees of the slots it is assigned to, through slots assigned to
+// slots (3.2.2), and the ::part() rules of the trees its part names reach
+// through its hosts' exportparts (CSS Shadow Parts 1, 4.1 and 5).
+func (cs *computeState) matchShadow(n *html.Node, x *selIndex, addAt func(selRef, int32)) {
 	sh, m := cs.opts.Shadows, cs.m
+	add := func(ref selRef) {
+		if cs.r.rules[ref.rule].rule.scope == nil {
+			addAt(ref, noProximity)
+		}
+	}
 	if root := sh.Root(n); root != nil {
 		for _, ref := range x.universal {
-			if rr := &cs.r.rules[ref.rule]; rr.origin == Author && rr.scope == root && m.matchesHost(ref.sel, n) {
+			rr := &cs.r.rules[ref.rule]
+			if rr.origin != Author || rr.scope != root {
+				continue
+			}
+			if s := rr.rule.scope; s != nil {
+				// The host is the root of an @scope rule of its shadow
+				// tree without a prelude (CSS Cascade 6, 2.5.1).
+				if s.start == nil && s.parent == nil && rr.owner != nil && rr.owner.Parent == root && m.anyMatchesHostScoped(ref.sel, n) {
+					addAt(ref, 0)
+				}
+				continue
+			}
+			if m.matchesHost(ref.sel, n) {
 				add(ref)
 			}
 		}

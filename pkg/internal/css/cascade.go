@@ -38,6 +38,10 @@ type Sheet struct {
 	// sheet's rules apply to the elements of its own tree alone (CSS
 	// Scoping 1, 3.1); a user agent or user sheet applies in every tree.
 	Scope *html.Node
+	// Owner is the element that holds or links the sheet, a style or a
+	// link element, nil for none: the parent of it is the scoping root of
+	// the sheet's @scope rules without a prelude (CSS Cascade 6, 2.5.1).
+	Owner *html.Node
 }
 
 // rank orders declarations by origin and importance (CSS Cascade 4, 6.2):
@@ -106,6 +110,8 @@ type resolvedRule struct {
 	// scope is the shadow root of the tree an author rule applies in, nil
 	// for the document's.
 	scope *html.Node
+	// owner is the owner node of the rule's sheet ([Sheet.Owner]).
+	owner *html.Node
 	order int
 	// layer is the position of the rule's cascade layer in its origin's
 	// layer order (see [orderLayers]).
@@ -230,7 +236,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				continue
 			}
 			idx := len(r.rules)
-			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, scope: sh.Scope, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
+			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, scope: sh.Scope, owner: sh.Owner, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
 			for _, s := range sr.selectors {
 				ref := selRef{rule: idx, sel: s, anc: ancestorFeatures(s)}
 				switch pe, ok := pseudoNames[s.pseudoElement]; {
@@ -724,8 +730,12 @@ type cand struct {
 	// ([layerRank]), before specificity.
 	layer int
 	spec  uint64
-	ord   int
-	idx   int
+	// prox is the scope proximity of the declaration's rule, which orders
+	// declarations of one specificity, the nearer root winning (CSS
+	// Cascade 6, 6.6); [noProximity] outside any @scope rule.
+	prox int32
+	ord  int
+	idx  int
 }
 
 // pendingRef marks a longhand whose winning declaration holds var().
@@ -746,8 +756,11 @@ type computeState struct {
 	vars   map[*html.Node]map[string][]token
 	stamp  []int
 	spec   []uint32
-	elem   int
-	root   *Style
+	// prox is the scope proximity of each rule matched last, by rule
+	// index ([noProximity] outside @scope).
+	prox []int32
+	elem int
+	root *Style
 	// body is the style of the document's body element (Quirks Mode
 	// Standard, 2.2), nil before it is computed or when there is none.
 	body  *Style
@@ -928,7 +941,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 	cs := &computeState{
 		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps), opts.Mode == Quirks, opts.Shadows), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
-		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
+		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)), prox: make([]int32, len(r.rules)),
 	}
 	for _, w := range r.warns {
 		cs.warns.add(w)
@@ -1088,7 +1101,7 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 		for i := range hints {
 			// Presentational hints lose to every author rule, whatever
 			// its layer (CSS Cascade 5, 6.2).
-			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ctx: cs.ctx, layer: -attachedRank, ord: -1, idx: i})
+			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ctx: cs.ctx, layer: -attachedRank, prox: noProximity, ord: -1, idx: i})
 		}
 	}
 	// The style attribute of an HTML, SVG and MathML element (MathML Core,
@@ -1096,7 +1109,7 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg" || n.Namespace == "math") {
 		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL, Quirks: cs.opts.Mode == Quirks})
 		for i := range decls {
-			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), ctx: cs.ctx, layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
+			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), ctx: cs.ctx, layer: attachedRank, spec: styleAttrSpec, prox: noProximity, ord: len(cs.r.rules) + 1, idx: i})
 		}
 	}
 	return cands
@@ -1177,6 +1190,9 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			return c
 		}
 		if c := cmp.Compare(a.spec, b.spec); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(b.prox, a.prox); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(a.ord, b.ord); c != 0 {
@@ -1415,13 +1431,15 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		scope = treeScope(n)
 	}
 	cs.ctx = sh.depth(scope)
-	add := func(ref selRef) {
+	add := func(ref selRef, prox int32) {
 		if cs.stamp[ref.rule] != cs.elem {
 			cs.stamp[ref.rule] = cs.elem
 			cs.spec[ref.rule] = ref.sel.spec
+			cs.prox[ref.rule] = prox
 			matched = append(matched, ref.rule)
 		} else {
 			cs.spec[ref.rule] = max(cs.spec[ref.rule], ref.sel.spec)
+			cs.prox[ref.rule] = min(cs.prox[ref.rule], prox)
 		}
 	}
 	test := func(refs []selRef) {
@@ -1429,13 +1447,20 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 			if cs.m.over {
 				return
 			}
-			if rr := &cs.r.rules[ref.rule]; rr.origin == Author && rr.scope != scope {
+			rr := &cs.r.rules[ref.rule]
+			if rr.origin == Author && rr.scope != scope {
 				continue
 			}
-			if !cs.anc.admits(ref.anc) || !cs.m.matches(ref.sel, n) {
+			if !cs.anc.admits(ref.anc) {
 				continue
 			}
-			add(ref)
+			if rr.rule.scope != nil {
+				cs.matchScoped(ref, rr, n, add)
+				continue
+			}
+			if cs.m.matches(ref.sel, n) {
+				add(ref, noProximity)
+			}
 		}
 	}
 	if id, ok := attr(n, "id"); ok {
@@ -1486,7 +1511,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		}
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
-			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), ctx: ctx, layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
+			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), ctx: ctx, layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), prox: cs.prox[ri], ord: rr.order, idx: i})
 		}
 	}
 	cs.cands = out[:0]

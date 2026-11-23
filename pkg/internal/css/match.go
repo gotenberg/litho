@@ -40,12 +40,17 @@ type matcher struct {
 	quirks bool
 	// shadows holds the document's shadow trees, nil for none.
 	shadows *Shadows
+	// scope is the scoping root :scope names while a scoped selector is
+	// matched, nil for the document's root element.
+	scope *html.Node
 }
 
-// hasProbe names one :has() tested on one element.
+// hasProbe names one :has() tested on one element, under the scoping
+// root its :scope names.
 type hasProbe struct {
-	p *pseudoSel
-	n *html.Node
+	p     *pseudoSel
+	n     *html.Node
+	scope *html.Node
 }
 
 func newMatcher(docLang string, maxSteps int, quirks bool, shadows *Shadows) *matcher {
@@ -270,6 +275,12 @@ func (m *matcher) featurelessCompound(c *compound, n *html.Node) bool {
 			if !m.hostPseudo(p, n) {
 				return false
 			}
+		case psScope:
+			// The host is the scoping root of an @scope rule of its
+			// shadow tree without a prelude (CSS Cascade 6, 2.5.1).
+			if m.scope != n {
+				return false
+			}
 		case psIs, psWhere:
 			if !m.anyMatchesHost(p.args, n) {
 				return false
@@ -311,7 +322,7 @@ func featurelessCapable(c *compound) bool {
 	for i := range c.pseudos {
 		p := &c.pseudos[i]
 		switch p.kind { //nolint:exhaustive // every other pseudo-class needs features
-		case psHost, psHostContext, psIs, psWhere, psHas:
+		case psHost, psHostContext, psScope, psIs, psWhere, psHas:
 		case psNot:
 			for _, s := range p.args {
 				if !featurelessCapable(&s.parts[len(s.parts)-1]) {
@@ -325,9 +336,10 @@ func featurelessCapable(c *compound) bool {
 	return true
 }
 
-// holdsHost reports whether the compound c holds :host, :host() or
-// :host-context(), itself or in the last compound of an argument of its
-// :is(), :where() or :not(), depth levels down.
+// holdsHost reports whether the compound c holds :host, :host(),
+// :host-context() or :scope, which an @scope rule of the host's shadow
+// tree may make the host, itself or in the last compound of an argument
+// of its :is(), :where() or :not(), depth levels down.
 func holdsHost(c *compound, depth int) bool {
 	if depth > maxSelectorNesting {
 		return false
@@ -335,7 +347,7 @@ func holdsHost(c *compound, depth int) bool {
 	for i := range c.pseudos {
 		p := &c.pseudos[i]
 		switch p.kind { //nolint:exhaustive // the other pseudo-classes hold no :host
-		case psHost, psHostContext:
+		case psHost, psHostContext, psScope:
 			return true
 		case psIs, psWhere, psNot:
 			for _, s := range p.args {
@@ -511,6 +523,11 @@ func disabled(n *html.Node) bool {
 // pseudo matches a pseudo-class (Selectors 4, 4 to 15).
 func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 	switch p.kind { //nolint:exhaustive // psNever and the rest match nothing
+	case psScope:
+		if m.scope != nil {
+			return n == m.scope
+		}
+		return n.Parent != nil && n.Parent.Type == html.DocumentNode && !isShadowRoot(n.Parent)
 	case psRoot:
 		// The top-level elements of a shadow tree are no root: their
 		// parent is the shadow root (CSS Scoping 1, 3.1).
@@ -611,7 +628,7 @@ func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 // :has() and n; the cascade's step budget bounds the rest, a selector
 // that searches past it failing the cascade.
 func (m *matcher) hasMatch(p *pseudoSel, n *html.Node) bool {
-	k := hasProbe{p, n}
+	k := hasProbe{p, n, m.scope}
 	if v, ok := m.has[k]; ok {
 		return v
 	}

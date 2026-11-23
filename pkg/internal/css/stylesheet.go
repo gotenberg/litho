@@ -80,7 +80,10 @@ type styleRule struct {
 	cond      *mediaCond
 	// cont is the condition of the @container rules around the rule, nil
 	// outside any: it is evaluated for each element the selectors match.
-	cont  *containerCond
+	cont *containerCond
+	// scope is the innermost @scope rule around the rule, nil outside
+	// any: its selectors match only the elements in that scope.
+	scope *scopeRule
 	layer int
 }
 
@@ -122,6 +125,10 @@ type sheetParser struct {
 	container *containerCond
 	// ns holds the @namespace rules of the style sheet being parsed.
 	ns *namespaces
+	// scope is the @scope rule the rules being parsed sit in, nil
+	// outside any, and scopes counts the nested ones.
+	scope  *scopeRule
+	scopes int
 }
 
 // ruleOrder tracks the rules that must come first in a style sheet: @import
@@ -208,6 +215,7 @@ var ignoredAtRules = map[string]bool{
 var readAtRules = []string{
 	"import", "namespace", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
 	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values", "position-try", "property",
+	"scope",
 }
 
 // readsAtRule reports whether litho reads the at-rule of the lowercased
@@ -232,6 +240,9 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 	switch it.kind { //nolint:exhaustive // declarations and errors cannot reach the top level
 	case itemQualified:
 		order.imports, order.namespaces = false, false
+		if sp.scope != nil {
+			it.prelude = scopedPrelude(it.prelude)
+		}
 		sels, err := parseSelectorList(it.prelude, 0, false)
 		if err != nil {
 			if err.unsupported != "" {
@@ -279,6 +290,10 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 		case "container":
 			if it.hasBlock {
 				sp.enterContainer(it.prelude, c, func() { sp.nested(ctx, it.block, base, cond, depth) })
+			}
+		case "scope":
+			if it.hasBlock {
+				sp.scopeRule(ctx, it, base, cond, depth, c)
 			}
 		case "page":
 			sels, unsupported, ok := parsePageSelectors(it.prelude)
@@ -374,11 +389,11 @@ func (sp *sheetParser) styleBlock(ctx context.Context, prelude []token, sels []*
 		if len(decls) == 0 && !first || !sp.count() {
 			return
 		}
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond, cont: sp.container, layer: sp.layer})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond, cont: sp.container, scope: sp.scope, layer: sp.layer})
 		decls, first = nil, false
 	}
 	if sp.nesting >= maxNestingDepth {
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond, cont: sp.container, layer: sp.layer})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond, cont: sp.container, scope: sp.scope, layer: sp.layer})
 		return
 	}
 	sp.nesting++

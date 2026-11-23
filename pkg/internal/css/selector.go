@@ -83,6 +83,10 @@ const (
 	psHost
 	psHostContext
 	psDefined
+	// psScope is :scope: the scoping root of the @scope rule a selector
+	// sits in, :root outside any (Selectors 4, 14.3; CSS Cascade 6,
+	// 2.5.2).
+	psScope
 )
 
 // pseudoSel is a pseudo-class with its arguments.
@@ -222,7 +226,7 @@ var subPseudoElements = map[string]map[string]bool{
 
 // simplePseudos maps the argument-less pseudo-classes to their kind.
 var simplePseudos = map[string]pseudoKind{
-	"root": psRoot, "scope": psRoot, "first-child": psFirstChild, "last-child": psLastChild,
+	"root": psRoot, "scope": psScope, "first-child": psFirstChild, "last-child": psLastChild,
 	"only-child": psOnlyChild, "first-of-type": psFirstOfType, "last-of-type": psLastOfType,
 	"only-of-type": psOnlyOfType, "empty": psEmpty, "link": psLink, "any-link": psLink,
 	"checked": psChecked, "disabled": psDisabled, "enabled": psEnabled, "defined": psDefined,
