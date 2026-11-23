@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -196,6 +197,34 @@ func TestDrawing_ChartEx(t *testing.T) {
 	doc, _ = readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
 	if n := len(doc.Sheets[0].Drawings); n != 0 {
 		t.Errorf("%d drawings for a chart whose part is missing, want none", n)
+	}
+}
+
+// TestNumericLabelsHidden checks that an Office 2016 chart keeps the tick
+// labels of a category axis of text alone, as Excel prints it.
+func TestNumericLabelsHidden(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		s    chart.Series
+		cats bool
+	}{
+		{"text categories", chart.Series{Categories: chart.Data{Values: []chart.Value{chart.Str("Start"), chart.Str("End")}}}, true},
+		{"text categories through the workbook", chart.Series{Categories: chart.Data{Ref: "S!$A$1:$A$2"}}, true},
+		{"numbered categories", chart.Series{Categories: chart.Data{Values: []chart.Value{chart.Num(1), chart.Num(2)}}}, false},
+		{"no categories", chart.Series{}, false},
+		{"bins", chart.Series{Categories: chart.Data{Values: []chart.Value{chart.Str("a")}}, Bins: &chart.Binning{}}, false},
+	} {
+		s := tc.s
+		c := &chart.Chart{
+			Groups:   []*chart.Group{{Series: []*chart.Series{&s}}},
+			Axes:     []*chart.Axis{{Kind: chart.CategoryAxis}, {Kind: chart.ValueAxis}},
+			Resolver: func(string) []chart.Value { return []chart.Value{chart.Str("Late")} },
+		}
+		numericLabelsHidden(c)
+		if got := c.Axes[0].Labels != chart.LabelNone; got != tc.cats || c.Axes[1].Labels != chart.LabelNone {
+			t.Errorf("%s: category labels shown %v, value labels %v; want %v and none", tc.name, got, c.Axes[1].Labels, tc.cats)
+		}
 	}
 }
 

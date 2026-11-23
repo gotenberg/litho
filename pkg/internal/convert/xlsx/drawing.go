@@ -280,6 +280,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 					w.r.warn(x.Code, x.Effect, x.Message)
 				}
 				c.Resolver = w.r.rangeValues
+				numericLabelsHidden(c)
 				d.Chart = c
 				return true
 			case uriDiagram:
@@ -310,6 +311,44 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 		}
 	}
 	return false
+}
+
+// numericLabelsHidden hides the tick labels of an Office 2016 chart's
+// axes that label numbers, as Excel prints such a chart: the value axes,
+// and a category axis whose categories hold no text, a histogram's bins
+// and categories the file leaves to their index among them. A category
+// axis of text labels keeps them; the gridlines stay.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/SimpleHistogram.xlsx, chart2/boxWhisker.xlsx,
+//     chart2/box-whisker-gapwidth.xlsx and chart2/clusteredColumn.xlsx
+//     print their gridlines and no tick label, neither the values nor the
+//     bins and numbered categories.
+//   - litho/xlsx: charts_chartex prints the categories of its waterfall,
+//     Pareto and box and whisker charts (Start, Late, A) and no value,
+//     percentage or bin label.
+func numericLabelsHidden(c *chart.Chart) {
+	text := false
+	for _, g := range c.Groups {
+		for _, s := range g.Series {
+			if s.Bins != nil {
+				continue
+			}
+			cats := s.Categories.Values
+			if cats == nil && s.Categories.Ref != "" && c.Resolver != nil {
+				cats = c.Resolver(s.Categories.Ref)
+			}
+			if slices.ContainsFunc(cats, func(v chart.Value) bool { return v.Kind == chart.Text }) {
+				text = true
+			}
+		}
+	}
+	for _, a := range c.Axes {
+		if a.Kind == chart.ValueAxis || !text {
+			a.Labels = chart.LabelNone
+		}
+	}
 }
 
 // hidden reports a shape its non-visual properties hide (ECMA-376 Part 1,
