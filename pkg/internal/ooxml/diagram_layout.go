@@ -550,7 +550,16 @@ func (e *engine) copyShape(a *DiagramAtom) *DiagramShape {
 // shallowest data point it presents, the text of every one in order with
 // its depth as the paragraphs' level, and the quick style and colours of
 // the point's style label (the layout node's when the point has none),
-// the idx-th colour of each list.
+// the colour of each list at the point's index among the points of its
+// label (21.4.3.7 prSet presStyleIdx), else at idx, its place in its
+// for-each.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: O12_templates/CycleDiagram_TP10174326's cycle8
+//     lays its five wedges out by name, outside any for-each, their points
+//     at presStyleIdx 0 to 4 of node1: Office prints them in the five
+//     accents of colorful1, one each.
 func (e *engine) setupShape(node *DiagramAtom, s *DiagramShape, p *DiagramPoint, idx int) {
 	if items, ok := e.d.presOf[p.ModelID]; ok {
 		minDepth := math.MaxInt
@@ -598,6 +607,9 @@ func (e *engine) setupShape(node *DiagramAtom, s *DiagramShape, p *DiagramPoint,
 	label := p.PresStyleLbl
 	if label == "" {
 		label = node.StyleLbl
+	}
+	if p.PresStyleIdx >= 0 {
+		idx = p.PresStyleIdx
 	}
 	if label == "" {
 		return

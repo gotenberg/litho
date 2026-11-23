@@ -84,6 +84,9 @@ type DiagramPoint struct {
 	// PresName, PresStyleLbl and PresAssocID are a presentation point's
 	// layout node name, style label and data point.
 	PresName, PresStyleLbl, PresAssocID string
+	// PresStyleIdx is the index of the point among those of its style
+	// label (prSet presStyleIdx), -1 when the point states none.
+	PresStyleIdx int
 	// CustomText marks a point whose text formatting the user changed
 	// (prSet custT).
 	CustomText bool
@@ -294,7 +297,7 @@ func (d *Diagram) parseData(dm *Element) {
 		if !pt.Is(NSDgm, "pt") || len(d.Points) >= maxDiagramPoints {
 			continue
 		}
-		p := &DiagramPoint{ModelID: attrOr(pt, "modelId"), Type: tokenOr(pt, "type", "node"), Dir: "norm"}
+		p := &DiagramPoint{ModelID: attrOr(pt, "modelId"), Type: tokenOr(pt, "type", "node"), Dir: "norm", PresStyleIdx: -1}
 		if p.Type == "parTrans" || p.Type == "sibTrans" {
 			p.CxnID = attrOr(pt, "cxnId")
 		}
@@ -302,6 +305,10 @@ func (d *Diagram) parseData(dm *Element) {
 			p.PresName = attrOr(pr, "presName")
 			p.PresStyleLbl = attrOr(pr, "presStyleLbl")
 			p.PresAssocID = attrOr(pr, "presAssocID")
+			// ST_Int: 32 bits.
+			if v, err := intconv.Atoi32(strings.TrimSpace(attrOr(pr, "presStyleIdx"))); err == nil && v >= 0 {
+				p.PresStyleIdx = v
+			}
 			p.CustomText = boolOr(pr, "custT", false)
 			// ST_PrSetCustVal: a percentage in thousandths, at 32 bits.
 			if v, err := intconv.Atoi32(strings.TrimSpace(attrOr(pr, "custScaleX"))); err == nil && v > 0 {
