@@ -507,3 +507,17 @@ func TestFontUnits_ZeroAdvanceCounts(t *testing.T) {
 		t.Errorf("zero-advance ch %v ic %v, want 0 0", ch, ic)
 	}
 }
+
+// TestDisplay_FlowAlone checks display: flow, an inner display type alone,
+// which is block flow (CSS Display 3, 2.1: the outer type defaults to
+// block), as Chromium lays out a span of display: flow.
+func TestDisplay_FlowAlone(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><span id=t></span></body>`, `#t { display: flow }`)
+	if d := c.of("t").Display; d != Block {
+		t.Errorf("display: flow computes to %v", d)
+	}
+	if w := c.c.Warnings(); len(w) != 0 {
+		t.Errorf("warnings: %v", w)
+	}
+}

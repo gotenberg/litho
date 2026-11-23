@@ -550,6 +550,9 @@ var displays = map[string]Display{
 	// math alone is inline math (MathML Core, 4.1), which computes to
 	// inline flow on an element outside MathML.
 	"math": Inline,
+	// flow alone is block flow: an inner display type without an outer
+	// one is block-level (CSS Display 3, 2.1).
+	"flow": Block,
 }
 
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
