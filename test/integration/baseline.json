@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T06:58:30Z",
+  "captured_at": "2026-11-23T07:41:08Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -119740,8 +119740,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5926,
-          "mismatched": 568,
+          "matched": 5936,
+          "mismatched": 558,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -123116,7 +123116,7 @@
             "css/css-grid/layout-algorithm/grid-stretch-respects-min-size-003.html": "pass",
             "css/css-grid/layout-algorithm/grid-template-flexible-rerun-track-sizing.html": "fail",
             "css/css-grid/layout-algorithm/grid-track-ignores-max-size-001.html": "pass",
-            "css/css-grid/min-size-auto-overflow-clip.html": "fail",
+            "css/css-grid/min-size-auto-overflow-clip.html": "pass",
             "css/css-grid/placement/grid-layout-lines-shorthands.html": "pass",
             "css/css-grid/placement/grid-layout-placement-shorthands.html": "pass",
             "css/css-grid/placement/grid-placement-items-spanning-multiple-rows-001.html": "pass",
@@ -123622,7 +123622,7 @@
             "css/css-multicol/spanner-fragmentation-008.html": "pass",
             "css/css-multicol/spanner-in-child-after-parallel-flow-004.html": "pass",
             "css/css-multicol/zero-column-width-layout.html": "pass",
-            "css/css-overflow/clip-008.html": "fail",
+            "css/css-overflow/clip-008.html": "pass",
             "css/css-overflow/flex-nested-container-with-scrollable-descendant.html": "pass",
             "css/css-overflow/line-clamp/block-ellipsis-013.html": "fail",
             "css/css-overflow/line-clamp/block-ellipsis-018.html": "fail",
@@ -123639,7 +123639,7 @@
             "css/css-overflow/line-clamp/line-clamp-009.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-032.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-036.html": "pass",
-            "css/css-overflow/line-clamp/line-clamp-038.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-038.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-auto-004.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-auto-017.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-auto-019.html": "pass",
@@ -123664,7 +123664,7 @@
             "css/css-overflow/line-clamp/webkit-line-clamp-010.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-016.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-039.html": "pass",
-            "css/css-overflow/line-clamp/webkit-line-clamp-043.html": "fail",
+            "css/css-overflow/line-clamp/webkit-line-clamp-043.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-045.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-049.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-051.html": "pass",
@@ -123672,7 +123672,7 @@
             "css/css-overflow/overflow-body-propagation-008.html": "pass",
             "css/css-overflow/overflow-clip-margin-009.html": "pass",
             "css/css-overflow/overflow-clip-margin-011.html": "pass",
-            "css/css-overflow/overflow-clip-margin-021.html": "fail",
+            "css/css-overflow/overflow-clip-margin-021.html": "pass",
             "css/css-overflow/overflow-clip-margin-visual-box.html": "pass",
             "css/css-overflow/overflow-does-not-apply-to-inline-box.html": "pass",
             "css/css-overflow/overflow-inline-block-with-opacity.html": "pass",
@@ -123815,18 +123815,18 @@
             "css/css-pseudo/first-letter-001.html": "fail",
             "css/css-pseudo/first-letter-002.html": "pass",
             "css/css-pseudo/first-letter-003.html": "pass",
-            "css/css-pseudo/first-letter-004.html": "fail",
+            "css/css-pseudo/first-letter-004.html": "pass",
             "css/css-pseudo/first-letter-005.html": "pass",
             "css/css-pseudo/first-letter-capitalize-supplementary-char.html": "pass",
             "css/css-pseudo/first-letter-digraph.html": "fail",
-            "css/css-pseudo/first-letter-exclude-block-child-marker.html": "fail",
-            "css/css-pseudo/first-letter-exclude-inline-child-marker.html": "fail",
-            "css/css-pseudo/first-letter-exclude-inline-marker.html": "fail",
+            "css/css-pseudo/first-letter-exclude-block-child-marker.html": "pass",
+            "css/css-pseudo/first-letter-exclude-inline-child-marker.html": "pass",
+            "css/css-pseudo/first-letter-exclude-inline-marker.html": "pass",
             "css/css-pseudo/first-letter-require-first-formatted-line.html": "pass",
             "css/css-pseudo/first-letter-skip-empty-span-nested.html": "pass",
             "css/css-pseudo/first-letter-skip-empty-span.html": "pass",
             "css/css-pseudo/first-letter-skip-marker.html": "pass",
-            "css/css-pseudo/first-letter-trailing-punctuation.html": "fail",
+            "css/css-pseudo/first-letter-trailing-punctuation.html": "pass",
             "css/css-pseudo/first-letter-width.html": "pass",
             "css/css-pseudo/first-letter-with-before-after.html": "pass",
             "css/css-pseudo/first-letter-with-preceding-new-line.html": "pass",
