@@ -207,6 +207,36 @@ func TestShadow_CrossTreeSelectors(t *testing.T) {
 	}
 }
 
+func TestShadow_KeyframesNamesAreTreeScoped(t *testing.T) {
+	t.Parallel()
+	// CSS Scoping 1, 3.5: an animation-name refers to the @keyframes of the
+	// tree its declaration comes from, else of the trees around it; the
+	// names a shadow tree defines stay inside it. Each case colours the run
+	// X blue when the name resolves as the clause says, red otherwise.
+	anim := `animation: k 1s both`
+	tests := []struct {
+		name, src string
+	}{
+		{"a ::part() rule takes its own tree's", `<style>@keyframes k { from, to { color: blue } } .h::part(p) { ` + anim + ` }</style>` +
+			`<div class="h"><template shadowrootmode="open"><style>@keyframes k { from, to { color: red } }</style><span part="p">X</span></template></div>`},
+		{"a shadow tree reaches the document's", `<style>@keyframes k { from, to { color: blue } }</style>` +
+			`<div><template shadowrootmode="open"><style>span { ` + anim + ` }</style><span>X</span></template></div>`},
+		{"a shadow tree's own first", `<style>@keyframes k { from, to { color: red } }</style>` +
+			`<div><template shadowrootmode="open"><style>@keyframes k { from, to { color: blue } } span { ` + anim + ` }</style><span>X</span></template></div>`},
+		{"the document does not reach inside", `<style>p { color: blue; ` + anim + ` }</style><p>X</p>` +
+			`<div><template shadowrootmode="open"><style>@keyframes k { from, to { color: red } }</style></template></div>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := convertDoc(t, "<!DOCTYPE html>"+tt.src, Options{})
+			if c := textColor(t, doc.Pages[0], "X"); c != textBlue {
+				t.Errorf("X is %v, want blue", c)
+			}
+		})
+	}
+}
+
 func TestShadow_FragmentsNameTheDocumentTree(t *testing.T) {
 	t.Parallel()
 	// HTML Standard, 7.4.6.4: a fragment names an element of the document

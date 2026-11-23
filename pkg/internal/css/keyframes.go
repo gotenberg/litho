@@ -3,6 +3,8 @@ package css
 import (
 	"slices"
 
+	"golang.org/x/net/html"
+
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -292,10 +294,18 @@ func (r *keyframesRule) animated() ([]propID, []string) {
 	return ids, custom
 }
 
-// keyframesAt holds the @keyframes rules a resolver applies, by name:
-// the last rule of a name in document order whose media condition
-// matches (CSS Animations 1, 3).
-type keyframesAt map[string]*keyframesRule
+// keyframesAt holds the @keyframes rules a resolver applies, by tree
+// scope and name: the last rule of a name in document order whose media
+// condition matches (CSS Animations 1, 3), in each tree whose author
+// sheets hold one (CSS Scoping 1, 3.5).
+type keyframesAt map[scopedName]*keyframesRule
+
+// scopedName is a name a rule of a tree defines: scope is the shadow root
+// of the tree, nil for the document's and for user agent and user rules.
+type scopedName struct {
+	scope *html.Node
+	name  string
+}
 
 // discreteAnimation holds the longhands whose definitions animate them in
 // discrete steps (Web Animations 1, 5.2: "Animation type: discrete"),

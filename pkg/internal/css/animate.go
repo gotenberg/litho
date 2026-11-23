@@ -160,6 +160,24 @@ func animationNames(v any, parent *Style) []string {
 	return nil
 }
 
+// keyframesOf returns the @keyframes rule called name that the element's
+// animation-name refers to: the one of the tree its declaration comes
+// from, else of the nearest tree around it, the document's last (CSS
+// Scoping 1, 3.5).
+func (cs *computeState) keyframesOf(name string) *keyframesRule {
+	scope := cs.nameScope
+	for {
+		if k := cs.r.keyframes[scopedName{scope: scope, name: name}]; k != nil || scope == nil {
+			return k
+		}
+		if h := cs.opts.Shadows.Host(scope); h != nil {
+			scope = treeScope(h)
+		} else {
+			scope = nil
+		}
+	}
+}
+
 // animates reports whether the cascaded animation-name v names an
 // @keyframes rule the resolver holds.
 func (cs *computeState) animates(v any, parent *Style) bool {
@@ -167,7 +185,7 @@ func (cs *computeState) animates(v any, parent *Style) bool {
 		return false
 	}
 	for _, n := range animationNames(v, parent) {
-		if cs.r.keyframes[n] != nil {
+		if cs.keyframesOf(n) != nil {
 			return true
 		}
 	}
@@ -203,7 +221,7 @@ func (cs *computeState) animate(winners *[numProps]any, imp *[numProps]bool, pen
 	}
 	var frames []frame
 	for i, name := range a.Names {
-		rule := cs.r.keyframes[name]
+		rule := cs.keyframesOf(name)
 		if rule == nil {
 			continue
 		}

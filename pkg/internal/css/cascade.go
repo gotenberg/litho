@@ -204,7 +204,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	order := 0
 	var counterRules []*counterStyleRule
 	var counterPos []int
-	kfPos := map[string]int{}
+	kfPos := map[scopedName]int{}
 	tryPos := map[string]int{}
 	propPos := map[string]int{}
 	type layeredValues struct {
@@ -280,9 +280,13 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				// The last rule of a name in the highest layer wins
 				// (CSS Cascade 5, 6.4.3; CSS Animations 1, 3).
 				pos := lay.of(si, sh.Origin, k.layer)
-				if prev, ok := kfPos[k.name]; !ok || pos >= prev {
-					kfPos[k.name] = pos
-					r.keyframes[k.name] = k
+				key := scopedName{name: k.name}
+				if sh.Origin == Author {
+					key.scope = sh.Scope
+				}
+				if prev, ok := kfPos[key]; !ok || pos >= prev {
+					kfPos[key] = pos
+					r.keyframes[key] = k
 				}
 			}
 		}
@@ -738,6 +742,10 @@ type cand struct {
 	prox int32
 	ord  int
 	idx  int
+	// scope is the shadow root of the tree the declaration comes from,
+	// nil for the document's and for user agent and user rules: the tree
+	// whose names it refers to (CSS Scoping 1, 3.5).
+	scope *html.Node
 }
 
 // pendingRef marks a longhand whose winning declaration holds var().
@@ -746,6 +754,9 @@ type pendingRef struct{ d *Declaration }
 // computeState is the state of one Compute call.
 type computeState struct {
 	r *Resolver
+	// nameScope is the tree of the declaration the animation-name of the
+	// element being cascaded comes from.
+	nameScope *html.Node
 	// ctx is the depth of the tree of the element matched last, the
 	// context of its own declarations ([cand.ctx]).
 	ctx    int
@@ -1110,8 +1121,12 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 	// 2.1.4: the same syntax and semantics as on an HTML element).
 	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg" || n.Namespace == "math") {
 		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL, Quirks: cs.opts.Mode == Quirks})
+		var own *html.Node
+		if cs.opts.Shadows != nil {
+			own = treeScope(n)
+		}
 		for i := range decls {
-			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), ctx: cs.ctx, layer: attachedRank, spec: styleAttrSpec, prox: noProximity, ord: len(cs.r.rules) + 1, idx: i})
+			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), ctx: cs.ctx, layer: attachedRank, spec: styleAttrSpec, prox: noProximity, ord: len(cs.r.rules) + 1, idx: i, scope: own})
 		}
 	}
 	return cands
@@ -1217,6 +1232,8 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 	}
 	var winners [numProps]any
+	// nameScope is the tree of the declaration animation-name takes.
+	var nameScope *html.Node
 	// imp records the longhands an !important declaration sets, which an
 	// animation does not override (CSS Cascade 4, 6.2).
 	var imp [numProps]bool
@@ -1304,12 +1321,18 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			custom[c.d.Property] = c.d.custom
 		case len(c.d.pending) > 0:
 			for _, id := range longhandsOf(c.d.Property) {
+				if id == pAnimationName {
+					nameScope = c.scope
+				}
 				winners[side(c.d, id)] = pendingRef{c.d}
 				imp[side(c.d, id)] = c.d.Important
 				written(c, side(c.d, id))
 			}
 		default:
 			for _, e := range c.d.entries {
+				if e.id == pAnimationName {
+					nameScope = c.scope
+				}
 				winners[side(c.d, e.id)] = e.v
 				imp[side(c.d, e.id)] = c.d.Important
 				written(c, side(c.d, e.id))
@@ -1349,6 +1372,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		pend = append(pend, pendingAt{id: propID(id), src: src, d: p.d}) // fits propID: id < numProps
 	}
 	cs.pend = pend[:0]
+	cs.nameScope = nameScope
 	if only == nil && cs.animates(winners[pAnimationName], parentStyle) {
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
@@ -1516,7 +1540,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		}
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
-			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), ctx: ctx, layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), prox: cs.prox[ri], ord: rr.order, idx: i})
+			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), ctx: ctx, layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), prox: cs.prox[ri], ord: rr.order, idx: i, scope: rr.scope})
 		}
 	}
 	cs.cands = out[:0]
