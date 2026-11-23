@@ -646,6 +646,9 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 			st.Left = css.Pts(alignX(g, b.contentWidth()))
 		}
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+		if !page && paraRel(g.hrel) && g.hasW && b.hf == nil {
+			alignInParagraph(&st, g.hpos)
+		}
 		st.ZIndex = css.ZIndex{Level: 0}
 		return
 	}
@@ -1084,6 +1087,28 @@ func (b *builder) pinFloats(kids []*layout.Node, p paraState) {
 		}
 		st.Left, st.Top = css.Pts(x), css.Pts(y)
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	}
+}
+
+// alignInParagraph aligns st, the style of an absolutely positioned
+// frame of a stated width placed from its paragraph, the paragraph being
+// its containing block, as style:horizontal-pos says (ODF 1.3, Part 3,
+// 20.290): centred or at the right edge of the paragraph's own width, a
+// table cell's when the paragraph is in one, by auto margins and a right
+// offset (CSS 2.1, 10.3.7). Other positions keep their left offset.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/chained-boxes-in-min-height-cells.fodt
+//     centres its 130 mm run-through frames in the paragraphs of 138.5 mm
+//     cells of a 277 mm table: each frame starts 4.25 mm inside its cell.
+func alignInParagraph(st *css.Style, hpos string) {
+	switch hpos {
+	case "center":
+		st.Left, st.Right = css.Pts(0), css.Pts(0)
+		st.Margin[css.Left], st.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	case "right", "outside":
+		st.Left, st.Right = css.Dimension{Kind: css.Auto}, css.Pts(0)
 	}
 }
 

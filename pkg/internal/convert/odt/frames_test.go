@@ -292,3 +292,28 @@ func TestBuiltinFrame(t *testing.T) {
 		}
 	}
 }
+
+// TestFrameCentredInCell locks that a run-through frame centred on its
+// paragraph is centred in the paragraph of the table cell holding it,
+// not across the page (see [alignInParagraph]).
+func TestFrameCentredInCell(t *testing.T) {
+	auto := `<style:style style:name="T" style:family="table"><style:table-properties style:width="17cm" table:align="left"/></style:style>` +
+		`<style:style style:name="T.A" style:family="table-column"><style:table-column-properties style:column-width="8.5cm"/></style:style>` +
+		`<style:style style:name="T.A1" style:family="table-cell"><style:table-cell-properties fo:padding="0cm" fo:border="none"/></style:style>` +
+		`<style:style style:name="fr" style:family="graphic" style:parent-style-name="Frame"><style:graphic-properties fo:margin="0cm" fo:padding="0cm" fo:border="none" style:wrap="run-through" style:vertical-pos="top" style:vertical-rel="paragraph" style:horizontal-pos="center" style:horizontal-rel="paragraph"/></style:style>`
+	frame := `<draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="char" svg:width="4.5cm" svg:height="2cm"><draw:text-box><text:p>IN</text:p></draw:text-box></draw:frame>`
+	body := `<table:table table:name="T" table:style-name="T"><table:table-column table:style-name="T.A" table:number-columns-repeated="2"/>` +
+		`<table:table-row><table:table-cell table:style-name="T.A1"><text:p>a</text:p></table:table-cell><table:table-cell table:style-name="T.A1"><text:p>` + frame + `</text:p></table:table-cell></table:table-row></table:table>`
+	pg := convertDoc(t, doc{styles: `<style:style style:name="Frame" style:family="graphic"/>`, contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+	// The second cell starts at 2 + 8.5 cm; the frame 2 cm inside it.
+	want := (2 + 8.5 + 2) / 2.54 * 72
+	for _, r := range runs(pg) {
+		if strings.TrimSpace(r.text) == "IN" {
+			if !near(r.x, want, 0.5) {
+				t.Errorf("IN at x %.2f, want %.2f", r.x, want)
+			}
+			return
+		}
+	}
+	t.Error("no IN")
+}
