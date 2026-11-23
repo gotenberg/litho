@@ -1522,6 +1522,9 @@ type Style struct {
 	// LineClamp is max-lines, line-clamp: auto, continue, block-ellipsis
 	// and the legacy -webkit-line-clamp (CSS Overflow 4, 6).
 	LineClamp LineClamp
+	// legacyBox is the legacy flexible box of display: -webkit-box
+	// (webkitbox.go), which the cascade maps onto the flex properties.
+	legacyBox legacyBox
 
 	ListStyleType     ListStyleType
 	ListStylePosition ListStylePosition

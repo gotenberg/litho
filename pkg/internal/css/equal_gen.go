@@ -621,6 +621,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalLineClamp(&a.LineClamp, &b.LineClamp) {
 		return false
 	}
+	if !equallegacyBox(&a.legacyBox, &b.legacyBox) {
+		return false
+	}
 	if a.ListStyleType != b.ListStyleType {
 		return false
 	}
@@ -1101,6 +1104,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.TextCombineUpright))
 	h = hashOverflowMark(h, &x.TextOverflow)
 	h = hashLineClamp(h, &x.LineClamp)
+	h = hashlegacyBox(h, &x.legacyBox)
 	h = mix(h, uint64(x.ListStyleType))
 	h = mix(h, uint64(x.ListStylePosition))
 	h = mixString(h, x.ListStyleImage)
@@ -1903,6 +1907,36 @@ func hashLineClamp(h uint64, x *LineClamp) uint64 {
 	h = mixBool(h, x.webkitBox)
 	h = mixBool(h, x.webkitVertical)
 	h = mix(h, uint64(x.webkitLines))
+	return h
+}
+
+// equallegacyBox reports whether a and b hold equal values, field by field.
+func equallegacyBox(a, b *legacyBox) bool {
+	if a.pack != b.pack {
+		return false
+	}
+	if a.align != b.align {
+		return false
+	}
+	if a.reverse != b.reverse {
+		return false
+	}
+	if math.Float64bits(a.flex) != math.Float64bits(b.flex) {
+		return false
+	}
+	if a.group != b.group {
+		return false
+	}
+	return true
+}
+
+// hashlegacyBox folds every field of x into h.
+func hashlegacyBox(h uint64, x *legacyBox) uint64 {
+	h = mix(h, uint64(x.pack))
+	h = mix(h, uint64(x.align))
+	h = mixBool(h, x.reverse)
+	h = mix(h, math.Float64bits(x.flex))
+	h = mix(h, uint64(x.group))
 	return h
 }
 

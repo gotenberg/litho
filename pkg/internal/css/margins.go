@@ -92,19 +92,13 @@ func (s *Style) flexOrGridContainer() bool {
 	return s.flexOrGrid || isFlexContainer(s.Display) || isGridContainer(s.Display)
 }
 
-// laidAs is a flex or grid display value laid out as d; webkitBox
-// records the legacy -webkit-box and -webkit-inline-box, whose
-// -webkit-line-clamp Chromium honours (CSS Overflow 4, 6.5).
+// laidAs is a display value computed as d until the cascade knows more;
+// webkitBox records the legacy -webkit-box and -webkit-inline-box, which
+// [fixupLegacyBox] makes a flex container unless its -webkit-line-clamp,
+// which Chromium honours (CSS Overflow 4, 6.5), keeps it a block.
 type laidAs struct {
 	d         Display
 	webkitBox bool
-}
-
-// flexOrGrid are the single display keywords of flex and grid containers.
-var flexOrGrid = map[string]bool{
-	"flex": true, "grid": true, "inline-flex": true, "inline-grid": true, "-webkit-box": true,
-	"-webkit-flex": true, "-ms-flexbox": true, "-webkit-inline-box": true, "-webkit-inline-flex": true,
-	"-ms-inline-flexbox": true,
 }
 
 // footnoteArea is the [marginRule] box of an @footnote rule, and

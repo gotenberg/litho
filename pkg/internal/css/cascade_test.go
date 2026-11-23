@@ -176,7 +176,6 @@ func TestCompute_Deterministic(t *testing.T) {
 		part string
 	}{
 		{warn.CSSUnsupported, "cross-fade"},
-		{warn.CSSUnsupported, "display: -webkit-box"},
 		{warn.CSSUnsupported, `"foo"`},
 	} {
 		if !hasWarning(a.Warnings(), want.code, want.part) {

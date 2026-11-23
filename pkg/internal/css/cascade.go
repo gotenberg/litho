@@ -1646,6 +1646,7 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 	}
 	fixupOverflow(st)
 	fixupDisplay(st, isRoot)
+	fixupLegacyBox(st)
 	if st.Display == Contents && cs.noContents {
 		st.Display = DisplayNone
 	}
@@ -1659,6 +1660,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 		// 2.7), and so are those a display: contents child of it hands
 		// it (2.5).
 		st.Display, _ = blockify(st.Display)
+		if parent.Display != Contents {
+			legacyBoxItem(st, parent)
+		}
 	}
 	if !isRoot && (parent.Display == Ruby || parent.Display == RubyText) && st.Float == FloatNone && st.Position != Absolute && st.Position != Fixed {
 		// CSS Ruby 1, 2.1: the in-flow block-level children of a ruby

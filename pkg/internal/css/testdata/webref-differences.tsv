@@ -14,6 +14,7 @@ initial	outline-color	CSS UI 4 gives auto; Chromium 156 refuses outline-color: a
 initial	ruby-position	Chromium 156 parses over and under alone and computes the initial value to over; CSS Ruby 1, 4.1 gives alternate
 initial	text-autospace	CSS Text 4 gives normal; Chromium 156 computes no-autospace on a plain element, and litho's initial value is that
 unknown	-webkit-box-decoration-break	a legacy name Chromium 156 parses (CSS.supports true) that webref does not list as an alias of box-decoration-break
+unknown	-webkit-box-direction	a legacy name Chromium 156 parses (CSS.supports true) and lays out, normal or reverse, not inherited, the main axis direction of a display: -webkit-box container; webref lists the other -webkit-box- names from the Compatibility Standard and not this one
 unknown	-webkit-column-break-after	a legacy name Chromium 156 reads as break-after under keywords of its own (always as column, avoid as avoid-column), that webref does not list
 unknown	-webkit-column-break-before	a legacy name Chromium 156 reads as break-before under keywords of its own (always as column, avoid as avoid-column), that webref does not list
 unknown	-webkit-column-break-inside	a legacy name Chromium 156 reads as break-inside under keywords of its own (avoid as avoid-column), that webref does not list

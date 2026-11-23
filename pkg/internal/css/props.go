@@ -3,8 +3,6 @@ package css
 import (
 	"maps"
 	"math"
-
-	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // propID names a longhand. The cascade computes longhands in this order:
@@ -305,6 +303,11 @@ const (
 	pBackfaceVisibility
 	pZoom
 	pOverflowY
+	pWebkitBoxPack
+	pWebkitBoxAlign
+	pWebkitBoxDirection
+	pWebkitBoxFlex
+	pWebkitBoxOrdinalGroup
 	numProps
 )
 
@@ -555,9 +558,10 @@ var displays = map[string]Display{
 	"flow": Block,
 }
 
-// displays3 are the CSS Display 3 values laid out as Block or InlineBlock
-// in this version, with a warning.
-var displays3 = map[string]Display{
+// legacyBoxDisplays are the displays of the legacy flexible box, block-
+// and inline-level, which [fixupLegacyBox] lays out as flex containers
+// once their orientation and line clamp are known.
+var legacyBoxDisplays = map[string]Display{
 	"-webkit-box": Block, "-webkit-inline-box": InlineBlock,
 }
 
@@ -568,17 +572,13 @@ type flowRootListItem struct{ inline bool }
 
 // parseDisplay parses display (CSS Display 3, 2), the one- and two-keyword
 // forms.
-func parseDisplay(v []token, c *declCtx) (any, bool) {
+func parseDisplay(v []token, _ *declCtx) (any, bool) {
 	if k, ok := keyword(v); ok {
 		if d, ok := displays[k]; ok {
 			return d, true
 		}
-		if d, ok := displays3[k]; ok {
-			c.warn(warn.CSSUnsupported, warn.Approximated, "display: %s is laid out as %s", k, displayName(d))
-			if flexOrGrid[k] {
-				return laidAs{d: d, webkitBox: k == "-webkit-box" || k == "-webkit-inline-box"}, true
-			}
-			return d, true
+		if d, ok := legacyBoxDisplays[k]; ok {
+			return laidAs{d: d, webkitBox: true}, true
 		}
 		return nil, false
 	}
@@ -665,16 +665,6 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		return BlockRuby, true
 	}
 	return nil, false
-}
-
-func displayName(d Display) string {
-	if d == InlineBlock {
-		return "inline-block"
-	}
-	if d == Inline {
-		return "inline"
-	}
-	return "block"
 }
 
 func parseOpacity(v []token, _ *declCtx) (any, bool) {
@@ -1066,6 +1056,9 @@ func init() {
 	corners := [4]string{"border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"}
 	for i, n := range corners {
 		props[pRadiusTopLeft+propID(i)] = radiusProp(Corner(i), n)
+	}
+	for id, def := range legacyBoxProps() {
+		props[id] = def
 	}
 	for id, def := range flexProps() {
 		props[id] = def
