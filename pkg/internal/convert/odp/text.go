@@ -156,7 +156,9 @@ type paraState struct {
 // whether their style:writing-mode sets the paragraphs' direction, which
 // an automatic graphic or presentation style's does not: Impress takes
 // it for the shape's text writing mode, so a paragraph keeps the
-// direction of the default style or a common style.
+// direction of the default style or a common style. Start and end read
+// as left and right in a document LibreOffice wrote
+// ([odf.AbsoluteStartEnd]).
 //
 // # Corpus evidence
 //
@@ -165,13 +167,24 @@ type paraState struct {
 //     presentation style of lr-tb, left to right with a common graphic
 //     style or a paragraph style of lr-tb.
 //   - libreoffice/odp: sd/tdf128985's outline, of an automatic lr-tb style,
-//     prints its bullet right of its text.
+//     prints its bullet right of its text, and its paragraph of
+//     fo:text-align start at the left: LibreOfficeDev 7.2 wrote it.
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, right-to-left
+//     paragraphs aligned start print at the left of their frame and those
+//     aligned end at the right under the generator LibreOffice 7.4; at the
+//     right and the left under none and Apache OpenOffice 4.1.
 func (r *reader) applyPara(ps *paraState, p odf.Props, direction bool) {
 	switch p.Get("fo:text-align") {
 	case "start":
 		ps.align = css.AlignStart
+		if r.absoluteAlign {
+			ps.align = css.AlignLeft
+		}
 	case "end":
 		ps.align = css.AlignEnd
+		if r.absoluteAlign {
+			ps.align = css.AlignRight
+		}
 	case "left":
 		ps.align = css.AlignLeft
 	case "right":

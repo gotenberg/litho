@@ -53,20 +53,23 @@ const (
 
 // reader reads one presentation into the slide model.
 type reader struct {
-	ctx      context.Context
-	pkg      *odf.Package
-	fonts    *text.Fonts
-	styles   *odf.Styles
-	draw     *odf.DrawStyles
-	data     *odf.DataStyles
-	builtin  *odf.Styles
-	warnings []typeset.Warning
-	warned   map[string]bool
-	err      error
-	steps    int
-	shapes   int
-	paras    int
-	pics     map[string]*picResult
+	ctx context.Context
+	pkg *odf.Package
+	// absoluteAlign reads fo:text-align start and end as left and right
+	// in every writing mode ([odf.AbsoluteStartEnd]).
+	absoluteAlign bool
+	fonts         *text.Fonts
+	styles        *odf.Styles
+	draw          *odf.DrawStyles
+	data          *odf.DataStyles
+	builtin       *odf.Styles
+	warnings      []typeset.Warning
+	warned        map[string]bool
+	err           error
+	steps         int
+	shapes        int
+	paras         int
+	pics          map[string]*picResult
 	// layers maps a draw:layer name to its draw:display (ODF 1.3, Part 3,
 	// 10.2.3 and 19.153): always, screen, printer or none.
 	layers map[string]string
@@ -109,8 +112,8 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	r := &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts,
 		styles: odf.NewStyles(pkg), draw: odf.NewDrawStyles(pkg), data: odf.NewDataStyles(pkg),
-		builtin: builtinStyles(ctx),
-		warned:  map[string]bool{}, pics: map[string]*picResult{}, layers: map[string]string{},
+		builtin: builtinStyles(ctx), absoluteAlign: odf.AbsoluteStartEnd(pkg),
+		warned: map[string]bool{}, pics: map[string]*picResult{}, layers: map[string]string{},
 		footers: map[string]string{}, headers: map[string]string{}, dates: map[string]*odf.Element{},
 	}
 	for _, l := range odf.Section(pkg.Styles, "master-styles").Child(odf.NSDraw, "layer-set").All(odf.NSDraw, "layer") {
