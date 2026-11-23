@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T05:45:44Z",
+  "captured_at": "2026-11-23T06:10:54Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -19000,8 +19000,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 150,
-          "mismatched": 20,
+          "matched": 151,
+          "mismatched": 19,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19083,12 +19083,12 @@
               "text_f1": 1
             },
             "sd-data/fdo71075.odp": {
-              "layout": 0,
+              "layout": 0.9884,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.3871
+              "strict": 1,
+              "text_f1": 1
             },
             "sd-data/fdo71961.odp": {
               "layout": 0.992,
@@ -54508,8 +54508,8 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 151,
-          "mismatched": 12,
+          "matched": 152,
+          "mismatched": 11,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -54583,12 +54583,12 @@
               "text_f1": 1
             },
             "charts-pie-doughnut": {
-              "layout": 0.7215,
+              "layout": 0.8022,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9872
+              "text_f1": 0.9877
             },
             "charts-scatter-bubble-radar": {
               "layout": 0.8293,
@@ -54599,7 +54599,7 @@
               "text_f1": 0.9385
             },
             "charts-stock-combo": {
-              "layout": 0.8624,
+              "layout": 0.9338,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -74350,20 +74350,20 @@
               "text_f1": 0.92
             },
             "chart-line": {
-              "layout": 0.8015,
+              "layout": 0.9,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 0.925
             },
             "chart-pie": {
-              "layout": 0.5077,
+              "layout": 0.6999,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.7855
+              "text_f1": 0.8214
             },
             "chart-radar": {
               "layout": 0.877,
@@ -74382,11 +74382,11 @@
               "text_f1": 0.8898
             },
             "chart-stock": {
-              "layout": 0.7802,
+              "layout": 0.9428,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.9
             },
             "chart-surface": {
