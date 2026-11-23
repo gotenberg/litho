@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-23T12:08:40Z",
+  "captured_at": "2026-11-23T13:34:16Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -119798,8 +119798,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5942,
-          "mismatched": 552,
+          "matched": 5944,
+          "mismatched": 550,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -124911,7 +124911,7 @@
             "css/css-values/attr-notype-fallback.html": "pass",
             "css/css-values/attr-style-sharing-5.html": "pass",
             "css/css-values/calc-background-image-gradient-1.html": "pass",
-            "css/css-values/calc-background-size-round-percentage.html": "fail",
+            "css/css-values/calc-background-size-round-percentage.html": "pass",
             "css/css-values/calc-border-radius-1.html": "pass",
             "css/css-values/calc-ch-ex-lang.html": "pass",
             "css/css-values/calc-height-block-1.html": "pass",
@@ -126159,7 +126159,7 @@
             "css/selectors/text-fill-color-visited-inheritance.html": "pass",
             "css/selectors/text-stroke-color-visited-inheritance.html": "pass",
             "css/selectors/visited-nested.html": "pass",
-            "html/rendering/widgets/field-sizing-placeholder-stretch.html": "fail",
+            "html/rendering/widgets/field-sizing-placeholder-stretch.html": "pass",
             "mathml/presentation-markup/direction/direction-overall-002.html": "pass",
             "mathml/presentation-markup/direction/direction-overall-003.html": "pass",
             "mathml/presentation-markup/fractions/frac-color-001.html": "pass",
