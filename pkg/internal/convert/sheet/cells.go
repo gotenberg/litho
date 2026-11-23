@@ -100,6 +100,30 @@ func numValue(v Value) numfmt.Value {
 	return numfmt.Value{Kind: numfmt.Text, Text: v.Text}
 }
 
+// generalCode reports the code of the General format.
+func generalCode(code string) bool {
+	code = strings.TrimSpace(code)
+	return code == "" || strings.EqualFold(code, "General")
+}
+
+// roundPlaces returns x rounded to n decimals, halves away from zero, as
+// Calc rounds a General number to its limit of decimals
+// (rtl::math::round); x itself when the scaled value would lose it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/numgroup_example.ods, whose default cell style
+//     limits General numbers to 2 decimals, prints 17.6028206551877 as
+//     17.6 and 24.1070668657122 as 24.11.
+func roundPlaces(x float64, n int) float64 {
+	p := math.Pow10(n)
+	y := float64(x * p)
+	if !numeric.Finite(y) || math.Abs(y) >= 1<<52 {
+		return x
+	}
+	return math.Round(y) / p
+}
+
 // printedError returns what an error value prints as under e, which is
 // not ErrorsDisplayed or ErrorsBlank (ECMA-376 Part 1, 18.18.60
 // ST_PrintError: "--" for dash, "#N/A" for NA).
@@ -160,6 +184,9 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 		v := numValue(c.Value)
 		if c.Value.Kind == Text && c.Value.Text == "" && len(c.Runs) > 0 {
 			v.Text = ""
+		}
+		if c.Value.Kind == Number && !b.doc.ExcelRules && b.doc.LimitGeneral && generalCode(st.Format) {
+			v.Number = roundPlaces(v.Number, b.doc.GeneralDecimals)
 		}
 		measure := func(s string) float64 { return b.m.width(d.font, s) }
 		if d.value && !st.Align.Shrink {

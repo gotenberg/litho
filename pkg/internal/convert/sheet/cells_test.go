@@ -825,3 +825,32 @@ func TestConvert_ExcelCentresBooleansAndErrors(t *testing.T) {
 		t.Errorf("Calc ends TRUE at %.2f, want the cell's right side %.2f", b.endX, c.endX)
 	}
 }
+
+// TestConvert_GeneralDecimalsLimit locks Calc's limit of decimals for the
+// General format: a General number rounds to it, a number of another
+// format and a book without the limit keep their decimals.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/numgroup_example.ods, whose default cell style
+//     limits General numbers to 2 decimals, prints 17.6028206551877 as
+//     17.6 and 24.1070668657122 as 24.11.
+func TestConvert_GeneralDecimalsLimit(t *testing.T) {
+	doc := func(limit bool) *Document {
+		d := newDoc(&Sheet{Name: "S", DefaultColumnWidth: 120, Rows: []Row{{Index: 0, Cells: []Cell{
+			numCell(0, 17.6028206551877, nil), numCell(1, 24.1070668657122, nil), numCell(2, 1.23456, &Style{Format: "0.0000"}),
+		}}}})
+		d.GeneralDecimals, d.LimitGeneral = 2, limit
+		return d
+	}
+	pg := convert(t, doc(true), office.Options{}).Pages[0]
+	for _, s := range []string{"17.6", "24.11", "1.2346"} {
+		find(t, pg, s)
+	}
+	pg = convert(t, doc(false), office.Options{}).Pages[0]
+	for _, r := range runs(pg) {
+		if r.text == "17.6" || r.text == "24.11" {
+			t.Errorf("without a limit %q is rounded", r.text)
+		}
+	}
+}

@@ -88,3 +88,18 @@ func TestRead_CachedErrorResults(t *testing.T) {
 		t.Errorf("column 4 = %+v, want the number", c)
 	}
 }
+
+// TestRead_GeneralDecimals locks the limit of decimals of the General
+// format, read from the default cell style (ODF 1.3 Part 3, 20.255
+// style:decimal-places), and no limit when the style states none.
+func TestRead_GeneralDecimals(t *testing.T) {
+	body := table("S", `<table:table-row><table:table-cell office:value-type="float" office:value="1.5"/></table:table-row>`)
+	doc, _ := read(t, flat{styles: `<style:default-style style:family="table-cell"><style:table-cell-properties style:decimal-places="2"/></style:default-style>`, body: body}.bytes())
+	if !doc.LimitGeneral || doc.GeneralDecimals != 2 {
+		t.Errorf("limit %v %d, want 2", doc.LimitGeneral, doc.GeneralDecimals)
+	}
+	doc, _ = read(t, flat{body: body}.bytes())
+	if doc.LimitGeneral {
+		t.Errorf("limit %d without a default style", doc.GeneralDecimals)
+	}
+}

@@ -49,6 +49,12 @@ type Document struct {
 	// ([builder.excelDrops]). The XLSX reader sets it for a styles part
 	// without x14ac:knownFonts.
 	FitRows bool
+	// GeneralDecimals, when LimitGeneral is set, is the most decimals a
+	// number in the General format shows under Calc's rules, rounded to
+	// them (ODF 1.3 Part 3, 20.255 style:decimal-places of the default
+	// cell style, Calc's limit of decimals for the General format).
+	GeneralDecimals int
+	LimitGeneral    bool
 }
 
 // Sheet is one worksheet (ECMA-376 Part 1, 18.3; ODF 1.3 Part 3, 9.1.2,

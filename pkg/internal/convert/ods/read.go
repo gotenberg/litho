@@ -179,6 +179,9 @@ func (r *reader) tick() bool {
 // document reads the office:spreadsheet body (ODF 1.3, Part 3, 9.1).
 func (r *reader) document(body *odf.Element) *sheet.Document {
 	r.doc = &sheet.Document{Meta: r.metadata(), Default: r.defaultStyle()}
+	if n, err := intconv.Atoi(r.styles.Default(odf.FamilyCell, odf.CellProps).Get("style:decimal-places")); err == nil && n >= 0 {
+		r.doc.GeneralDecimals, r.doc.LimitGeneral = min(n, maxGeneralDecimals), true
+	}
 	var noPrint []bool
 	for _, c := range body.Children {
 		switch {
@@ -208,6 +211,11 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 	r.linkNames()
 	return r.doc
 }
+
+// maxGeneralDecimals bounds the decimals a General number is rounded to.
+// Not spec-mandated: a float64 holds 17 significant digits, so rounding
+// past 20 decimals changes no number Calc shows.
+const maxGeneralDecimals = 20
 
 // maxNames caps the named ranges read. Anti-DoS guard, not
 // spec-mandated: a spreadsheet names a few hundred ranges at most.
