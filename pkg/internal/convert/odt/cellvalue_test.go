@@ -16,13 +16,15 @@ func TestCellValueText_WriterShowsValues(t *testing.T) {
 	cell := func(attrs, text string) string {
 		return `<table:table-cell ` + attrs + `><text:p>` + text + `</text:p></table:table-cell>`
 	}
-	body := `<table:table><table:table-column table:number-columns-repeated="6"/><table:table-row>` +
+	body := `<table:table><table:table-column table:number-columns-repeated="8"/><table:table-row>` +
 		cell(`table:style-name="ce1" office:value-type="float" office:value="500000"`, "") +
 		cell(`table:style-name="ce2" office:value-type="date" office:date-value="2012-02-18T00:00:00.0Z"`, "") +
 		cell(`office:value-type="string" office:string-value="USD"`, "hidden") +
 		cell(`office:value-type="float" office:value="7"`, "kept") +
 		cell(`table:style-name="ce1" office:value-type="float" office:value="0"`, "Banana") +
 		cell(``, "plain") +
+		cell(`table:formula="ooow:&lt;?&gt;+&lt;D2&gt;" office:value-type="float" office:value="5"`, "5") +
+		cell(`table:formula="ooow:&lt;A1&gt;+1" office:value-type="float" office:value="8"`, "8") +
 		`</table:table-row></table:table>`
 	b := newTestBuilder(t, doc{contentAuto: auto, body: body})
 	root, _ := b.document(odfBody(b))
@@ -32,7 +34,7 @@ func TestCellValueText_WriterShowsValues(t *testing.T) {
 			got = append(got, nodeText(n))
 		}
 	})
-	want := "500 000,00|18/02/2012|USD|kept|Banana|plain"
+	want := "500 000,00|18/02/2012|USD|kept|Banana|plain|** Expression is faulty **|8"
 	if strings.Join(got, "|") != want {
 		t.Errorf("cells %q, want %q", strings.Join(got, "|"), want)
 	}

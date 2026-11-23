@@ -38,15 +38,29 @@ func (b *builder) cellDataStyle(name string) string {
 	return ""
 }
 
+// faultyFormula is the text Writer prints in a table cell whose formula
+// it cannot compute (sw's STR_POOLCOREUI_CALC_SYNTAX error text).
+const faultyFormula = "** Expression is faulty **"
+
 // cellValueText returns the text Writer shows for the table cell c in
 // place of its paragraphs' text, false when it shows the paragraphs: a
 // cell with an office:value-type whose cell style names a data style and
 // whose paragraphs hold no text shows its value in that format, and a
 // string cell its office:string-value. A cell whose paragraphs hold text
-// shows it, whatever its value.
+// shows it, whatever its value. A table:formula naming the reference
+// <?>, which Writer writes for a cell a deleted row or column took away,
+// shows Writer's error text whatever value and text the cell keeps:
+// Writer computes the formula again on load and fails.
 //
 // # Corpus evidence
 //
+//   - libreoffice/odt: odfexport/tdf139126.odt prints "** Expression is
+//     faulty **" in its cell of formula <?>+<D2>, which stores the value
+//     1.8e308 and prints it in full.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, cells storing 5 of
+//     the formulas <?>+1, <?>, sum <?> and <A1>*<?> print the error text;
+//     <A1>+1 prints 8 for an A1 of 7 (Writer computes every formula
+//     again, which litho does not: the stored value stands).
 //   - libreoffice/odt: odfimport/fdo60842.odt prints its date, currency
 //     and string cells by their values ("18/02/2012", "500 000,00",
 //     "USD") where the string cell's paragraph says "This text should not
@@ -54,6 +68,9 @@ func (b *builder) cellDataStyle(name string) string {
 //   - libreoffice/odt: odfexport/tdf131025_noZerosInTable.odt prints
 //     "Banana" in a cell of value 0.
 func (b *builder) cellValueText(c *odf.Element) (string, bool) {
+	if strings.Contains(c.A(odf.NSTable, "formula"), "<?>") {
+		return faultyFormula, true
+	}
 	vt := c.A(odf.NSOffice, "value-type")
 	if vt == "string" {
 		return c.Lookup(odf.NSOffice, "string-value")
