@@ -83,8 +83,8 @@ type Relationship struct {
 
 // Open opens the package data holds. It fails with office.ErrEncrypted
 // for a compound file, an encrypted package that needs a password first,
-// with office.ErrMalformed for anything else that is not a zip archive or
-// holds no content types, and with limits.ErrInputTooLarge past
+// with office.ErrMalformed for anything else that is not a zip archive,
+// names one part twice or holds no content types, and with limits.ErrInputTooLarge past
 // office.MaxPackageEntries. The content types are parsed under ctx and its
 // memory budget.
 func Open(ctx context.Context, data []byte) (*Package, error) {
@@ -106,10 +106,15 @@ func Open(ctx context.Context, data []byte) (*Package, error) {
 	}
 	for _, f := range zr.File {
 		name := partKey(f.Name)
-		if _, dup := p.entries[name]; dup || name == "" || strings.HasSuffix(name, "/") {
-			// The first of two entries of one name wins, as zip readers do;
-			// ECMA-376 Part 2, 9.1.1.1.2 forbids equivalent part names.
+		if name == "" || strings.HasSuffix(name, "/") {
 			continue
+		}
+		if _, dup := p.entries[name]; dup {
+			// ECMA-376 Part 2, 9.1.1.1.2 (M1.12): a package holds no two
+			// equivalent part names, and no reader recognises one that
+			// does. Zip readers pick the first entry or the last, so two
+			// readers would print two documents: the package is refused.
+			return nil, fmt.Errorf("%w: two zip entries name the part %s", office.ErrMalformed, f.Name)
 		}
 		p.entries[name] = f
 	}

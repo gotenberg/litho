@@ -1,6 +1,8 @@
 package ooxml
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -118,5 +120,43 @@ func TestPackage_PartsStopOnCancel(t *testing.T) {
 	}
 	if got := p.RelatedPart(cancelled, "word/document.xml", RelImage); got != "" {
 		t.Errorf("RelatedPart on a cancelled context = %q, want none", got)
+	}
+}
+
+// TestOpen_RefusesAPartNamedTwice checks that a package whose zip names
+// one part twice, or two equivalent names, is refused (ECMA-376 Part 2,
+// 9.1.1.1.2): readers that pick different entries would read different
+// documents.
+func TestOpen_RefusesAPartNamedTwice(t *testing.T) {
+	t.Parallel()
+	for _, second := range []string{"word/document.xml", "Word/Document.XML"} {
+		data := buildZip(t, minimalPackage())
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range zr.File {
+			if err := zw.Copy(f); err != nil {
+				t.Fatal(err)
+			}
+		}
+		w, err := zw.Create(second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("<broken")); err != nil {
+			t.Fatal(err)
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Open(t.Context(), buf.Bytes()); !errors.Is(err, office.ErrMalformed) {
+			t.Errorf("%s twice: Open = %v, want office.ErrMalformed", second, err)
+		}
+	}
+	if _, err := Open(t.Context(), buildZip(t, minimalPackage())); err != nil {
+		t.Fatalf("each part once: %v", err)
 	}
 }
