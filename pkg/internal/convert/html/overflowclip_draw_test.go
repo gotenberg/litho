@@ -3,7 +3,9 @@ package html
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -78,6 +80,27 @@ func TestDraw_OverflowClipsOneAxis(t *testing.T) {
 		c := color.NRGBAModel.Convert(img.At(tt.x, tt.y)).(color.NRGBA)
 		if got := c.R < 0x40 && c.G > 0xc0; got != tt.green {
 			t.Errorf("(%d, %d) = %v, want green %v", tt.x, tt.y, c, tt.green)
+		}
+	}
+}
+
+func TestPages_LinePushedPastAClipAddsNoPage(t *testing.T) {
+	t.Parallel()
+	// A scroll container as tall as the page, the shell of an application:
+	// the line that straddles the page's end moves to the next page, below
+	// the container's end, where its clip shows nothing of it (CSS Overflow
+	// 3, 3.1), though the ink of its glyphs reaches back over the cut.
+	var lines strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&lines, "<div>line %d</div>", i)
+	}
+	for _, h := range []string{"100vh", "265.9px", "266px"} {
+		for _, ov := range []string{"auto", "hidden", "clip"} {
+			src := `<!DOCTYPE html><style>@page { size: 400px 266px; margin: 0 } body { margin: 0; font: 20px/10px sans-serif }</style>` +
+				`<div style="height: ` + h + `; overflow: ` + ov + `">` + lines.String() + `</div>`
+			if doc := convertDoc(t, src, Options{}); len(doc.Pages) != 1 {
+				t.Errorf("height %s, overflow %s: %d pages, want 1", h, ov, len(doc.Pages))
+			}
 		}
 	}
 }

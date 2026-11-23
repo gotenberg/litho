@@ -182,7 +182,12 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 				continue
 			}
 			if k.page >= 0 {
-				n = max(n, k.page+1)
+				// A piece placed on a page its clips end above shows
+				// nothing there: the ink of a line pushed past the end of
+				// a clipping box can reach back over the cut.
+				if hi > e.pageTop(k.page)+eps {
+					n = max(n, k.page+1)
+				}
 				continue
 			}
 			if clipped {
