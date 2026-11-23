@@ -16,11 +16,13 @@ import (
 // Encoding Standard knows (ISO-8859-1, windows-1252, Shift_JIS...) is
 // decoded to UTF-8 through golang.org/x/text. ODF 1.3, Part 2, 3.1 asks
 // for UTF-8 or UTF-16, but producers write ASCII declarations, and
-// LibreOffice reads any encoding its parser knows. An unknown name
-// fails with office.ErrMalformed.
+// LibreOffice reads any encoding its parser knows. A UTF-16 name passes
+// the bytes through too: the token reader has decoded UTF-16 by the byte
+// order mark XML 1.0, 4.3.3 requires of it. An unknown name fails with
+// office.ErrMalformed.
 func charsetReader(label string, input io.Reader) (io.Reader, error) {
 	switch strings.ToLower(strings.TrimSpace(label)) {
-	case "us-ascii", "ascii", "iso-646-us", "iso646-us", "ansi_x3.4-1968", "utf8":
+	case "us-ascii", "ascii", "iso-646-us", "iso646-us", "ansi_x3.4-1968", "utf8", "utf-16", "utf16", "utf-16le", "utf-16be":
 		return input, nil
 	}
 	enc, err := htmlindex.Get(label)

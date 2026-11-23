@@ -64,3 +64,41 @@ func TestTokenReader_CharsetInput(t *testing.T) {
 		t.Fatalf("Read after Mark = %d, %v", n, err)
 	}
 }
+
+// utf16 encodes s as UTF-16 in the byte order big says, its byte order
+// mark first.
+func utf16(s string, big bool) []byte {
+	out := []byte{0xFF, 0xFE}
+	if big {
+		out = []byte{0xFE, 0xFF}
+	}
+	for _, r := range s {
+		hi, lo := byte(r>>8), byte(r) //nolint:gosec // the two bytes of a code unit of the BMP
+		if big {
+			out = append(out, hi, lo)
+		} else {
+			out = append(out, lo, hi)
+		}
+	}
+	return out
+}
+
+// TestTokenReader_DecodesUTF16 checks that a stream opening with a UTF-16
+// byte order mark reads as UTF-8 without the mark (XML 1.0, 4.3.3), in
+// both byte orders, and that a stream without one is read as it is.
+func TestTokenReader_DecodesUTF16(t *testing.T) {
+	t.Parallel()
+	const doc = `<?xml version="1.0"?><a>été</a>`
+	for _, big := range []bool{false, true} {
+		got, err := io.ReadAll(NewTokenReader(strings.NewReader(string(utf16(doc, big))), 0))
+		if err != nil || string(got) != doc {
+			t.Errorf("big endian %t: %q, %v; want %q", big, got, err, doc)
+		}
+	}
+	for _, plain := range []string{doc, "", "<"} {
+		got, err := io.ReadAll(NewTokenReader(strings.NewReader(plain), 0))
+		if err != nil || string(got) != plain {
+			t.Errorf("%q read as %q, %v", plain, got, err)
+		}
+	}
+}

@@ -189,6 +189,7 @@ var errDocType = errors.New("a document type declaration")
 func parse(ctx context.Context, in *office.TokenReader, understood []string, count *int) (*Element, error) {
 	dec := xml.NewDecoder(in)
 	dec.Strict = true
+	dec.CharsetReader = charsetReader
 	mem := limits.BudgetFrom(ctx)
 	type frame struct {
 		el  *Element
@@ -298,6 +299,18 @@ func parse(ctx context.Context, in *office.TokenReader, understood []string, cou
 		return doc.Children[0], nil
 	}
 	return nil, fmt.Errorf("%w: no root element", office.ErrMalformed)
+}
+
+// charsetReader passes through a part whose declaration names UTF-8 or
+// UTF-16, the two encodings of XML content (ECMA-376 Part 2, M1.17): the
+// token reader has decoded UTF-16 by its byte order mark, which XML 1.0,
+// 4.3.3 requires of it. Any other name fails with office.ErrMalformed.
+func charsetReader(label string, input io.Reader) (io.Reader, error) {
+	switch strings.ToLower(strings.TrimSpace(label)) {
+	case "utf-8", "utf8", "utf-16", "utf16", "utf-16le", "utf-16be":
+		return input, nil
+	}
+	return nil, fmt.Errorf("%w: the XML encoding %q is not UTF-8 or UTF-16", office.ErrMalformed, label)
 }
 
 // requiresURIs is the attribute the parser adds to an mc:Choice: the
