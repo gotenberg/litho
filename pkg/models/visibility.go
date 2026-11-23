@@ -9,8 +9,8 @@ const (
 	// layer over a scan uses, or in mode 7, which only adds them to the clip,
 	// when nothing the page paints through that clip shows inside them.
 	UnseenRenderMode UnseenReason = "render-mode"
-	// UnseenOutsidePage is text whose glyphs start outside the page's crop
-	// box, the region a viewer shows (14.11.2).
+	// UnseenOutsidePage is text whose glyphs lie off the page's crop box, the
+	// region a viewer shows (14.11.2), as TextElement.IsClipped says.
 	UnseenOutsidePage UnseenReason = "outside-page"
 	// UnseenPaintsNothing is text that marks no pixel even drawn alone on a
 	// white page: glyphs that describe no shape, text a clipping path

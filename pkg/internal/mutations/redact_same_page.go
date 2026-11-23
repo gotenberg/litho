@@ -57,8 +57,9 @@ type SamePageCopy struct {
 //     9.3.6, Table 106: not 3, invisible, nor 7, clip only);
 //   - does not paint only in white in a device colour space, its fill, its
 //     stroke or both as its mode applies them ([models.TextElement.Invisible]);
-//   - falls inside the clipping path and the crop box
-//     ([models.TextElement.Hidden], [models.TextElement.IsClipped]), and is
+//   - falls inside the clipping path ([models.TextElement.Hidden]), has a
+//     baseline segment that touches the crop box
+//     ([models.TextElement.IsClipped]), and is
 //     not in optional content that is off, a group or a membership
 //     dictionary read as the renderer reads it ([document.OCVisible]; the
 //     extraction skips those, so the operator has codes with no glyph);

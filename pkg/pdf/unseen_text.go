@@ -26,7 +26,9 @@ func invisibleMode(mode int) bool {
 //     glyph (ISO 32000-1, 9.3.6, Table 106), as an OCR layer does. It also
 //     covers text in mode 7, which only adds its glyphs to the clip, when what
 //     the page paints through that clip shows nothing inside them.
-//   - [models.UnseenOutsidePage], text set outside the crop box.
+//   - [models.UnseenOutsidePage], text set off the crop box
+//     ([models.TextElement.IsClipped]). A glyph the edge of the crop box cuts
+//     is judged by what it paints.
 //   - [models.UnseenPaintsNothing], text that marks no pixel even drawn alone
 //     on a white page: glyphs describing no shape, text a clipping path removes
 //     (8.5.4), fully transparent text, text in white.

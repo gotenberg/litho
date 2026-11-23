@@ -786,7 +786,7 @@ func withUnvaluedMarked() ExtractTextOption {
 }
 
 // WithHiddenText includes every category of normally-stripped text: invisible
-// text, text excluded by the graphics-state clipping path, text outside the
+// text, text excluded by the graphics-state clipping path, text off the
 // CropBox, and /Artifact content. It is the shortcut for passing
 // [WithInvisibleText], [WithClipPathText], [WithClippedText] and
 // [WithArtifacts] together.
@@ -821,8 +821,11 @@ func WithClipPathText() ExtractTextOption {
 	}
 }
 
-// WithClippedText includes text that falls outside the page CropBox.
-// Useful for detecting overset content or debugging layout issues.
+// WithClippedText includes the glyphs off the page CropBox (ISO 32000-1,
+// 14.11.2), those whose baseline segment does not touch it
+// ([models.TextElement.IsClipped]). A glyph the edge of the CropBox cuts is
+// read without it. Useful for detecting
+// overset content or debugging layout issues.
 func WithClippedText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeClipped = true
@@ -857,9 +860,14 @@ func WithArtifacts() ExtractTextOption {
 // optional content layer rules, and spatial whitespace inference logic.
 //
 // By default, invisible text (rendering mode 3, white-on-white colors), text
-// outside the clipping path and CropBox, and artifact text (headers, footers,
-// page numbers) are silently dropped. Pass [WithHiddenText] to include all text
-// regardless of visibility.
+// outside the clipping path, glyphs off the CropBox, and
+// artifact text (headers, footers, page numbers) are silently dropped. Pass
+// [WithHiddenText] to include all text regardless of visibility.
+//
+// The CropBox test is made glyph by glyph (ISO 32000-1, 14.11.2): a glyph is
+// read when its baseline segment, from its origin to its origin plus its
+// advance as the text matrix and the CTM draw it, touches the CropBox, so a
+// word that runs off the page reads as the part of it that shows.
 //
 // Text whose every paint is device white is invisible only where it lies on
 // white. The paints are the fill, the stroke or both, as the rendering mode

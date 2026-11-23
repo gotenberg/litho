@@ -837,6 +837,10 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	// extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
+	savedBox, savedHas := machine.TextPageBox, machine.HasTextPageBox
+	machine.TextPageBox, machine.HasTextPageBox = textPageBox(page)
+	defer func() { machine.TextPageBox, machine.HasTextPageBox = savedBox, savedHas }()
+
 	estimatedCap := shownCodeBound(ops)
 	elements := make([]models.TextElement, 0, estimatedCap)
 	var origins []int
@@ -902,38 +906,6 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 			slog.Int("operators", len(ops)),
 			slog.Int("annot_appearances_skipped", len(annotAppearances)),
 		)
-	}
-
-	// Flag elements that fall outside the CropBox (the visible region).
-	// The check uses the glyph's start point, matching PDF viewers
-	// that reject a glyph when its text-matrix position sits past the
-	// right or bottom edge of the page. A glyph past the right edge stays
-	// out even when it continues a word inside: upright text advances
-	// rightward from its origin, so the whole glyph paints outside the
-	// visible region (ISO 32000-1, 14.11.2), and PDF.js drops it on the
-	// same test (src/core/evaluator.js, compareWithLastPosition).
-	//
-	// When a page declares a /CropBox that lies entirely outside the
-	// /MediaBox, the stated clip is nonsensical and viewers fall back to
-	// the /MediaBox for visibility. Treating the empty-intersection case
-	// as "no clip" recovers text from the page rather than discarding
-	// every glyph as out-of-bounds.
-	cropBox := boxRectFromArray(page.CropBox)
-	mediaBox := boxRectFromArray(page.MediaBox)
-	if cropBox != [4]float64{} && rectsIntersect(cropBox, mediaBox) {
-		minX, minY, maxX, maxY := cropBox[0], cropBox[1], cropBox[2], cropBox[3]
-		if minX > maxX {
-			minX, maxX = maxX, minX
-		}
-		if minY > maxY {
-			minY, maxY = maxY, minY
-		}
-		for i := range elements {
-			if elements[i].X < minX || elements[i].X > maxX ||
-				elements[i].Y < minY || elements[i].Y > maxY {
-				elements[i].IsClipped = true
-			}
-		}
 	}
 
 	var runFonts []runFont
@@ -1249,6 +1221,67 @@ func baselineDirection(e models.TextElement) (float64, float64) {
 		return detmath.Sin(e.Angle), detmath.Cos(e.Angle)
 	}
 	return detmath.Cos(e.Angle), detmath.Sin(e.Angle)
+}
+
+// textPageBox returns the crop box of page as [minX minY maxX maxY], the
+// region a viewer displays or prints the page's contents in, clipped to it
+// (ISO 32000-1, 14.11.2), which each glyph is read against ([offPage]). It
+// returns false, testing nothing, for a page that states no box.
+//
+// When a page declares a /CropBox that lies entirely outside the
+// /MediaBox, the stated clip is nonsensical and viewers fall back to the
+// /MediaBox for visibility. Treating the empty-intersection case as "no
+// clip" recovers text from the page rather than discarding every glyph as
+// out-of-bounds.
+func textPageBox(page *document.Page) ([4]float64, bool) {
+	crop := boxRectFromArray(page.CropBox)
+	if crop == [4]float64{} || !rectsIntersect(crop, boxRectFromArray(page.MediaBox)) {
+		return [4]float64{}, false
+	}
+	return [4]float64{min(crop[0], crop[2]), min(crop[1], crop[3]), max(crop[0], crop[2]), max(crop[1], crop[3])}, true
+}
+
+// offPage reports whether a glyph whose baseline segment ([glyphBaseline])
+// runs between the ends seg lies wholly outside the crop box crop, [minX minY
+// maxX maxY]. The crop box clips the page's contents (ISO 32000-1, 14.11.2):
+// a glyph whose segment touches it, its origin outside the edge and its
+// advance across it among them, is on the page. Across the baseline the
+// glyph is read at its baseline alone, as PDF.js and poppler read it: a line
+// whose baseline lies outside the box is off the page, whatever part of its
+// letters reaches in. A segment of non-numbers compares false on every side
+// and stays on the page, as a glyph tested at such an origin did.
+//
+// The segment misses the box when the box lies wholly beyond one of its
+// sides, or wholly on one side of the line the segment runs along, which a
+// turned segment needs.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx fonts; libreoffice/xlsx sc/tdf106197_import_upright.xlsx,
+//     sc/tdf137000_export_upright.xlsx: a cell's text runs off the paper's
+//     left edge, and the glyph the edge cuts shows. Read at its origin it was
+//     left out, and the rest of its word read apart from the reference's.
+//   - govdocs/pdf, pdfjs, litho/pptx, litho/odp: a body rising to the cap
+//     height above the baseline read lines whose baseline lies under the
+//     bottom edge, some a reader sees in part, some a clipping path hides,
+//     and 13 fixtures apart from PDF.js and the references; the baseline
+//     reads none of them.
+func offPage(seg [2][2]float64, crop [4]float64) bool {
+	a, b := seg[0], seg[1]
+	if max(a[0], b[0]) < crop[0] || min(a[0], b[0]) > crop[2] || max(a[1], b[1]) < crop[1] || min(a[1], b[1]) > crop[3] {
+		return true
+	}
+	dx, dy := b[0]-a[0], b[1]-a[1]
+	above, below := 0, 0
+	for _, c := range [4][2]float64{{crop[0], crop[1]}, {crop[2], crop[1]}, {crop[2], crop[3]}, {crop[0], crop[3]}} {
+		switch side := float64(dx*(c[1]-a[1])) - float64(dy*(c[0]-a[0])); {
+		case side > 0:
+			above++
+		case side < 0:
+			below++
+		}
+	}
+	return above == 4 || below == 4
 }
 
 // boxRectFromArray converts a PdfArray [llx, lly, urx, ury] to [4]float64.

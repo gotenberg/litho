@@ -78,9 +78,14 @@ type TextElement struct {
 	// Redacted reports an element whose ink overlaps an unapplied /Redact
 	// annotation. Only Reader.ExtractRedactedText sets it.
 	Redacted bool `json:"redacted,omitempty"`
-	// IsClipped reports a glyph whose origin falls outside the page's crop
-	// box, the region a viewer shows (ISO 32000-1, 14.11.2). It stays false
-	// when the crop box lies wholly outside the media box.
+	// IsClipped reports a glyph off the page's crop box, the region a viewer
+	// shows the page's contents in (ISO 32000-1, 14.11.2): its baseline
+	// segment, from its origin to its origin plus its advance as the text
+	// matrix and the CTM draw it, does not touch the crop box. A glyph whose
+	// origin lies outside while its advance crosses the edge is not clipped.
+	// A run of glyphs is split where it leaves the crop box, so the flag
+	// holds for every glyph of an element. It stays false when the crop box
+	// lies wholly outside the media box.
 	IsClipped bool `json:"isClipped,omitempty"`
 	// PatternType is "Tiling" or "Shading" when the glyph is painted with a
 	// pattern of that type (ISO 32000-1, 8.7.3.1, Table 75), and empty

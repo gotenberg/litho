@@ -2,13 +2,13 @@ package typography
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
-	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestBoxRectFromArray(t *testing.T) {
@@ -35,46 +35,84 @@ func TestBoxRectFromArray_Nil(t *testing.T) {
 	}
 }
 
-// TestIsClipped_OutsideCropBox verifies that elements placed outside the
-// CropBox are flagged with IsClipped = true.
-func TestIsClipped_OutsideCropBox(t *testing.T) {
-	elements := []models.TextElement{
-		{Text: "A", X: 50, Y: 400},  // Inside CropBox [10, 10, 602, 782]
-		{Text: "B", X: 5, Y: 400},   // Outside left edge
-		{Text: "C", X: 50, Y: 5},    // Outside bottom edge
-		{Text: "D", X: 610, Y: 400}, // Outside right edge
-		{Text: "E", X: 50, Y: 790},  // Outside top edge
-		{Text: "F", X: 10, Y: 10},   // Exactly on corner (inside)
-		{Text: "G", X: 602, Y: 782}, // Exactly on far corner (inside)
+// TestOffPage_BaselineAgainstCropBox pins the test [offPage] makes: a glyph
+// is off the page when its baseline segment does not touch the crop box [10
+// 10 602 782] (ISO 32000-1, 14.11.2).
+func TestOffPage_BaselineAgainstCropBox(t *testing.T) {
+	t.Parallel()
+	crop := [4]float64{10, 10, 602, 782}
+	nan := math.NaN()
+	tests := []struct {
+		name string
+		seg  [2][2]float64
+		off  bool
+	}{
+		{"inside", [2][2]float64{{50, 400}, {56, 400}}, false},
+		{"cut by the left edge, origin outside", [2][2]float64{{7, 400}, {13, 400}}, false},
+		{"wholly left", [2][2]float64{{2, 400}, {8, 400}}, true},
+		{"cut by the right edge, origin inside", [2][2]float64{{600, 400}, {606, 400}}, false},
+		{"wholly right, origin just past the edge", [2][2]float64{{602.4, 400}, {608.4, 400}}, true},
+		{"baseline under the bottom edge", [2][2]float64{{50, 9}, {56, 9}}, true},
+		{"baseline on the bottom edge", [2][2]float64{{50, 10}, {56, 10}}, false},
+		{"baseline over the top edge", [2][2]float64{{50, 783}, {56, 783}}, true},
+		{"zero advance on the edge", [2][2]float64{{602, 400}, {602, 400}}, false},
+		{"turned, running up through the bottom edge", [2][2]float64{{300, 5}, {300, 15}}, false},
+		// Turned 45 degrees, a segment whose bounding box reaches the
+		// corner of the crop box while the segment does not.
+		{"turned, past the corner", [2][2]float64{{600, 786}, {606, 780}}, true},
+		{"turned, over the corner", [2][2]float64{{598, 784}, {604, 778}}, false},
+		{"non-numbers stay", [2][2]float64{{nan, nan}, {nan, nan}}, false},
 	}
-
-	cropBox := ast.PdfArray{ast.PdfInt(10), ast.PdfInt(10), ast.PdfInt(602), ast.PdfInt(782)}
-	crop := boxRectFromArray(cropBox)
-	minX, minY, maxX, maxY := crop[0], crop[1], crop[2], crop[3]
-
-	for i := range elements {
-		if elements[i].X < minX || elements[i].X > maxX ||
-			elements[i].Y < minY || elements[i].Y > maxY {
-			elements[i].IsClipped = true
+	for _, tc := range tests {
+		if got := offPage(tc.seg, crop); got != tc.off {
+			t.Errorf("%s: offPage = %v, want %v", tc.name, got, tc.off)
 		}
 	}
+}
 
-	tests := []struct {
-		text    string
-		clipped bool
-	}{
-		{"A", false},
-		{"B", true},
-		{"C", true},
-		{"D", true},
-		{"E", true},
-		{"F", false},
-		{"G", false},
+// TestTextPageBox pins the box the glyphs are read against: the crop box,
+// its corners in order, and none for a page without one or with one that
+// shares no area with the media box.
+func TestTextPageBox(t *testing.T) {
+	t.Parallel()
+	media := ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)}
+	if got, ok := textPageBox(&document.Page{MediaBox: media}); ok {
+		t.Errorf("no crop box: %v, want none", got)
 	}
+	outside := ast.PdfArray{ast.PdfInt(1000), ast.PdfInt(1000), ast.PdfInt(1100), ast.PdfInt(1100)}
+	if got, ok := textPageBox(&document.Page{CropBox: outside, MediaBox: media}); ok {
+		t.Errorf("crop box outside the media box: %v, want none", got)
+	}
+	swapped := ast.PdfArray{ast.PdfInt(562), ast.PdfInt(742), ast.PdfInt(50), ast.PdfInt(50)}
+	got, ok := textPageBox(&document.Page{CropBox: swapped, MediaBox: media})
+	if want := [4]float64{50, 50, 562, 742}; !ok || got != want {
+		t.Errorf("swapped corners: %v, want %v", got, want)
+	}
+}
 
-	for i, tc := range tests {
-		if elements[i].IsClipped != tc.clipped {
-			t.Errorf("element %q: IsClipped=%v, want %v", tc.text, elements[i].IsClipped, tc.clipped)
+// TestGlyphBaseline_Advance pins the baseline segment of a glyph: from its
+// origin along its advance, through the text matrix, and down its vertical
+// advance in vertical writing.
+func TestGlyphBaseline_Advance(t *testing.T) {
+	t.Parallel()
+	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+	state := machine.Current()
+	state.Text.Tm = [6]float64{0, 1, -1, 0, 100, 200}
+	font := &Font{Subtype: "Type1", FirstChar: 65, LastChar: 65, Widths: []float64{667}}
+	got := glyphBaseline(state, font, 10, 65)
+	want := [2][2]float64{{100, 200}, {100, 206.67}}
+	for i := range got {
+		if math.Abs(got[i][0]-want[i][0]) > 1e-9 || math.Abs(got[i][1]-want[i][1]) > 1e-9 {
+			t.Fatalf("turned a quarter: segment = %v, want %v", got, want)
+		}
+	}
+	state.Text.Tm = [6]float64{1, 0, 0, 1, 100, 200}
+	vertical := &Font{Subtype: "Type0", WMode: 1, DW2: [2]float64{880, -1000}}
+	got = glyphBaseline(state, vertical, 10, 1)
+	want = [2][2]float64{{100, 200}, {100, 190}}
+	for i := range got {
+		if math.Abs(got[i][0]-want[i][0]) > 1e-9 || math.Abs(got[i][1]-want[i][1]) > 1e-9 {
+			t.Fatalf("vertical: segment = %v, want %v", got, want)
 		}
 	}
 }

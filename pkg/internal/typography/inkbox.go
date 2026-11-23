@@ -105,14 +105,22 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 			}
 		}
 	}
-	th := state.Text.Tz / 100
-	rise := state.Text.Ts
-	tm, ctm := state.Text.Tm, state.CTM
+	box := textCornersOnPage(state, corners, fontSize, originX, originY)
+	if font.Subtype != "Type3" && strokesText(state.Text.Tmode) {
+		r := strokeReach(state.LineWidth, state.LineJoin, state.LineCap, state.MiterLimit, state.CTM, false)
+		box = [4]float64{box[0] - r, box[1] - r, box[2] + r, box[3] + r}
+	}
+	return box
+}
+
+// textCornersOnPage returns the axis-aligned bounds, in user space, of the
+// corners of a box in text space per unit of font size, carried through the
+// text rendering matrix of ISO 32000-1, 9.4.4, [Tfs×Th 0 0 Tfs 0 Trise] × Tm
+// × CTM, together with the origin (originX, originY).
+func textCornersOnPage(state *graphics.State, corners [4][2]float64, fontSize, originX, originY float64) [4]float64 {
 	box := [4]float64{originX, originY, originX, originY}
-	for _, c := range corners {
-		tx, ty := c[0]*fontSize*th, float64(c[1]*fontSize)+rise
-		ux, uy := float64(tx*tm[0])+float64(ty*tm[2])+tm[4], float64(tx*tm[1])+float64(ty*tm[3])+tm[5]
-		px, py := float64(ux*ctm[0])+float64(uy*ctm[2])+ctm[4], float64(ux*ctm[1])+float64(uy*ctm[3])+ctm[5]
+	for _, p := range textPointsOnPage(state, corners, fontSize) {
+		px, py := p[0], p[1]
 		// A comparison with NaN is false, so a matrix a file fills with
 		// non-numbers leaves the box at the origin rather than poisoning it.
 		if px < box[0] {
@@ -128,11 +136,42 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 			box[3] = py
 		}
 	}
-	if font.Subtype != "Type3" && strokesText(state.Text.Tmode) {
-		r := strokeReach(state.LineWidth, state.LineJoin, state.LineCap, state.MiterLimit, state.CTM, false)
-		box = [4]float64{box[0] - r, box[1] - r, box[2] + r, box[3] + r}
-	}
 	return box
+}
+
+// textPointsOnPage returns the points, in text space per unit of font size,
+// carried into user space by the text rendering matrix of ISO 32000-1,
+// 9.4.4, [Tfs×Th 0 0 Tfs 0 Trise] × Tm × CTM.
+func textPointsOnPage(state *graphics.State, points [4][2]float64, fontSize float64) [4][2]float64 {
+	th := state.Text.Tz / 100
+	rise := state.Text.Ts
+	tm, ctm := state.Text.Tm, state.CTM
+	var out [4][2]float64
+	for i, c := range points {
+		tx, ty := c[0]*fontSize*th, float64(c[1]*fontSize)+rise
+		ux, uy := float64(tx*tm[0])+float64(ty*tm[2])+tm[4], float64(tx*tm[1])+float64(ty*tm[3])+tm[5]
+		out[i] = [2]float64{float64(ux*ctm[0]) + float64(uy*ctm[2]) + ctm[4], float64(ux*ctm[1]) + float64(uy*ctm[3]) + ctm[5]}
+	}
+	return out
+}
+
+// glyphBaseline returns the ends, in user space, of the baseline segment of
+// the glyph cid of font shown in state: from its origin to its origin plus
+// its advance, carried through the text rendering matrix of ISO 32000-1,
+// 9.4.4, so a turned or scaled glyph's segment runs where the glyph draws.
+// The crop box test reads it ([offPage]).
+//
+// The advance is the width the font gives the glyph (9.2.4), the d0 or d1
+// width of a Type 3 glyph (9.6.5), and for a glyph in vertical writing its
+// vertical advance, down from its origin (9.7.4.3).
+func glyphBaseline(state *graphics.State, font *Font, fontSize float64, cid int) [2][2]float64 {
+	end := [2]float64{font.GlyphWidth(cid) / 1000, 0}
+	if font.WMode == 1 {
+		w1, _, _ := font.VerticalMetrics(cid)
+		end = [2]float64{0, w1 / 1000}
+	}
+	p := textPointsOnPage(state, [4][2]float64{{0, 0}, end, end, {0, 0}}, fontSize)
+	return [2][2]float64{p[0], p[1]}
 }
 
 // type3ShownInk returns the ink, in glyph space, that bounds the Type 3 glyph

@@ -254,6 +254,14 @@ type Machine struct {
 	// where the box is the advance box alone. A redaction selecting glyphs by
 	// the ink they paint needs it.
 	GlyphOutlineBounds GlyphBoundsFunc
+	// TextPageBox is the crop box [minX minY maxX maxY] the text extractor
+	// reads each glyph against when HasTextPageBox is set: a glyph whose
+	// baseline segment does not touch it is off the page
+	// (models.TextElement.IsClipped).
+	// The extractor sets both for the page it reads; unset, nothing is
+	// tested.
+	TextPageBox    [4]float64
+	HasTextPageBox bool
 	// FormDepth is the nesting level of the content stream being executed: 0 for
 	// the page's own, one deeper per form XObject a caller recurses into. The
 	// machine cannot know this by itself, because a form's operators arrive

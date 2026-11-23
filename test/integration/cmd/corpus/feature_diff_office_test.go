@@ -107,8 +107,8 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //   - litho/docx: of the 126 references, 122 clear both bars; text F1 is
 //     under 0.85 on intl-rtl-arabic (0.346), intl-rtl-hebrew (0.240),
 //     para-alignment (0.826) and tables-rtl (0.713).
-//   - litho/xlsx: of the 97 references, 94 clear both bars; text F1 is under
-//     0.85 on fonts (0.750), rtl_sheet (0.407) and wide_columns (0.611).
+//   - litho/xlsx: of the 97 references, 96 clear both bars; text F1 is under
+//     0.85 on rtl_sheet (0.407).
 //   - litho/pptx: of the 116 references, 115 clear both bars; text F1 is under
 //     0.85 on text-rtl (0.384).
 func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
@@ -116,7 +116,7 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 
 	underBars := map[string]map[string]bool{
 		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "para-alignment": true, "tables-rtl": true},
-		"xlsx": {"fonts": true, "rtl_sheet": true, "wide_columns": true},
+		"xlsx": {"rtl_sheet": true},
 		"pptx": {"text-rtl": true},
 	}
 	for _, format := range []string{"docx", "xlsx", "pptx"} {

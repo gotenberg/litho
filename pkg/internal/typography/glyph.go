@@ -108,6 +108,12 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		}
 		angle := detmath.Atan2(dirY, dirX)
 
+		ink := glyphInkBox(ctx, machine, font, fontSize, cid, data[:min(n, len(data))], x, y)
+		offPageGlyph := false
+		if machine.HasTextPageBox {
+			offPageGlyph = offPage(glyphBaseline(state, font, fontSize, cid), machine.TextPageBox)
+		}
+
 		// Unresolved single-byte glyphs (char == "") still get a
 		// models.TextElement so downstream layout code sees the
 		// width they occupy. CoalesceElements drops them before the
@@ -128,7 +134,8 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
 			InkRight:      glyphsInkRight(state, font),
-			InkBox:        glyphInkBox(ctx, machine, font, fontSize, cid, data[:min(n, len(data))], x, y),
+			InkBox:        ink,
+			IsClipped:     offPageGlyph,
 			PatternType:   state.Fill.PatternType,
 			Language:      mcLang,
 			ExpansionText: mcExpansion,
@@ -702,8 +709,8 @@ func colourIsWhite(colour graphics.Color) bool {
 // seeds the clipping path with the page box, so testing the bounds alone would
 // repeat what [models.TextElement.IsClipped] already says about the CropBox and
 // report every page as clipping its overflow. The glyph origin is the test
-// point, matching the CropBox check downstream and the viewers that drop a
-// glyph whose text-matrix position lands outside.
+// point; the CropBox test ([offPage]) reads the glyph's baseline segment
+// instead.
 func textIsClipped(state *graphics.State, x, y float64) bool {
 	if !state.ClipApplied {
 		return false
