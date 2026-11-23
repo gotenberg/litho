@@ -190,6 +190,8 @@ func TestShadow_CrossTreeSelectors(t *testing.T) {
 		{"inner important declarations win", `<style>div.h { color: red !important }</style>` + host(`:host { color: blue !important }`, `X`, ``)},
 		{"slotted loses to the light tree's rules", `<style>b { color: blue }</style>` + host(`::slotted(b) { color: red }`, `<slot></slot>`, `<b>X</b>`)},
 		{":defined holds for a built-in host", host(`:host(:defined) { color: blue }`, `X`, ``)},
+		{"an unupgraded custom element is undefined", `<style>x-card:not(:defined) { color: blue } x-card:defined { color: red }</style><x-card>X</x-card>`},
+		{"so is an element with is", `<style>p:not(:defined) { color: blue }</style><p is="x-p">X</p>`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

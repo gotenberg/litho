@@ -82,6 +82,7 @@ const (
 	// compound a functional form tests (CSS Scoping 1, 3.2.1).
 	psHost
 	psHostContext
+	psDefined
 )
 
 // pseudoSel is a pseudo-class with its arguments.
@@ -224,7 +225,7 @@ var simplePseudos = map[string]pseudoKind{
 	"root": psRoot, "scope": psRoot, "first-child": psFirstChild, "last-child": psLastChild,
 	"only-child": psOnlyChild, "first-of-type": psFirstOfType, "last-of-type": psLastOfType,
 	"only-of-type": psOnlyOfType, "empty": psEmpty, "link": psLink, "any-link": psLink,
-	"checked": psChecked, "disabled": psDisabled, "enabled": psEnabled, "defined": psAlways,
+	"checked": psChecked, "disabled": psDisabled, "enabled": psEnabled, "defined": psDefined,
 	"hover": psNever, "focus": psNever, "active": psNever, "visited": psNever,
 	"focus-within": psNever, "focus-visible": psNever, "target": psNever,
 	"required": psRequired, "optional": psOptional, "read-only": psReadOnly, "read-write": psReadWrite,

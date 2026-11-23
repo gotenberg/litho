@@ -580,6 +580,18 @@ func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 		return n.Namespace == "" && formElements[n.Data] && !disabled(n)
 	case psAlways:
 		return true
+	case psDefined:
+		// An HTML element of a valid custom element name, or with an is
+		// attribute, is created undefined, and only a definition, which
+		// a script registers, upgrades it (HTML Standard, 4.13.4, the
+		// create an element steps; 4.16.3): litho runs no script.
+		if n.Namespace != "" {
+			return true
+		}
+		if hasAttr(n, "is") {
+			return false
+		}
+		return !ValidCustomElementName(n.Data)
 	case psHas:
 		return m.hasMatch(p, n)
 	case psDir:
