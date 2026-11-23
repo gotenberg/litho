@@ -1388,14 +1388,19 @@ func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
 }
 
 // shapeText returns the text a drawing shape holds (ODF 1.3, Part 3,
-// 10.3: its paragraphs, headings and lists), nil when it holds none
-// that draws.
+// 10.3: its paragraphs, headings and lists, and the tables LibreOffice
+// writes there as loext:table), nil when it holds none that draws.
 func (b *builder) shapeText(c *odf.Element, depth int) *layout.Node {
 	var kids []*layout.Node
 	ctx := blockCtx{depth: depth + 1}
 	for _, k := range c.Children {
-		if k.Name.Space == odf.NSText && (k.Name.Local == "p" || k.Name.Local == "h" || k.Name.Local == "list") {
+		switch {
+		case k.Name.Space == odf.NSText && (k.Name.Local == "p" || k.Name.Local == "h" || k.Name.Local == "list"):
 			kids = append(kids, b.block(k, &ctx)...)
+		case k.Is(odf.NSLOExt, "table"):
+			b.boxed++
+			kids = append(kids, b.block(loextTable(k, depth+1), &ctx)...)
+			b.boxed--
 		}
 	}
 	if !hasText(kids) {
@@ -1406,6 +1411,43 @@ func (b *builder) shapeText(c *odf.Element, depth int) *layout.Node {
 	st := baseStyle()
 	st.Display = css.Block
 	return b.node(&layout.Node{Kind: layout.Element, Style: st, Children: kids})
+}
+
+// loextTables are the local names of the table elements LibreOffice
+// writes in the loext namespace inside a shape's text, which mean what
+// the table elements of ODF 1.3 Part 3, 9.1 of those names mean.
+var loextTables = map[string]bool{
+	"table": true, "table-column": true, "table-columns": true, "table-column-group": true,
+	"table-header-columns": true, "table-row": true, "table-rows": true, "table-row-group": true,
+	"table-header-rows": true, "table-cell": true, "covered-table-cell": true,
+}
+
+// loextTable returns a copy of el, a loext:table, whose table elements
+// are in the table namespace, the rest shared; its descendants past
+// odf.MaxDepth are left out.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/gerrit13858.odt holds a loext:table of
+//     two rows between the paragraphs of a custom shape's text, which
+//     LibreOffice prints there.
+func loextTable(el *odf.Element, depth int) *odf.Element {
+	out := *el
+	if out.Name.Space == odf.NSLOExt && loextTables[out.Name.Local] {
+		out.Name.Space = odf.NSTable
+	}
+	if depth > odf.MaxDepth {
+		out.Children = nil
+		return &out
+	}
+	out.Children = make([]*odf.Element, len(el.Children))
+	for i, k := range el.Children {
+		if k.Name.Space == odf.NSLOExt && loextTables[k.Name.Local] {
+			k = loextTable(k, depth+1)
+		}
+		out.Children[i] = k
+	}
+	return &out
 }
 
 // withText lays a shape's text over its drawing n: a box of the shape's
