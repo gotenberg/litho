@@ -317,3 +317,33 @@ func TestTags_LanguageOfARun(t *testing.T) {
 		t.Errorf("first kid %+v, want a Span stating fr", sp)
 	}
 }
+
+// TestTags_BodyRowsBesideAHeader locks that a Table holding a THead or a
+// TFoot holds its other rows in a TBody (ISO 32000-1, 14.8.4.3.4, Table
+// 337; ISO 14289-1, 7.2), and that a table of rows alone keeps them.
+func TestTags_BodyRowsBesideAHeader(t *testing.T) {
+	in := inlineSty()
+	cell := func(r string, s string) *Node { return role(r, el(sty(display(css.TableCell)), txt(in, s))) }
+	row := func(r, s string) *Node { return role("TR", el(sty(display(css.TableRow)), cell(r, s))) }
+	head := role("THead", el(sty(display(css.TableHeaderGroup)), row("TH", "h")))
+	for name, tc := range map[string]struct {
+		root *Node
+		want string
+	}{
+		"rows after a header": {
+			doc(role("Table", el(sty(display(css.Table)), head, row("TD", "a"), row("TD", "b")))),
+			"Document[Table[THead[TR[TH#]] TBody[TR[TD#] TR[TD#]]]]",
+		},
+		"rows alone": {
+			doc(role("Table", el(sty(display(css.Table)), row("TD", "a")))),
+			"Document[Table[TR[TD#]]]",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, tc.root, page(200, 200))
+			if got := shape(res, res.Structure); got != tc.want {
+				t.Errorf("structure %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

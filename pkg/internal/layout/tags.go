@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"slices"
+
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -105,7 +107,47 @@ func (e *engine) anonymize(rb *box) {
 		}
 	}
 	budget = hoistBlocks(e.root, own, budget, 0)
+	budget = groupBodyRows(e.root, budget, 0)
 	wrapFragments(e.root, e.root.Role, budget, 0)
+}
+
+// groupBodyRows gathers, in every Table under el that holds a THead or a
+// TFoot, the rows it holds directly into a TBody: a table whose header or
+// footer rows are grouped holds its other rows in a body (ISO 32000-1,
+// 14.8.4.3.4, Table 337; ISO 14289-1, 7.2), which a converter that groups
+// the header rows alone, as a Writer table's table:table-header-rows, does
+// not write. Each TBody counts against budget; it returns what is left.
+func groupBodyRows(el *typeset.StructElem, budget, depth int) int {
+	if depth > maxStructDepth {
+		return budget
+	}
+	for _, k := range el.Kids {
+		budget = groupBodyRows(k, budget, depth+1)
+	}
+	if el.Role != "Table" || !slices.ContainsFunc(el.Kids, func(k *typeset.StructElem) bool { return k.Role == "THead" || k.Role == "TFoot" }) {
+		return budget
+	}
+	kids := make([]*typeset.StructElem, 0, len(el.Kids))
+	var body *typeset.StructElem
+	for _, k := range el.Kids {
+		if k.Role != "TR" {
+			body = nil
+			kids = append(kids, k)
+			continue
+		}
+		if body == nil {
+			if budget <= 0 {
+				kids = append(kids, k)
+				continue
+			}
+			body = &typeset.StructElem{Role: "TBody"}
+			kids = append(kids, body)
+			budget--
+		}
+		body.Kids = append(body.Kids, k)
+	}
+	el.Kids = kids
+	return budget
 }
 
 // headerScopes sets the Scope of each header cell of the row tr, under

@@ -2,6 +2,7 @@ package odt
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -78,5 +79,30 @@ func TestConvert_TableWithoutWidths(t *testing.T) {
 		if r.text == "R" && (r.x < 297 || r.x > 305) {
 			t.Errorf("second cell's text at %.1f, want past 297.6", r.x)
 		}
+	}
+}
+
+// TestConvert_TableBodyBesideItsHeader locks the structure of a table
+// with header rows: the THead holds them and a TBody the rows after them
+// (ISO 32000-1, 14.8.4.3.4, Table 337; ISO 14289-1, 7.2), and a table
+// without header rows holds its rows directly.
+//
+// # Corpus evidence
+//
+//   - litho/odt paper-*, libreoffice/odt odfimport/incorrectsum.odt and
+//     four others: a THead beside rows of no TBody failed PDF/UA-1, 7.2
+//     until a remediation regrouped them.
+func TestConvert_TableBodyBesideItsHeader(t *testing.T) {
+	cell := func(s string) string { return `<table:table-cell><text:p>` + s + `</text:p></table:table-cell>` }
+	headed := `<table:table table:name="T"><table:table-column table:number-columns-repeated="2"/>` +
+		`<table:table-header-rows><table:table-row>` + cell("h1") + cell("h2") + `</table:table-row></table:table-header-rows>` +
+		`<table:table-row>` + cell("a") + cell("b") + `</table:table-row><table:table-row>` + cell("c") + cell("d") + `</table:table-row></table:table>`
+	res := convertDoc(t, doc{body: headed}.pack(t), office.Options{})
+	if got := roles(res.Structure); !strings.Contains(got, "Table,THead,TR,TH,P,TH,P,TBody,TR,TD,P,TD,P,TR,TD,P,TD,P") {
+		t.Errorf("structure %s, want the header rows in a THead and the others in a TBody", got)
+	}
+	plain := `<table:table table:name="T"><table:table-column/><table:table-row>` + cell("a") + `</table:table-row></table:table>`
+	if got := roles(convertDoc(t, doc{body: plain}.pack(t), office.Options{}).Structure); strings.Contains(got, "TBody") {
+		t.Errorf("structure %s, want no TBody without header rows", got)
 	}
 }
