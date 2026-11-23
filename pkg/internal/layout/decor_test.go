@@ -375,3 +375,17 @@ func TestBackground_ColorClippedByTheBottomLayer(t *testing.T) {
 		_BB_
 		____`)
 }
+
+// TestTileSize_MixedCalc sizes a background tile by a calc() mixing a
+// length and a percentage of the positioning area (CSS Values 4, 10.8;
+// CSS Backgrounds 3, 3.9), the other axis auto keeping the picture's
+// ratio.
+func TestTileSize_MixedCalc(t *testing.T) {
+	t.Parallel()
+	l := &css.BackgroundLayer{Size: css.BackgroundSize{Kind: css.SizeExplicit,
+		Width: css.Dimension{Kind: css.Calc, Value: 10, Fraction: 0.5}, Height: css.Dimension{Kind: css.Auto}}}
+	w, h, _, _, ok := tileSize(l, &Picture{Width: 20, Height: 10}, typeset.Rect{Width: 200, Height: 100})
+	if !ok || w != 110 || h != 55 {
+		t.Errorf("tile %v by %v (%v), want 110 by 55", w, h, ok)
+	}
+}

@@ -366,7 +366,7 @@ func sizeValue(v []token) (bgSizeSpec, bool) {
 	var out bgSizeSpec
 	out.h = dimSpec{kind: Auto}
 	for i, t := range v {
-		d, ok := parseDim([]token{t}, allowPct|nonNeg, kwAuto, false)
+		d, ok := parseDim([]token{t}, allowPct|nonNeg|allowMixed, kwAuto, false)
 		if !ok {
 			return bgSizeSpec{}, false
 		}

@@ -132,3 +132,40 @@ func TestPosition_MixedCalc(t *testing.T) {
 		t.Errorf("gradient centre = %+v", g)
 	}
 }
+
+// TestBackgroundSize_MixedCalc keeps a calc() mixing lengths and
+// percentages in background-size and mask-size for the layout to resolve
+// against the positioning area (CSS Values 4, 10.8; CSS Backgrounds 3,
+// 3.9), in the longhands and the shorthands.
+func TestBackgroundSize_MixedCalc(t *testing.T) {
+	t.Parallel()
+	mixed := func(px, frac float64) Dimension { return Dimension{Kind: Calc, Value: px * Pt, Fraction: frac} }
+	for _, tc := range []struct {
+		decl string
+		mask bool
+		w, h Dimension
+	}{
+		{"background-size: calc(50% + 10px) auto", false, mixed(10, 0.5), Dimension{Kind: Auto}},
+		{"background-size: calc(25% - 10px) calc(50% + 5px)", false, mixed(-10, 0.25), mixed(5, 0.5)},
+		{"background: url(a.png) 0 0 / calc(50% + 10px) auto", false, mixed(10, 0.5), Dimension{Kind: Auto}},
+		{"mask-size: calc(50% + 10px) calc(100% - 40px)", true, mixed(10, 0.5), mixed(-40, 1)},
+		{"mask: url(a.png) center / calc(50% + 1px)", true, mixed(1, 0.5), Dimension{Kind: Auto}},
+	} {
+		st := styleOf(t, tc.decl)
+		got := st.BackgroundSize
+		if tc.mask {
+			if len(st.Mask.Sizes) != 1 {
+				t.Errorf("%s: %d mask sizes, want 1", tc.decl, len(st.Mask.Sizes))
+				continue
+			}
+			got = st.Mask.Sizes[0]
+		}
+		for i, d := range [2]Dimension{got.Width, got.Height} {
+			want := [2]Dimension{tc.w, tc.h}[i]
+			if d.Kind != want.Kind || !near(d.Value, want.Value) || !near(d.Fraction, want.Fraction) {
+				t.Errorf("%s: size %+v, want %+v", tc.decl, got, [2]Dimension{tc.w, tc.h})
+				break
+			}
+		}
+	}
+}
