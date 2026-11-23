@@ -105,6 +105,30 @@ func (e *engine) clampDiscards() bool {
 	return true
 }
 
+// phantomOnly reports an anonymous block of inline content that makes
+// phantom line boxes alone (CSS Inline 3, 2.3): no text, no preserved
+// white space, no atomic inline, no inline box with a margin, border or
+// padding and no forced break, as the block an inline box split around a
+// block leaves after it when nothing follows the block. Such line boxes
+// are treated as not existing (CSS Overflow 4, 6.1: they make no clamp
+// point).
+func (e *engine) phantomOnly(b *box) bool {
+	if !b.anon || b.kind != kindBlock {
+		return false
+	}
+	for _, k := range b.kids {
+		if !k.inline {
+			return false
+		}
+	}
+	for _, p := range e.ifcOf(b).paras {
+		if p.forced || p.p != nil && p.p.Len() > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // finish ends the last line kept with the mark, once.
 func (c *clampState) finish() {
 	if c.marked || c.prev == nil {

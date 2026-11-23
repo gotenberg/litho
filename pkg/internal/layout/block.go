@@ -1508,7 +1508,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		if e.clamp != nil && e.clamp.done && !k.abs {
 			// A line clamp container discards what follows its last line
 			// (CSS Overflow 4, 6): the box is not laid out, nor painted.
-			e.clampDiscards()
+			// Phantom line boxes count as no line, so they make no clamp
+			// point and leave the last line without its mark.
+			if !e.phantomOnly(k) {
+				e.clampDiscards()
+			}
 			k.laidOut = false
 			continue
 		}

@@ -27,6 +27,10 @@ func TestLineClamp_KeepsLines(t *testing.T) {
 		{"no mark", doc(el(sty(clamp(1, css.OverflowMark{})), txt(sty(), "a b c"))), 30, []string{"a b"}},
 		{"no ellipsis when nothing follows", doc(el(sty(clamp(2, auto)), txt(sty(), "aa bb"))), 30, []string{"aa", "bb"}},
 		{"lines of nested blocks count", doc(el(sty(clamp(2, auto)), el(sty(ws), txt(sty(ws), "a\nb")), el(sty(), txt(sty(), "c")))), 100, []string{"a", "b…"}},
+		// The block an inline box split around a block leaves after it
+		// holds phantom line boxes alone, which make no clamp point (CSS
+		// Inline 3, 2.3).
+		{"phantom lines make no clamp point", doc(el(sty(clamp(2, auto)), el(sty(display(css.Inline)), el(sty(ws), txt(sty(ws), "a\nb")), txt(sty(), " ")))), 100, []string{"a", "b"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
