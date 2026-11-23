@@ -254,7 +254,7 @@ func (cs *computeState) animate(winners *[numProps]any, imp *[numProps]bool, pen
 			}
 			declared[n] = customAt[n]
 		}
-		vars = cs.resolveCustom(names, declared, parentVars)
+		vars = cs.resolveCustom(names, declared, parentVars, parentVars)
 		for _, pa := range pend {
 			winners[pa.id] = wideUnset
 			for _, e := range cs.substituteDecl(pa.d, vars) {

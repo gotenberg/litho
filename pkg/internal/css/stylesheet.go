@@ -60,6 +60,8 @@ type Stylesheet struct {
 	keyframes []*keyframesRule
 	// positionTries are the @position-try rules, in order.
 	positionTries []*positionTryRule
+	// properties are the valid @property rules, in order.
+	properties []*propertyRule
 	// layers are the paths of the cascade layers the sheet names, in the
 	// order they first appear (CSS Cascade 5, 6.4), each rule holding an
 	// index into it or unlayered.
@@ -196,7 +198,7 @@ func (sp *sheetParser) flush(c *declCtx) {
 // Transitions 2, 3.3), and a converted document runs no transition.
 var ignoredAtRules = map[string]bool{
 	"-moz-keyframes": true, "-o-keyframes": true, "starting-style": true,
-	"property": true, "viewport": true, "-ms-viewport": true, "view-transition": true,
+	"viewport": true, "-ms-viewport": true, "view-transition": true,
 	"charset": true,
 }
 
@@ -205,7 +207,7 @@ var ignoredAtRules = map[string]bool{
 // the feature blocks of @font-feature-values are read inside those.
 var readAtRules = []string{
 	"import", "namespace", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
-	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values", "position-try",
+	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values", "position-try", "property",
 }
 
 // readsAtRule reports whether litho reads the at-rule of the lowercased
@@ -325,6 +327,16 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			if r, ok := parsePositionTryRule(it.prelude, it.block, c); ok && sp.count() {
 				r.cond, r.layer = cond, sp.layer
 				sp.sheet.positionTries = append(sp.sheet.positionTries, r)
+			}
+		case "property":
+			if !it.hasBlock {
+				return
+			}
+			if r, ok := parsePropertyRule(it.prelude, it.block); ok && sp.count() {
+				r.cond, r.layer = cond, sp.layer
+				sp.sheet.properties = append(sp.sheet.properties, r)
+			} else if !ok {
+				c.warn(warn.CSSInvalid, warn.Approximated, "an invalid @property rule was ignored")
 			}
 		case "font-palette-values":
 			if !it.hasBlock || !sp.count() {

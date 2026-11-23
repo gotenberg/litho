@@ -90,6 +90,11 @@ type Resolver struct {
 	// positionTries holds the @position-try rules whose media conditions
 	// match, the last of each name in the highest layer.
 	positionTries map[string]*positionTryRule
+	// registered holds the custom properties the @property rules whose
+	// media conditions match register, the last of each name in the
+	// highest layer, and registeredNames their names in order.
+	registered      map[string]*registration
+	registeredNames []string
 	// slotted and parts hold the selectors ending in ::slotted() and
 	// ::part(), which style elements of other trees.
 	slotted, parts []selRef
@@ -191,6 +196,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	var counterPos []int
 	kfPos := map[string]int{}
 	tryPos := map[string]int{}
+	propPos := map[string]int{}
 	type layeredValues struct {
 		v   FontFeatureValues
 		pos int
@@ -281,6 +287,23 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				if prev, ok := tryPos[p.name]; !ok || pos >= prev {
 					tryPos[p.name] = pos
 					r.positionTries[p.name] = p
+				}
+			}
+		}
+		for _, p := range sh.Sheet.properties {
+			if p.cond.matches(media, cache) && sh.Origin != UserAgent {
+				if r.registered == nil {
+					r.registered = map[string]*registration{}
+				}
+				// The last valid rule of a name wins (CSS Properties and
+				// Values API 1, 3), in the highest layer as @keyframes.
+				pos := lay.of(si, sh.Origin, p.layer)
+				if prev, ok := propPos[p.name]; !ok || pos >= prev {
+					if !ok {
+						r.registeredNames = append(r.registeredNames, p.name)
+					}
+					propPos[p.name] = pos
+					r.registered[p.name] = p.reg
 				}
 			}
 		}
@@ -1128,6 +1151,8 @@ func (cs *computeState) boxParentOf(p *html.Node) Display {
 // properties. only, when not nil, names the longhands the declarations
 // may set: the others take their inherited or initial values.
 func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map[string][]token, isRoot bool, only *[numProps]bool) (*Style, map[string][]token) {
+	inherited := parentVars
+	parentVars = cs.registeredBase(parentVars)
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
 			return c
@@ -1274,7 +1299,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	}
 	vars := parentVars
 	if len(customNames) > 0 {
-		vars = cs.resolveCustom(customNames, custom, parentVars)
+		vars = cs.resolveCustom(customNames, custom, parentVars, inherited)
 	}
 	expanded := map[*Declaration][]entry{}
 	pend := cs.pend[:0]

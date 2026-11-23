@@ -14,25 +14,64 @@ const maxVarDepth = 64
 
 // resolveCustom computes the custom properties of an element (CSS
 // Variables 1, 2 and 3): the declared ones with their var() references
-// substituted, over the inherited ones. A cycle, a reference to an
-// undefined property without fallback, or a value past maxVarTokens makes
-// the property guaranteed-invalid, which removes it.
-func (cs *computeState) resolveCustom(names []string, declared map[string][]token, parent map[string][]token) map[string][]token {
-	if !cs.m.charge(len(parent) + len(names)) {
-		return parent
+// substituted, over base, the values the element takes undeclared
+// ([computeState.registeredBase]). A cycle, a reference to an undefined
+// property without fallback, or a value past maxVarTokens makes the
+// property guaranteed-invalid, which removes it. parent holds the
+// parent's values, which inherit takes.
+//
+// A registered property (CSS Properties and Values API 1, 2.4) is invalid
+// at computed-value time when its value does not match its syntax, and
+// then, like one whose substitution fails, computes as unset: its
+// parent's value when it inherits, else its initial value. initial is its
+// initial value.
+func (cs *computeState) resolveCustom(names []string, declared map[string][]token, base, parent map[string][]token) map[string][]token {
+	if !cs.m.charge(len(base) + len(names)) {
+		return base
 	}
-	out := make(map[string][]token, len(parent)+len(names))
-	maps.Copy(out, parent)
+	out := make(map[string][]token, len(base)+len(names))
+	maps.Copy(out, base)
 	const (
 		visiting = 1
 		done     = 2
 	)
 	state := map[string]uint8{}
+	set := func(name string, v []token, ok bool) ([]token, bool) {
+		if ok {
+			out[name] = v
+		} else {
+			delete(out, name)
+		}
+		return v, ok
+	}
+	// unset is the value of a property that computes as unset (CSS
+	// Cascade 5, 7.3.3): inherited when it inherits, else its initial
+	// value, guaranteed-invalid for an unregistered property.
+	unset := func(name string) ([]token, bool) {
+		reg := cs.r.registered[name]
+		if reg == nil || reg.inherits {
+			v, ok := parent[name]
+			if !ok && reg != nil && reg.initial != nil {
+				return set(name, reg.initial, true)
+			}
+			return set(name, v, ok)
+		}
+		return set(name, reg.initial, reg.initial != nil)
+	}
+	// invalid is the value of a property invalid at computed-value time:
+	// the guaranteed-invalid value (CSS Variables 1, 3), or unset for a
+	// registered property.
+	invalid := func(name string) ([]token, bool) {
+		if cs.r.registered[name] == nil {
+			return set(name, nil, false)
+		}
+		return unset(name)
+	}
 	var resolve func(name string, depth int) ([]token, bool)
 	resolve = func(name string, depth int) ([]token, bool) {
 		raw, isDeclared := declared[name]
 		if !isDeclared {
-			v, ok := parent[name]
+			v, ok := base[name]
 			return v, ok
 		}
 		switch state[name] {
@@ -44,36 +83,78 @@ func (cs *computeState) resolveCustom(names []string, declared map[string][]toke
 		}
 		state[name] = visiting
 		defer func() { state[name] = done }()
+		reg := cs.r.registered[name]
 		if w, ok := wideKeyword(significant(raw)); ok {
-			if w == wideInitial {
-				delete(out, name)
-				return nil, false
+			switch {
+			case w == wideInitial && reg != nil:
+				return set(name, reg.initial, reg.initial != nil)
+			case w == wideInitial:
+				return set(name, nil, false)
+			case w == wideInherit:
+				v, ok := parent[name]
+				return set(name, v, ok)
 			}
-			v, ok := parent[name]
-			if ok {
-				out[name] = v
-			} else {
-				delete(out, name)
-			}
-			return v, ok
+			return unset(name)
 		}
 		if depth > maxVarDepth {
-			delete(out, name)
-			return nil, false
+			return invalid(name)
 		}
 		budget := maxVarTokens
 		v, ok := cs.substitute(raw, func(ref string) ([]token, bool) { return resolve(ref, depth+1) }, &budget, 0)
-		if !ok {
-			delete(out, name)
-			return nil, false
+		if !ok || reg != nil && !reg.matches(significant(v)) {
+			return invalid(name)
 		}
-		out[name] = v
-		return v, true
+		return set(name, v, true)
 	}
 	for _, name := range names {
 		resolve(name, 0)
 	}
 	return out
+}
+
+// registeredBase returns the custom properties an element takes before
+// its own declarations: its parent's, with each registered property that
+// does not inherit at its initial value, and each registered property its
+// parent lacks at its initial value too (CSS Properties and Values API 1,
+// 2.4). It returns parent itself when no value changes.
+func (cs *computeState) registeredBase(parent map[string][]token) map[string][]token {
+	if len(cs.r.registered) == 0 {
+		return parent
+	}
+	var out map[string][]token
+	for _, name := range cs.r.registeredNames {
+		reg := cs.r.registered[name]
+		v, has := parent[name]
+		want, keep := reg.initial, reg.initial != nil
+		if reg.inherits && has {
+			continue
+		}
+		if has == keep && sharedTokens(v, want) {
+			continue
+		}
+		if out == nil {
+			if !cs.m.charge(len(parent) + len(cs.r.registeredNames)) {
+				return parent
+			}
+			out = make(map[string][]token, len(parent)+len(cs.r.registeredNames))
+			maps.Copy(out, parent)
+		}
+		if keep {
+			out[name] = want
+		} else {
+			delete(out, name)
+		}
+	}
+	if out == nil {
+		return parent
+	}
+	return out
+}
+
+// sharedTokens reports whether a and b are the same slice: a registered
+// property's initial value is one slice every element shares.
+func sharedTokens(a, b []token) bool {
+	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
 // substitute replaces every var() in l (CSS Variables 1, 3): with the
