@@ -71,7 +71,14 @@ func TestConvert_LineDrawings(t *testing.T) {
 
 // TestConvert_DrawingLinks locks the link a drawing carries: one link
 // annotation over the drawing's box on each page it prints on, each in a
-// Link element, the first holding the drawing's Figure.
+// Link element, the first holding the drawing's Figure, which the outline
+// entry of a sheet that prints only the drawing names (ISO 14289-2, 8.8).
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx sc/image_hyperlink.xlsx: the outline entry of a
+//     sheet whose only drawing carries a link named no element and failed
+//     ISO 14289-2, 8.8.
 func TestConvert_DrawingLinks(t *testing.T) {
 	sh := &Sheet{Name: "S", Drawings: []Drawing{{
 		From: Anchor{}, Width: 300, Height: 1200, Name: "Chart 1", Href: "https://example.com/",
@@ -93,6 +100,8 @@ func TestConvert_DrawingLinks(t *testing.T) {
 			t.Errorf("page %d: link parent %+v, want a Link", i+1, l.Parent)
 		} else if i == 0 && (len(l.Parent.Kids) != 1 || l.Parent.Kids[0].Role != "Figure") {
 			t.Errorf("page 1: link kids %+v, want the Figure", l.Parent.Kids)
+		} else if i == 0 && (len(out.Outline) != 1 || out.Outline[0].Dest.Elem != l.Parent.Kids[0]) {
+			t.Errorf("outline %+v, want an entry naming the linked Figure", out.Outline)
 		}
 	}
 }

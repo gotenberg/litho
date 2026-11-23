@@ -371,8 +371,8 @@ func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
 // tableOf returns the element an outline entry or a link into a page
 // names as its structure destination (ISO 32000-2, 12.3.2.3; ISO 14289-2,
 // 8.8): the Table element among the kids of the page's structure root st,
-// else, on a page that prints only drawings, its first Figure; nil for
-// none.
+// else, on a page that prints only drawings, its first Figure, that of a
+// drawing carrying a link inside its Link element included; nil for none.
 func tableOf(st *typeset.StructElem) *typeset.StructElem {
 	if st == nil {
 		return nil
@@ -385,6 +385,13 @@ func tableOf(st *typeset.StructElem) *typeset.StructElem {
 	for _, k := range st.Kids {
 		if k.Role == "Figure" {
 			return k
+		}
+		if k.Role == "Link" {
+			for _, f := range k.Kids {
+				if f.Role == "Figure" {
+					return f
+				}
+			}
 		}
 	}
 	return nil
