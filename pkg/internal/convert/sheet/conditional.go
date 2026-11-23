@@ -1237,7 +1237,7 @@ func (g *grid) iconAt(r, c int, cell *Cell) (icon, bool) {
 		}
 		break
 	}
-	return iconOf(rule, band), rule.IconsOnly
+	return iconOf(rule, band, g.doc.ExcelRules), rule.IconsOnly
 }
 
 // drawIcon draws the icon of the cell of u at its bottom-left corner, the

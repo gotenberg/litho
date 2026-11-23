@@ -66,9 +66,14 @@ var iconSets = map[string][]icon{
 	"5Boxes":          {boxes(0), boxes(1), boxes(2), boxes(3), boxes(4)},
 }
 
-// iconOf returns the icon of band i of the rule, nil for none.
-func iconOf(rule *Rule, i int) icon {
-	set := iconSets[rule.Icons]
+// iconOf returns the icon of band i of the rule, nil for none: Excel's
+// art when excel is set ([excelIconSets]), Calc's otherwise.
+func iconOf(rule *Rule, i int, excel bool) icon {
+	sets := iconSets
+	if excel {
+		sets = excelIconSets
+	}
+	set := sets[rule.Icons]
 	if i < 0 || i >= len(set) {
 		return nil
 	}
@@ -78,7 +83,7 @@ func iconOf(rule *Rule, i int) icon {
 	if i < len(rule.IconsCustom) && rule.IconsCustom[i] != "" {
 		name, idx, _ := strings.Cut(rule.IconsCustom[i], ":")
 		k, err := intconv.Atoi(idx)
-		if other := iconSets[name]; err == nil && k >= 0 && k < len(other) {
+		if other := sets[name]; err == nil && k >= 0 && k < len(other) {
 			return other[k]
 		}
 		return nil
@@ -353,6 +358,221 @@ func boxes(lit int) icon {
 				c = iconBlue
 			}
 			out = append(out, shapeOf(poly(p[0], p[1], p[0]+6, p[1], p[0]+6, p[1]+6, p[0], p[1]+6), c.fill, c.line))
+		}
+		return out
+	}
+}
+
+// The colours of the icons Excel prints, sampled from Excel's prints:
+// each a fill and an outline, flat.
+var (
+	excelRed      = iconColors{fill: rgb(0xd6, 0x55, 0x32), line: rgb(0x9e, 0x38, 0x1c)}
+	excelAmber    = iconColors{fill: rgb(0xea, 0xc2, 0x82), line: rgb(0xa4, 0x80, 0x2b)}
+	excelGreen    = iconColors{fill: rgb(0x68, 0xa4, 0x90), line: rgb(0x32, 0x6f, 0x5b)}
+	excelGray     = iconColors{fill: rgb(0x80, 0x80, 0x80), line: rgb(0x64, 0x62, 0x62)}
+	excelOff      = iconColors{fill: rgb(0xb3, 0xb3, 0xb3), line: rgb(0x72, 0x72, 0x72)}
+	excelBlue     = iconColors{fill: rgb(0x4a, 0x7d, 0xb1), line: rgb(0x33, 0x5f, 0x8c)}
+	excelDark     = iconColors{fill: rgb(0x50, 0x50, 0x50), line: rgb(0x30, 0x30, 0x30)}
+	excelSilver   = iconColors{fill: rgb(0xb1, 0xb1, 0xb1), line: rgb(0x87, 0x87, 0x87)}
+	excelPink     = iconColors{fill: rgb(0xed, 0xb2, 0xa3), line: rgb(0xc4, 0x92, 0x84)}
+	excelBrick    = iconColors{fill: rgb(0xd8, 0x63, 0x44), line: rgb(0xb1, 0x46, 0x29)}
+	excelPole     = rgb(0x72, 0x72, 0x72)
+	excelCrossRed = iconColors{fill: rgb(0xd8, 0x63, 0x44), line: rgb(0xac, 0x42, 0x26)}
+	excelBang     = iconColors{fill: rgb(0xed, 0xc8, 0x7e), line: rgb(0xa4, 0x80, 0x2b)}
+	excelTick     = iconColors{fill: rgb(0x76, 0xa7, 0x97), line: rgb(0x3c, 0x77, 0x63)}
+)
+
+// excelIconSets are the icons of each icon set as Excel prints them,
+// lowest band first: flat icons in Excel's colours, its arrows narrower,
+// its flags pennants on a thin pole, its 3Symbols2 bare marks without a
+// disc, its stars outlined, its rating a staircase of bars, drawn as
+// vectors of the silhouettes of its prints.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: cf_icon_sets prints its 20 icon sets in these colours
+//     and shapes, as 24 by 24 pixel pictures of 11 points.
+var excelIconSets = map[string][]icon{
+	"3Arrows":         {webArrow(90, excelRed), webArrow(0, excelAmber), webArrow(-90, excelGreen)},
+	"3ArrowsGray":     {webArrow(90, excelGray), webArrow(0, excelGray), webArrow(-90, excelGray)},
+	"3Flags":          {pennant(excelRed), pennant(excelAmber), pennant(excelGreen)},
+	"3TrafficLights1": {disc(excelRed), disc(excelAmber), disc(excelGreen)},
+	"3TrafficLights2": {roundLamp(excelRed), roundLamp(excelAmber), roundLamp(excelGreen)},
+	"3Signs":          {diamond(excelRed), webTriangle(excelAmber), disc(excelGreen)},
+	"3Symbols":        {symbol(excelRed, 'x'), symbol(excelAmber, '!'), symbol(excelGreen, 'v')},
+	"3Symbols2":       {mark(excelCrossRed, 'x'), mark(excelBang, '!'), mark(excelTick, 'v')},
+	"3Smilies":        {face(excelAmber, -1), face(excelAmber, 0), face(excelAmber, 1)},
+	"3ColorSmilies":   {face(excelRed, -1), face(excelAmber, 0), face(excelGreen, 1)},
+	"3Stars":          {webStar(0), webStar(0.5), webStar(1)},
+	"3Triangles":      {webPointer(false, excelRed), webDash(excelAmber), webPointer(true, excelGreen)},
+	"4Arrows":         {webArrow(90, excelRed), webArrow(45, excelAmber), webArrow(-45, excelAmber), webArrow(-90, excelGreen)},
+	"4ArrowsGray":     {webArrow(90, excelGray), webArrow(45, excelGray), webArrow(-45, excelGray), webArrow(-90, excelGray)},
+	"4RedToBlack":     {disc(excelDark), disc(excelSilver), disc(excelPink), disc(excelBrick)},
+	"4Rating":         {stairs(1), stairs(2), stairs(3), stairs(4)},
+	"4TrafficLights":  {disc(excelDark), disc(excelRed), disc(excelAmber), disc(excelGreen)},
+	"5Arrows":         {webArrow(90, excelRed), webArrow(45, excelAmber), webArrow(0, excelAmber), webArrow(-45, excelAmber), webArrow(-90, excelGreen)},
+	"5ArrowsGray":     {webArrow(90, excelGray), webArrow(45, excelGray), webArrow(0, excelGray), webArrow(-45, excelGray), webArrow(-90, excelGray)},
+	"5Rating":         {stairs(0), stairs(1), stairs(2), stairs(3), stairs(4)},
+	"5Quarters":       {webQuarters(0), webQuarters(1), webQuarters(2), webQuarters(3), webQuarters(4)},
+	"5Boxes":          {webBoxes(0), webBoxes(1), webBoxes(2), webBoxes(3), webBoxes(4)},
+}
+
+// webArrow returns Excel's arrow pointing right turned clockwise by deg
+// degrees about the box's centre: a shaft a third of the box wide and a
+// head of 12 units.
+func webArrow(deg float64, c iconColors) icon {
+	return func() []typeset.Fragment {
+		ops := poly(0.7, 5.3, 8.7, 5.3, 8.7, 2, 15.3, 8, 8.7, 14, 8.7, 10.7, 0.7, 10.7)
+		rad := deg * math.Pi / 180
+		sin, cos := detmath.Sincos(rad)
+		m := typeset.Matrix{A: cos, B: sin, C: -sin, D: cos}
+		m.E, m.F = 8-float64(m.A*8)-float64(m.C*8), 8-float64(m.B*8)-float64(m.D*8)
+		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: []typeset.Fragment{shapeOf(ops, c.fill, c.line)}}}
+	}
+}
+
+// pennant returns a triangular flag at the top of a thin grey pole.
+func pennant(c iconColors) icon {
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{
+			shapeOf(poly(3.3, 0.7, 4.7, 0.7, 4.7, 15.3, 3.3, 15.3), excelPole, typeset.Color{}),
+			shapeOf(poly(5, 1.5, 13.3, 4.7, 5, 8), c.fill, c.line),
+		}
+	}
+}
+
+// roundLamp returns a coloured disc in a dark square, Excel's traffic
+// light.
+func roundLamp(c iconColors) icon {
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{
+			shapeOf(poly(0.7, 0.7, 15.3, 0.7, 15.3, 15.3, 0.7, 15.3), excelDark.fill, excelDark.line),
+			shapeOf(ellipse(8, 8, 4.6, 4.6), c.fill, typeset.Color{}),
+		}
+	}
+}
+
+// webTriangle returns Excel's upward warning triangle.
+func webTriangle(c iconColors) icon {
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{shapeOf(poly(8, 1.3, 15.3, 14, 0.7, 14), c.fill, c.line)}
+	}
+}
+
+// mark returns a bare cross 'x', exclamation mark '!' or check mark 'v'
+// without a disc, 3Symbols2's icons as Excel prints them.
+func mark(c iconColors, glyph byte) icon {
+	return func() []typeset.Fragment {
+		switch glyph {
+		case 'x':
+			return []typeset.Fragment{
+				shapeOf(poly(0.7, 3, 3, 0.7, 8, 5.7, 13, 0.7, 15.3, 3, 10.3, 8, 15.3, 13, 13, 15.3, 8, 10.3, 3, 15.3, 0.7, 13, 5.7, 8), c.fill, c.line),
+			}
+		case '!':
+			return []typeset.Fragment{
+				shapeOf(poly(6.3, 0.7, 9.7, 0.7, 9, 10.7, 7, 10.7), c.fill, c.line),
+				shapeOf(ellipse(8, 13.5, 1.8, 1.8), c.fill, c.line),
+			}
+		}
+		return []typeset.Fragment{shapeOf(poly(0.7, 8.3, 3, 6, 6, 9, 13, 2, 15.3, 4.3, 6, 13.7), c.fill, c.line)}
+	}
+}
+
+// webStar returns Excel's five-pointed star, white for none, its left
+// half amber for a half, amber whole.
+func webStar(full float64) icon {
+	return func() []typeset.Fragment {
+		xy := make([]float64, 0, 20)
+		for i := range 10 {
+			r := 7.3
+			if i%2 == 1 {
+				r = 3.3
+			}
+			a := -math.Pi/2 + float64(i)*math.Pi/5
+			xy = append(xy, 8+float64(r*detmath.Cos(a)), 8.4+float64(r*detmath.Sin(a)))
+		}
+		ops := poly(xy...)
+		white := rgb(0xff, 0xff, 0xff)
+		switch {
+		case full <= 0:
+			return []typeset.Fragment{shapeOf(ops, white, excelPole)}
+		case full >= 1:
+			return []typeset.Fragment{shapeOf(ops, excelAmber.fill, excelAmber.line)}
+		}
+		w := 16 * full
+		return []typeset.Fragment{
+			shapeOf(ops, white, typeset.Color{}),
+			&typeset.Group{Clip: &typeset.Path{Ops: poly(0, 0, w, 0, w, 16, 0, 16), Fill: &typeset.Fill{}}, Opacity: 1, Content: []typeset.Fragment{shapeOf(ops, excelAmber.fill, typeset.Color{})}},
+			shapeOf(ops, typeset.Color{}, excelAmber.line),
+		}
+	}
+}
+
+// webPointer returns 3Triangles' wide triangle as Excel prints it,
+// pointing up or down.
+func webPointer(up bool, c iconColors) icon {
+	return func() []typeset.Fragment {
+		if up {
+			return []typeset.Fragment{shapeOf(poly(8, 4, 15.3, 12.7, 0.7, 12.7), c.fill, c.line)}
+		}
+		return []typeset.Fragment{shapeOf(poly(0.7, 3.3, 15.3, 3.3, 8, 12), c.fill, c.line)}
+	}
+}
+
+// webDash returns the bar of 3Triangles' middle band as Excel prints it.
+func webDash(c iconColors) icon {
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{shapeOf(poly(0.7, 5.3, 15.3, 5.3, 15.3, 10.7, 0.7, 10.7), c.fill, c.line)}
+	}
+}
+
+// stairs returns Excel's rating: four bars side by side rising left to
+// right, the first lit ones blue, the rest grey.
+func stairs(lit int) icon {
+	return func() []typeset.Fragment {
+		out := make([]typeset.Fragment, 0, 4)
+		for i := range 4 {
+			c := excelOff
+			if i < lit {
+				c = excelBlue
+			}
+			x := 0.7 + float64(3.6*float64(i))
+			top := 11.3 - float64(3.3*float64(i))
+			out = append(out, shapeOf(poly(x, top, x+3.6, top, x+3.6, 15.3, x, 15.3), c.fill, c.line))
+		}
+		return out
+	}
+}
+
+// webQuarters returns a white disc filled dark by n quarters, clockwise
+// from twelve o'clock, as Excel prints it.
+func webQuarters(n int) icon {
+	return func() []typeset.Fragment {
+		out := []typeset.Fragment{shapeOf(ellipse(8, 8, 7.3, 7.3), rgb(0xff, 0xff, 0xff), excelDark.fill)}
+		switch {
+		case n >= 4:
+			out = append(out, shapeOf(ellipse(8, 8, 7.3, 7.3), excelDark.fill, excelDark.fill))
+		case n > 0:
+			clip := map[int][]float64{1: {8, 0, 16, 0, 16, 8, 8, 8}, 2: {8, 0, 16, 0, 16, 16, 8, 16}, 3: {8, 0, 16, 0, 16, 16, 0, 16, 0, 8, 8, 8}}[n]
+			pie := []typeset.Fragment{shapeOf(ellipse(8, 8, 7.3, 7.3), excelDark.fill, typeset.Color{})}
+			out = append(out, &typeset.Group{Clip: &typeset.Path{Ops: poly(clip...), Fill: &typeset.Fill{}}, Opacity: 1, Content: pie})
+		}
+		return out
+	}
+}
+
+// webBoxes returns four boxes in a square as Excel prints them, the first
+// lit ones blue: bottom left, bottom right, top left, then top right.
+func webBoxes(lit int) icon {
+	return func() []typeset.Fragment {
+		at := [4][2]float64{{0, 8.3}, {8.3, 8.3}, {0, 0.7}, {8.3, 0.7}}
+		out := make([]typeset.Fragment, 0, len(at))
+		for i, p := range at {
+			c := excelOff
+			if i < lit {
+				c = excelBlue
+			}
+			out = append(out, shapeOf(poly(p[0], p[1], p[0]+7.3, p[1], p[0]+7.3, p[1]+7.3, p[0], p[1]+7.3), c.fill, c.line))
 		}
 		return out
 	}

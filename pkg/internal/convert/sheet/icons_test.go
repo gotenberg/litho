@@ -46,6 +46,34 @@ func TestConditional_IconSet(t *testing.T) {
 	}
 }
 
+// TestConditional_ExcelIconArt checks that a workbook's icon sets take
+// Excel's art and an OpenDocument spreadsheet's Calc's, every set of both
+// tables holding the same number of icons.
+func TestConditional_ExcelIconArt(t *testing.T) {
+	for name, set := range iconSets {
+		if len(excelIconSets[name]) != len(set) {
+			t.Errorf("%s: %d icons in Excel's art, %d in Calc's", name, len(excelIconSets[name]), len(set))
+		}
+	}
+	sh := column(numCell(0, 1, nil))
+	sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{{
+		Kind: RuleIconSet, Icons: "3Arrows", Values: []Value{num(1), num(2), num(4)},
+	}}}}
+	for _, excel := range []bool{false, true} {
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		g := newGrid(t.Context(), doc, sh)
+		got, _ := g.iconAt(0, 0, g.cell(0, 0))
+		want := iconSets["3Arrows"][0]
+		if excel {
+			want = excelIconSets["3Arrows"][0]
+		}
+		if got == nil || fragmentsOf(got) != fragmentsOf(want) {
+			t.Errorf("Excel rules %v: another icon", excel)
+		}
+	}
+}
+
 // fragmentsOf returns a fingerprint of the drawing of ic.
 func fragmentsOf(ic icon) string {
 	out := ""
