@@ -219,10 +219,101 @@ func mediaRatio(l []token) (float64, bool) {
 // reports for a printed page (Media Queries 4, 6.1).
 const mediaColorBits = 8
 
+// printResolution is the resolution media feature of a printed page in
+// dppx: 300 dots an inch, the screening resolution Chromium reports when
+// it prints (Media Queries 4, 6.1), where a screen reports 1. Pictures are
+// still chosen for a device pixel ratio of 1 ([imageSetChoice]).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints the rules of (min-resolution:
+//     300dpi), (resolution: 3.125dppx), (min-resolution: 3x) and
+//     (-webkit-min-device-pixel-ratio: 3) and not those of
+//     (min-resolution: 3.5x), (min-resolution: 400dpi) or
+//     (-webkit-min-device-pixel-ratio: 4); under emulatedMediaType screen
+//     it prints none of (min-resolution: 200dpi) or
+//     (-webkit-min-device-pixel-ratio: 2.5).
+const printResolution = 300.0 / 96
+
+// resolution returns the resolution media feature of m in dppx.
+func (m Media) resolution() float64 {
+	if lower(m.Type) == "screen" {
+		return 1
+	}
+	return printResolution
+}
+
+// mediaResolution evaluates a <resolution> in a media feature, in dppx,
+// or the keyword infinite (Media Queries 4, 6.1). A math function holding
+// a percentage is invalid: a media feature resolves percentages against
+// nothing (CSS Values 4, the context of a calculation).
+func mediaResolution(t token) (float64, bool) {
+	if t.isIdent("infinite") {
+		return math.Inf(1), true
+	}
+	if holdsPercentage(t.children) {
+		return 0, false
+	}
+	return resolutionOf(t)
+}
+
+// holdsPercentage reports a percentage token in l at any depth.
+func holdsPercentage(l []token) bool {
+	for i := range l {
+		if l[i].typ == tPercentage || holdsPercentage(l[i].children) {
+			return true
+		}
+	}
+	return false
+}
+
+// mediaInteger evaluates a non-negative <integer> in a media feature.
+func mediaInteger(t token) (float64, bool) {
+	return t.num, t.typ == tNumber && t.integer && t.num >= 0
+}
+
+// numericFeature returns the value for m of a media feature of a number
+// beside the page box's, and how its values parse: resolution (Media
+// Queries 4, 6.1), color, color-index and monochrome (6.2, 6.3, 6.5),
+// whose min- and max- forms compare, and the viewport segment counts of
+// a page that is one segment (Media Queries 5, 4.2), which have none.
+// It is false for any other name.
+func numericFeature(name string, m Media) (float64, func(token) (float64, bool), bool) {
+	switch name {
+	case "resolution":
+		return m.resolution(), mediaResolution, true
+	case "color":
+		return mediaColorBits, mediaInteger, true
+	case "color-index", "monochrome":
+		return 0, mediaInteger, true
+	case "horizontal-viewport-segments", "vertical-viewport-segments":
+		return 1, mediaInteger, true
+	}
+	return 0, nil, false
+}
+
+// webkitPixelRatio returns the comparison a -webkit-device-pixel-ratio
+// feature names, "" "min-" or "max-" (the Compatibility Standard's
+// -webkit-device-pixel-ratio: the resolution in dppx, compared with a
+// <number>),
+// and false for any other name.
+func webkitPixelRatio(name string) (string, bool) {
+	switch name {
+	case "-webkit-device-pixel-ratio":
+		return "", true
+	case "-webkit-min-device-pixel-ratio":
+		return "min-", true
+	case "-webkit-max-device-pixel-ratio":
+		return "max-", true
+	}
+	return "", false
+}
+
 // evalFeature evaluates a <media-in-parens> holding a feature (Media
 // Queries 4, 4): width, height, aspect-ratio and orientation against the
-// page box, a handful of discrete features with the values of a static
-// printed page, and the range syntax for width and height. A feature
+// page box, the numeric features of [numericFeature], the device pixel
+// ratio and -webkit-transform-3d of the Compatibility Standard, a handful of discrete features with the values of a static
+// printed page, and the range syntax. A feature
 // litho does not know, a value its feature does not take, and a
 // <general-enclosed> are unknown (Media Queries 4, 3.2), as Chromium
 // evaluates them: not (unknown) matches nothing either.
@@ -242,10 +333,15 @@ func evalFeature(t token, m Media) (tri, bool) {
 		switch name {
 		case "width", "height", "device-width", "device-height":
 			return triOf(m.Width > 0 && m.Height > 0), true
-		case "color", "orientation", "aspect-ratio":
+		case "color", "orientation", "aspect-ratio", "device-aspect-ratio", "resolution", "-webkit-device-pixel-ratio",
+			"horizontal-viewport-segments", "vertical-viewport-segments":
 			return triTrue, true
-		case "monochrome", "grid":
+		case "monochrome", "grid", "color-index", "scan":
 			return triFalse, true
+		case "-webkit-transform-3d":
+			// The Compatibility Standard's -webkit-transform-3d: true on
+			// a user agent that supports 3D transforms, as litho does.
+			return triTrue, true
 		}
 		v, ok := discreteFeature(name, m)
 		if !ok {
@@ -299,6 +395,25 @@ func evalFeature(t token, m Media) (tri, bool) {
 			}
 			return triOf(h > 0 && cmp(prefix, w/h, r)), true
 		}
+		if got, parse, ok := numericFeature(base, m); ok && (prefix == "" || base != "horizontal-viewport-segments" && base != "vertical-viewport-segments") {
+			if len(val) != 1 {
+				return triUnknown, true
+			}
+			want, ok := parse(val[0])
+			if !ok || prefix != "" && math.IsInf(want, 0) {
+				return triUnknown, true
+			}
+			if math.IsInf(want, 0) {
+				return triOf(math.IsInf(got, 1)), true
+			}
+			return triOf(cmp(prefix, got, want)), true
+		}
+	}
+	if prefix, ok := webkitPixelRatio(name); ok {
+		if len(val) != 1 || val[0].typ != tNumber || val[0].num < 0 {
+			return triUnknown, true
+		}
+		return triOf(cmp(prefix, m.resolution(), val[0].num)), true
 	}
 	if len(val) != 1 || val[0].typ != tIdent && val[0].typ != tNumber {
 		return triUnknown, true
@@ -319,14 +434,18 @@ func evalFeature(t token, m Media) (tri, bool) {
 			return triOf(v == "portrait"), true
 		}
 		return triOf(v == "landscape"), true
-	case "color", "monochrome", "grid":
+	case "grid":
 		if val[0].typ != tNumber || !val[0].integer || val[0].num < 0 {
 			return triUnknown, true
 		}
-		if name == "color" {
-			return triOf(val[0].num <= mediaColorBits), true
-		}
 		return triOf(val[0].num == 0), true
+	case "scan":
+		// Media Queries 4, 5.3: scan describes a screen's scanning; a
+		// printed page has neither value.
+		if v != "interlace" && v != "progressive" {
+			return triUnknown, true
+		}
+		return triFalse, true
 	}
 	return triUnknown, true
 }
@@ -351,6 +470,7 @@ var discreteValues = map[string][]string{
 	"prefers-reduced-motion":       {"no-preference", "reduce"},
 	"prefers-contrast":             {"no-preference", "less", "more", "custom"},
 	"prefers-reduced-transparency": {"no-preference", "reduce"},
+	"device-posture":               {"continuous", "folded"},
 }
 
 // discreteFeature returns the value of a discrete media feature for m:
@@ -374,6 +494,8 @@ var discreteValues = map[string][]string{
 //     and hover and pointer are none: no user and no pointing device take
 //     part in a conversion.
 //   - scripting is none: litho runs no script.
+//   - device-posture is continuous (the Device Posture API): a page is
+//     flat.
 func discreteFeature(name string, m Media) (string, bool) {
 	if v, ok := m.Features[name]; ok {
 		return lower(v), true
@@ -401,6 +523,8 @@ func discreteFeature(name string, m Media) (string, bool) {
 		return "standard", true
 	case "display-mode":
 		return "browser", true
+	case "device-posture":
+		return "continuous", true
 	case "prefers-color-scheme":
 		return "light", true
 	case "hover", "any-hover", "pointer", "any-pointer", "scripting", "forced-colors":
@@ -441,9 +565,9 @@ func discreteTrue(name, v string) bool {
 	return v != "none"
 }
 
-// evalRange evaluates the range form of width and height (Media Queries
-// 4, 2.4.3): "width >= 600px", "600px < width" and "400px <= width <=
-// 800px".
+// evalRange evaluates the range form (Media Queries 4, 2.4.3) of width,
+// height and the numeric features of [numericFeature]: "width >= 600px",
+// "600px < width", "400px <= width <= 800px", "resolution > 1x".
 func evalRange(in []token, m Media) tri {
 	type op struct {
 		lt, eq bool
@@ -479,50 +603,57 @@ func evalRange(in []token, m Media) tri {
 		}
 		return a == b
 	}
-	feature := func(t token) (float64, bool) {
+	// feature returns the value of the feature t names, how its values
+	// parse, and whether it is defined on m: width and height are not on
+	// a medium of no size.
+	feature := func(t token) (float64, func(token) (float64, bool), bool, bool) {
 		switch {
 		case t.isIdent("width"):
-			return m.Width / Pt, true
+			return m.Width / Pt, mediaLength, m.Width > 0 && m.Height > 0, true
 		case t.isIdent("height"):
-			return m.Height / Pt, true
+			return m.Height / Pt, mediaLength, m.Width > 0 && m.Height > 0, true
+		case t.typ == tIdent:
+			if v, parse, ok := numericFeature(lower(t.value), m); ok {
+				return v, parse, true, true
+			}
 		}
-		return 0, false
+		return 0, nil, false, false
 	}
-	if f, ok := feature(in[0]); ok {
+	if f, parse, defined, ok := feature(in[0]); ok {
 		o, j, ok := readOp(1)
 		if !ok || j != len(in)-1 {
 			return triUnknown
 		}
-		v, ok := mediaLength(in[j])
+		v, ok := parse(in[j])
 		if !ok {
 			return triUnknown
 		}
-		return triOf(m.Width > 0 && m.Height > 0 && test(f, o, v))
-	}
-	a, ok := mediaLength(in[0])
-	if !ok {
-		return triUnknown
+		return triOf(defined && test(f, o, v))
 	}
 	o1, j, ok := readOp(1)
 	if !ok || j >= len(in) {
 		return triUnknown
 	}
-	f, ok := feature(in[j])
+	f, parse, defined, ok := feature(in[j])
+	if !ok {
+		return triUnknown
+	}
+	a, ok := parse(in[0])
 	if !ok {
 		return triUnknown
 	}
 	if j == len(in)-1 {
-		return triOf(m.Width > 0 && m.Height > 0 && test(a, o1, f))
+		return triOf(defined && test(a, o1, f))
 	}
 	o2, k, ok := readOp(j + 1)
 	if !ok || k != len(in)-1 {
 		return triUnknown
 	}
-	b, ok := mediaLength(in[k])
+	b, ok := parse(in[k])
 	if !ok {
 		return triUnknown
 	}
-	return triOf(m.Width > 0 && m.Height > 0 && test(a, o1, f) && test(f, o2, b))
+	return triOf(defined && test(a, o1, f) && test(f, o2, b))
 }
 
 // evalSupports evaluates an @supports condition (CSS Conditional 3, 6;
