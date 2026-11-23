@@ -430,18 +430,67 @@ func TestLinkRecall(t *testing.T) {
 		{links: []diffLink{{Page: 1, URI: "HTTPS://Gotenberg.dev"}, {Page: 1, DestPage: 2}}},
 		{links: []diffLink{{Page: 2, DestPage: 3}, {Page: 2, URI: "https://example.com"}}},
 	}
-	if got := linkRecall(golden, pages); got != 0.75 {
+	if got := linkRecall(golden, pages, false); got != 0.75 {
 		t.Errorf("recall = %v, want 0.75 (the duplicate dest link counts once per copy)", got)
 	}
-	if got := linkRecall(nil, pages); got != 1 {
+	if got := linkRecall(nil, pages, false); got != 1 {
 		t.Errorf("no golden link: recall %v, want 1", got)
 	}
 	dead := []diffLink{{Page: 1}, {Page: 1, DestPage: 2}, {Page: 2}}
-	if got := linkRecall(dead, pages); got != 1 {
+	if got := linkRecall(dead, pages, false); got != 1 {
 		t.Errorf("golden links without a target: recall %v, want 1 (they lead nowhere)", got)
 	}
-	if got := linkRecall(dead[:1], pages); got != 1 {
+	if got := linkRecall(dead[:1], pages, false); got != 1 {
 		t.Errorf("only dead golden links: recall %v, want 1", got)
+	}
+}
+
+// TestLinkRecall_ReadsUploadLinksAsTheSourceStatesThem locks the reading of
+// a LibreOffice reference's links into the folders Gotenberg's route saves
+// the upload in: litho's relative links, and its link to the first page for
+// the upload itself, match them; a Chromium or Microsoft reference keeps its
+// URIs as written.
+func TestLinkRecall_ReadsUploadLinksAsTheSourceStatesThem(t *testing.T) {
+	t.Parallel()
+
+	const (
+		working = "file:///tmp/d1beaa31-59c0-468b-b2c2-8810b5bf23bb/"
+		folder  = "ac170043-5ada-4ba9-b186-98a61f8a0025/"
+		upload  = "99bf101a-c3e2-4469-8b11-d9fb1d5c49a3.ods"
+	)
+	for _, tc := range []struct {
+		name      string
+		reference diffLink
+		litho     diffLink
+		want      diffLink
+	}{
+		{"beside the working folder", diffLink{Page: 1, URI: working + "Desktop/%23folder/test.ods#Sheet2.B10"}, diffLink{Page: 1, URI: "../../Desktop/%23folder/test.ods#Sheet2.B10"}, diffLink{Page: 1, URI: "../../Desktop/%23folder/test.ods#Sheet2.B10"}},
+		{"in the upload's folder", diffLink{Page: 2, URI: working + folder + "documentfoundation.org"}, diffLink{Page: 2, URI: "../documentfoundation.org"}, diffLink{Page: 2, URI: "../documentfoundation.org"}},
+		{"the upload itself", diffLink{Page: 1, URI: working + folder + upload}, diffLink{Page: 1, DestPage: 1}, diffLink{Page: 1, DestPage: 1}},
+		{"the upload with a fragment", diffLink{Page: 1, URI: working + folder + upload + "#Sheet2.A1"}, diffLink{Page: 1, DestPage: 1}, diffLink{Page: 1, URI: "../" + upload + "#Sheet2.A1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := statedLink(tc.reference); got.key() != tc.want.key() {
+				t.Errorf("statedLink(%q) = %q, want %q", tc.reference.URI, got.key(), tc.want.key())
+			}
+			pages := []diffLithoPage{{links: []diffLink{tc.litho}}, {links: []diffLink{tc.litho}}}
+			want := 1.0
+			if tc.want.key() != tc.litho.key() {
+				want = 0
+			}
+			if got := linkRecall([]diffLink{tc.reference}, pages, true); got != want {
+				t.Errorf("uploaded recall = %v, want %v", got, want)
+			}
+			if got := linkRecall([]diffLink{tc.reference}, pages, false); got != 0 {
+				t.Errorf("recall of a reference not uploaded = %v, want 0: its URI stays as written", got)
+			}
+		})
+	}
+	for _, uri := range []string{"https://gotenberg.dev/", "file:///tmp/report.ods", "file:///tmp/not-a-uuid/x.ods", "file://server/share/doc.xlsx"} {
+		if got := statedLink(diffLink{Page: 1, URI: uri}); got.URI != uri || got.DestPage != 0 {
+			t.Errorf("statedLink(%q) = %+v, want it unchanged", uri, got)
+		}
 	}
 }
 

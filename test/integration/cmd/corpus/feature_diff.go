@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -190,6 +191,10 @@ type diffGolden struct {
 	// a reference with a form qpdf was not there to read.
 	widgets    []diffWidget
 	formUnread bool
+	// uploaded marks a reference LibreOffice wrote through Gotenberg's
+	// route, whose links to files name the folder the route saved the
+	// upload in ([statedLink]).
+	uploaded bool
 }
 
 // diffPageSize is a page's width and height in points, after /Rotate.
@@ -343,6 +348,7 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	f.mu.RLock()
 	office := f.office
 	checkFonts := f.m != nil && f.m.References != nil && f.m.References.Engine == engineMicrosoft
+	libreOffice := f.m != nil && f.m.References != nil && f.m.References.Engine == engineLibreOffice
 	f.mu.RUnlock()
 	texts := make(map[string]*pdfjsReference)
 	var textMu sync.RWMutex
@@ -384,7 +390,7 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 			}
 			return fmt.Errorf("diff reference %s: %w", id, err)
 		}
-		g := &diffGolden{text: t, links: l, pdf: ref, sizes: sizes, outline: outline}
+		g := &diffGolden{text: t, links: l, pdf: ref, sizes: sizes, outline: outline, uploaded: libreOffice}
 		if office {
 			f.referenceForm(g, ref)
 		}
@@ -875,7 +881,7 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, draw func(page int) (image.Image
 	out.Scores = map[string]float64{
 		scorePages:   pagesScore,
 		scoreText:    text,
-		scoreLinks:   linkRecall(g.links.Links, pages),
+		scoreLinks:   linkRecall(g.links.Links, pages, g.uploaded),
 		scoreLayout:  meanOver(layoutSum, n),
 		scoreStrict:  meanOver(strictSum, n),
 		scoreOutline: outlineRecall(g.outline, doc.outline, outlineByPage),
@@ -978,7 +984,10 @@ func tokenF1(golden, got string) float64 {
 // linkRecall is the share of the golden's links, matched by page and target
 // as multisets, that litho's pages carry; 1 when the golden has none. A
 // golden link that leads nowhere (see [diffLink.dead]) is not one to carry.
-func linkRecall(golden []diffLink, pages []diffLithoPage) float64 {
+// uploaded reads each golden link as the link its source states
+// ([statedLink]), for a reference LibreOffice wrote through Gotenberg's
+// route.
+func linkRecall(golden []diffLink, pages []diffLithoPage, uploaded bool) float64 {
 	have := make(map[string]int)
 	for _, p := range pages {
 		for _, l := range p.links {
@@ -990,6 +999,9 @@ func linkRecall(golden []diffLink, pages []diffLithoPage) float64 {
 		if l.dead() {
 			continue
 		}
+		if uploaded {
+			l = statedLink(l)
+		}
 		want++
 		if have[l.key()] > 0 {
 			have[l.key()]--
@@ -1000,6 +1012,78 @@ func linkRecall(golden []diffLink, pages []diffLithoPage) float64 {
 		return 1
 	}
 	return float64(found) / float64(want)
+}
+
+// uploadLinkPattern matches the URI LibreOffice writes for a link that
+// leads into the folders Gotenberg's LibreOffice route saves an upload in:
+// the route saves it as /tmp/<working folder>/<upload folder>/<file>, the
+// folders named by a UUID and the file by a UUID and the document's
+// extension. The first group is the working folder's UUID, the second the
+// path below it.
+var uploadLinkPattern = regexp.MustCompile(`^file:///tmp/(` + uuidPattern + `)/(.+)$`)
+
+// uploadFolderPattern and uploadFilePattern match the name of the upload's
+// folder and of the upload itself.
+var (
+	uploadFolderPattern = regexp.MustCompile(`^` + uuidPattern + `$`)
+	uploadFilePattern   = regexp.MustCompile(`^` + uuidPattern + `\.[A-Za-z0-9]+$`)
+)
+
+// uuidPattern is a UUID as Gotenberg names its folders and uploads.
+const uuidPattern = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
+
+// statedLink returns the link of a LibreOffice reference as its source
+// states it. An OpenDocument link to another file is relative to the
+// package, the document itself taken as a folder (ODF 1.3, part 3, 19.910
+// xlink:href): "../x" names x beside the document.
+// LibreOffice resolves such a link against the URL of the file it
+// converts, and through Gotenberg's route that file is the upload, so the
+// reference's link names the route's folders where litho writes the
+// relative path the source states. A target in the upload's folder reads
+// as "../" and its path below it, one beside that folder as "../../" and
+// its path, and the upload itself as a link inside the document, to its
+// first page: the reference links the document itself where its source
+// names a place in it LibreOffice cannot resolve, or the package itself
+// (".."). Any other link is returned as it is.
+//
+// The rule does not reach a source link that climbs past the working
+// folder ("../../../x" names /tmp/x), one that names a file inside the
+// package (no "../"), whose URI LibreOffice was not measured on, nor a
+// link to the upload that carries a fragment, which names a place the
+// reference does not say: each keeps its URI and finds no match.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods sc/external_hyperlink.ods, sc/fdo79305.ods: the
+//     source's "../../Desktop/%23folder/test.ods#Sheet2.B10" and
+//     "../../xlsx/databar.xlsx" read file:///tmp/<working>/Desktop/... and
+//     file:///tmp/<working>/xlsx/databar.xlsx.
+//   - libreoffice/ods sc/rich-text-cells.ods, libreoffice/odp
+//     sd/tdf148966-withoutflag.odp: "../universal-content.ods" and
+//     "../documentfoundation.org" read file:///tmp/<working>/<upload
+//     folder>/universal-content.ods and .../documentfoundation.org.
+//   - libreoffice/odp sd/tdf148966-withflag.odp: "../../pptx/documentfoundation.org"
+//     reads file:///tmp/<working>/pptx/documentfoundation.org.
+//   - libreoffice/ods sc/sheet_name_with_dots.ods: two links to
+//     "#'1.1.1.1'.C1" and "#'1.1.1.1'!C2", a sheet whose name holds dots,
+//     read file:///tmp/<working>/<upload folder>/<upload>.ods; litho/ods
+//     sheet-selection: a chart's xlink:href ".." reads the same.
+func statedLink(l diffLink) diffLink {
+	m := uploadLinkPattern.FindStringSubmatch(l.URI)
+	if m == nil {
+		return l
+	}
+	rest := m[2]
+	folder, below, ok := strings.Cut(rest, "/")
+	switch {
+	case ok && uploadFolderPattern.MatchString(folder) && uploadFilePattern.MatchString(below):
+		l.URI, l.DestPage = "", 1
+	case ok && uploadFolderPattern.MatchString(folder):
+		l.URI = "../" + below
+	default:
+		l.URI = "../../" + rest
+	}
+	return l
 }
 
 // layoutScore compares where two pages put their ink, tolerating a small
