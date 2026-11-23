@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 
@@ -258,5 +259,43 @@ func TestFilter_InlineInColumns(t *testing.T) {
 		if c := at(img, p[0], p[1]); c.R != c.G || c.G != c.B || c.R > 30 {
 			t.Errorf("filtered blue at %v: %v, want a grey of 18", p, c)
 		}
+	}
+}
+
+// TestFilter_ImageCoversWhatThePageShows locks that a filtered element
+// under a transform draws an image of no more than its page shows, mapped
+// back through the transform: a child far larger than the page would
+// otherwise push the image past the surface cap, onto a grid of less than
+// one pixel a CSS pixel, whose edges fall inside the image's pixels and
+// land up to a pixel from the element's own.
+func TestFilter_ImageCoversWhatThePageShows(t *testing.T) {
+	moved := sty(func(s *css.Style) {
+		s.Transform = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(1))}}
+	})
+	filtered := sty(width(40), height(20), bg(blue), filters(css.Filter{Kind: css.FilterGrayscale, Amount: 1}))
+	huge := sty(width(px(20000)), height(px(1500)), bg(red))
+	res := run(t, doc(el(moved, el(filtered, el(huge)))), page(60, 1200))
+	var img *typeset.Image
+	var find func([]typeset.Fragment)
+	find = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Image:
+				img = v
+			case *typeset.Group:
+				find(v.Content)
+			}
+		}
+	}
+	find(res.Pages[0].Content)
+	if img == nil {
+		t.Fatal("no filtered image")
+	}
+	if img.Rect.Width > 100 || img.Rect.Height > 1250 {
+		t.Errorf("image of %g by %g points, want no more than the page and the filter's reach", img.Rect.Width, img.Rect.Height)
+	}
+	perPx := float64(img.Source.Width) / img.Rect.Width * css.Pt
+	if perPx < 1 || math.Abs(perPx-math.Round(perPx)) > 1e-6 {
+		t.Errorf("%g image pixels a CSS pixel, want a whole number", perPx)
 	}
 }

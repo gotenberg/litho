@@ -132,18 +132,18 @@ func (p *painter) backdropOf(b *box) *backdropFx {
 	}
 }
 
-// pushBackdropLevel opens a level of the walk the backdrop filters of a
-// document read ([engine.backdropped]); a document without one keeps no
-// levels.
+// pushBackdropLevel opens a level of the walk the backdrop filters and
+// the filtered elements of a document read ([engine.backdropped],
+// [engine.filterWindow]); a document without either keeps no levels.
 func (e *engine) pushBackdropLevel(l backdropLevel) {
-	if e.backdrops {
+	if e.backdrops || e.filters {
 		e.backdropLevels = append(e.backdropLevels, l)
 	}
 }
 
 // popBackdropLevel closes the innermost level.
 func (e *engine) popBackdropLevel() {
-	if e.backdrops {
+	if e.backdrops || e.filters {
 		e.backdropLevels = e.backdropLevels[:len(e.backdropLevels)-1]
 	}
 }

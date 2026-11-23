@@ -171,6 +171,10 @@ type engine struct {
 	// (backdrop.go).
 	backdrops      bool
 	backdropLevels []backdropLevel
+	// filters reports a document with a filtered element: the walk keeps
+	// its levels too, which say what part of a filtered element's content
+	// its page shows ([engine.filterWindow]).
+	filters bool
 	// anyBackdropFilter is 1 when the document's box tree holds a
 	// backdrop filter, -1 when it holds none, 0 before it is known.
 	anyBackdropFilter int8

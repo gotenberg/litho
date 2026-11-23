@@ -910,6 +910,7 @@ func (p *painter) unit(b *box, own bool) {
 		if b.kind == kindInline {
 			box, _ = p.inlineBounds(b) // an element on no line filters what its floats and blocks paint
 		}
+		p.e.filters = true
 		push(&ditem{group: true, fx: &groupFx{opacity: 1, filter: b.st.Filter, box: box, flow: p.inFlow(), zoom: p.zoom()}})
 		effects = true
 	}

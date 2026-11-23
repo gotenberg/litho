@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -135,7 +136,7 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 		e.filterPixels[page] = pixels
 	}
 	fx := it.effects()
-	img, err := e.filterImage(fx.filter, frags, fx.box, band, max(fx.zoom, 1.0/64), pixels)
+	img, err := e.filterImage(fx.filter, frags, fx.box, e.filterWindow(band, page), max(fx.zoom, 1.0/64), pixels)
 	switch {
 	case err == nil:
 	case errors.Is(err, errNoFilter):
@@ -158,12 +159,55 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 	return out
 }
 
+// filterWindow returns the part of a filtered element's content that page
+// p can show, in the coordinates of that content, nil when it is not
+// known. band, when not nil, is the slice of the flow the page shows, for
+// content in flow coordinates. Otherwise the levels of the walk say how
+// the groups around the element move its content onto the page: the page
+// box, margins and bleed included, mapped back through them bounds what
+// the page can show of it. A transform that enlarges content far past
+// the page, as a child near the eye plane of a perspective does, then
+// leaves the element's image no larger than the page needs, so its grid
+// keeps whole pixels a CSS pixel and its edges land where the unfiltered
+// element's would (see [cssPixelGrid]).
+func (e *engine) filterWindow(band *typeset.Rect, p int) *typeset.Rect {
+	if band != nil || p < 0 || e.cols != nil || e.turn != css.HorizontalTB {
+		return band
+	}
+	levels := e.backdropLevels
+	if len(levels) == 0 || !levels[0].flow {
+		return nil
+	}
+	onPage := typeset.Identity
+	for i := range levels {
+		onPage = mul(onPage, levels[i].transform())
+	}
+	fromPage, ok := invertMatrix(onPage)
+	if !ok {
+		return nil
+	}
+	pb := e.assembledBox(p, e.fitH)
+	// The page's slice of the flow may move down by its note area and its
+	// alignment; the window grows by both rather than follow them.
+	slack := math.Abs(e.noteShift(p)) + math.Abs(e.pageAlignShift(p)) + pb.Bleed
+	page := typeset.Rect{
+		X: -pb.Margin[css.Left] - pb.Bleed, Y: e.pageTop(p) - pb.Margin[css.Top] - slack,
+		Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*slack,
+	}
+	w := boundsOf(fromPage, page)
+	if !numeric.Finite(w.X) || !numeric.Finite(w.Y) || !numeric.Finite(w.Width) || !numeric.Finite(w.Height) {
+		return nil
+	}
+	return &w
+}
+
 // filterImage draws frags filtered by fs as an image, nil when the
-// filter leaves nothing to see. box is the element's border box. zoom is
-// how much the page enlarges the content: the resolution is chosen for
-// the content as the page shows it. pixels counts the page's filter
-// pixels.
-func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box typeset.Rect, band *typeset.Rect, zoom float64, pixels *effect.Page) (*typeset.Image, error) {
+// filter leaves nothing to see. box is the element's border box. window,
+// when not nil, is what the page can show of the content: the image
+// covers no more of it than the filter reaches past. zoom is how much the
+// page enlarges the content: the resolution is chosen for the content as
+// the page shows it. pixels counts the page's filter pixels.
+func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box typeset.Rect, window *typeset.Rect, zoom float64, pixels *effect.Page) (*typeset.Image, error) {
 	refs, err := e.filterRefs(fs, box)
 	if err != nil {
 		return nil, err
@@ -186,8 +230,11 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 			sigma = s
 		}
 	}
-	if band != nil {
-		y0, y1 = max(y0, band.Y-reach), min(y1, band.Y+band.Height+reach)
+	if window != nil {
+		y0, y1 = max(y0, window.Y-reach), min(y1, window.Y+window.Height+reach)
+		if window.Width > 0 {
+			x0, x1 = max(x0, window.X-reach), min(x1, window.X+window.Width+reach)
+		}
 	}
 	// The region starts and ends on whole CSS pixels, so a last bit of
 	// the bounds does not move it (see cssPixelGrid).
