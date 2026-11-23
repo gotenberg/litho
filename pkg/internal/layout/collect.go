@@ -322,11 +322,41 @@ func hasInlineEdges(b *box) bool {
 // object adds an object run for box b.
 func (c *collector) object(kind runKind, b *box) {
 	o := &text.Object{Tab: kind == runTab}
-	if b.ruby != nil {
+	switch {
+	case b.ruby != nil:
 		o.BreakAs = b.ruby.breakAs
+	case c.stickyImage(b):
+		o.BreakAs = noBreakSpace
 	}
 	c.addRun(text.ParagraphRun{Object: o}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
 	c.cur.n++
+}
+
+// noBreakSpace is U+00A0 NO-BREAK SPACE, which UAX #14 classes GL: no
+// break after it, and none before it but after a space, a hyphen or a
+// break-after character (LB12, LB12a).
+const noBreakSpace = '\u00a0'
+
+// stickyImage reports the replaced box b of an img element in the inline
+// formatting context of a table cell of width auto in a document in quirks
+// mode, which has no soft wrap opportunity before or after it (Quirks Mode
+// Standard, 3.8). Chromium breaks there as before and after a no-break
+// space, which still breaks after a space or a hyphen before the image,
+// and the image's line breaks so too, not only its minimum content width.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sizes the auto
+//     cell of a 1px table in quirks mode 100px wide for two 50px img
+//     elements, for two input elements of type image, for two object
+//     elements showing a picture and for aaa, an img and bbb, and 50px for
+//     two img elements a space parts, for aa- before an img, for two
+//     inline-blocks and two svg elements, for an img in a div in the cell
+//     and for a cell of a width; in limited-quirks and no-quirks mode
+//     50px for each.
+func (c *collector) stickyImage(b *box) bool {
+	return b.kind == kindReplaced && b.node != nil && b.node.Quirks&StickyImage != 0 &&
+		c.root.tpart == partCell && c.root.st.Width.Kind == css.Auto
 }
 
 // breakPara ends the current paragraph at a forced break.

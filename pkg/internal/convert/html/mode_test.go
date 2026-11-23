@@ -1,6 +1,7 @@
 package html
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -172,6 +173,41 @@ func TestQuirksMode_TableCells(t *testing.T) {
 		cell, nowrap := strings.Split(got["r"], "x")[1], strings.Split(strings.Split(got["g"], "+")[1], "x")[0]
 		if quirks && (cell != "50" || nowrap != "200") || !quirks && (cell != "70" || nowrap == "200") {
 			t.Errorf("quirks %v: cell %s, nowrap cell %s", quirks, got["r"], got["g"])
+		}
+	}
+}
+
+// TestQuirksMode_StickyImages locks the table cell width calculation quirk
+// (Quirks Mode Standard, 3.8): in quirks mode no soft wrap opportunity
+// opens before or after an img in the inline formatting context of a table
+// cell of width auto, so two 50px pictures side by side make a 1px table's
+// cell 100px wide; a space between them still breaks, as Chromium breaks
+// before a no-break space after one, and a cell of a width, a picture in a
+// div and every other mode keep the breaks.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws these four
+//     cells 100, 50, 50 and 50 px wide in quirks mode and 50 px wide each
+//     in limited-quirks and no-quirks mode.
+func TestQuirksMode_StickyImages(t *testing.T) {
+	t.Parallel()
+	img := `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(pngBytes(t, 50, 20)) + `">`
+	table := func(class, cell, content string) string {
+		return `<table style="width: 1px" cellspacing=0 cellpadding=0><tr><td class=` + class + cell + `>` + content + `</td></tr></table>`
+	}
+	body := `<style>@page { size: 400px 300px; margin: 0 } body { margin: 0 } .r { background: red } .g { background: lime } .m { background: magenta } .k { background: cyan }</style>` +
+		table("r", "", img+img) + table("g", "", img+" "+img) + table("m", ` style="width: 10px"`, img+img) + table("k", "", "<div>"+img+img+"</div>")
+	for _, dt := range []string{"", `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">`, "<!DOCTYPE html>"} {
+		got := pxBoxes(convertDoc(t, dt+body, Options{PreferCSSPageSize: true}))[0]
+		want := map[string]string{"r": "50", "g": "50", "m": "50", "k": "50"}
+		if dt == "" {
+			want["r"] = "100"
+		}
+		for c, w := range want {
+			if width := strings.Split(strings.Split(got[c], "+")[1], "x")[0]; width != w {
+				t.Errorf("doctype %q: cell %s is %s px wide, want %s", dt, c, width, w)
+			}
 		}
 	}
 }

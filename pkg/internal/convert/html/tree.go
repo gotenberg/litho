@@ -660,7 +660,9 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 	src, density := b.imageSource(n)
 	fallback := func(failed bool) []*layout.Node {
 		if alt == "" {
-			return emptyImage(n, st, failed)
+			out := emptyImage(n, st, failed)
+			out[0].Quirks = b.stickyImage()
+			return out
 		}
 		return []*layout.Node{{Kind: layout.Text, Style: parent, Text: alt}}
 	}
@@ -683,7 +685,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		scaled.Width, scaled.Height = pic.Width/density, pic.Height/density
 		pic = &scaled
 	}
-	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic}
+	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic, Quirks: b.stickyImage()}
 	node.ID, _ = attr(n, "id")
 	if lang, ok := attr(n, "lang"); ok {
 		node.Lang = strings.TrimSpace(lang)

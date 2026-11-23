@@ -347,7 +347,7 @@ func (b *builder) embeddedPicture(ctx context.Context, n *dom.Node, st *css.Styl
 		}
 		return nil
 	}
-	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic, Role: "Figure"}
+	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic, Role: "Figure", Quirks: b.stickyImage()}
 	node.ID, _ = attr(n, "id")
 	node.Alt, _ = attr(n, "title")
 	if lang, ok := attr(n, "lang"); ok {

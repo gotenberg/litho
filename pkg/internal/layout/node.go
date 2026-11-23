@@ -249,8 +249,9 @@ type Node struct {
 	// that such a container drops at its content's start or end (HTML
 	// Standard, 15.3.3), [FillsViewport] for the html and body elements
 	// (Quirks Mode Standard, 3.6 and 3.7), [QuirkyNowrap] for a cell of a
-	// nowrap attribute (3.9); a td or th also sizes its border box by its
-	// height (3.13). Zero for every other node.
+	// nowrap attribute (3.9), [StickyImage] for an img element (3.8); a
+	// td or th also sizes its border box by its height (3.13). Zero for
+	// every other node.
 	Quirks Quirks
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
@@ -320,6 +321,11 @@ const (
 	// QuirkyNowrap makes the width of a td or th of a nowrap attribute a
 	// minimum of its column (Quirks Mode Standard, 3.9).
 	QuirkyNowrap
+	// StickyImage marks the inline-level replaced box of an img element:
+	// in the inline formatting context of a table cell of width auto it
+	// has no soft wrap opportunity before or after it (Quirks Mode
+	// Standard, 3.8).
+	StickyImage
 )
 
 // Options parametrises one [Layout] call.

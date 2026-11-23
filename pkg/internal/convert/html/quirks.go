@@ -60,3 +60,15 @@ func quirksOf(n *dom.Node, st *css.Style) layout.Quirks {
 	}
 	return q
 }
+
+// stickyImage returns the quirk of the replaced box of an img element, an
+// input element of type image or an object or embed element showing a
+// picture, in a document in quirks mode (Quirks Mode Standard, 3.8, which
+// names img elements; Chromium treats the other three as it treats an
+// img): see [layout.StickyImage].
+func (b *builder) stickyImage() layout.Quirks {
+	if b.frameOpts.mode != css.Quirks {
+		return 0
+	}
+	return layout.StickyImage
+}
