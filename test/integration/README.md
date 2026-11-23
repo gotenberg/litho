@@ -345,6 +345,20 @@ Adding a new corpus means dropping `corpus/<name>/manifest.json` with a `fetch` 
 
 A new corpus becomes regression-gated only after the next `make corpus-baseline` commit; until then it runs and scores but cannot fail `make corpus-check`.
 
+### The application a conversion is judged against
+
+A converter corpus scores litho against the PDF the source's own application prints, and that application decides what a conversion should look like:
+
+| Formats            | Application                                             | Reference                                                 |
+| ------------------ | ------------------------------------------------------- | --------------------------------------------------------- |
+| DOCX, XLSX, PPTX   | Microsoft Office, as Office for the web prints the file | built through Microsoft Graph                             |
+| ODT, ODS, ODP, CSV | LibreOffice, as Writer, Calc and Impress print the file | built with the pinned Gotenberg image's LibreOffice route |
+| HTML, Markdown     | Chromium, as it prints the page                         | built with the pinned Gotenberg image's Chromium route    |
+
+For the Microsoft formats, Office for the web is Microsoft Office: no behaviour is held back because another edition of Office is believed to print the file otherwise, and a rule that is Office's alone leaves the OpenDocument corpora unmoved, as a rule that is LibreOffice's alone leaves the Microsoft ones. A converter fault is a difference from the application's page.
+
+One limit: a behaviour of the reference that changes nothing a reader of the page sees and makes the PDF worse is not copied. Text the reference draws as outlines stays text, a link the reference resolves to nowhere stays a working link, and a description stays in the structure tree, not on the page. Where such a reference would misjudge a conversion, the rig is told what the page holds (`expectedText`, the upload-link rule of the `diff` feature) and the corpus's `FIXTURES.md` records the fixture and the reason; the converter is not bent to it. For HTML, where Chromium's PDF departs from both the specification and Chromium's own screen, litho keeps the specification.
+
 ### Coverage: craft a litho fixture
 
 When a change touches a construct no corpus file reaches, add a fixture to the litho/pdf corpus so the gate covers it. A fix measured only on throwaway files is protected by nothing once it lands: a later change can undo it and the gate stays green.
