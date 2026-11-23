@@ -306,9 +306,11 @@ func (r *chartReader) read(ch *Element) {
 	r.table = readLocalTable(ch.Child(NSTable, "table"))
 	if t := ch.Child(NSChart, "title"); t != nil {
 		c.Title = r.title(t, 13, false)
+		r.placeTitle(ch, t, c.Title)
 	}
 	if t := ch.Child(NSChart, "subtitle"); t != nil {
 		c.Subtitle = r.title(t, 11, false)
+		r.placeTitle(ch, t, c.Subtitle)
 	}
 	if lg := ch.Child(NSChart, "legend"); lg != nil {
 		r.legend(lg)
@@ -361,6 +363,30 @@ func (r *chartReader) placedPlot(ch, pa *Element) *chart.ManualLayout {
 	}
 	clamp := func(v float64) float64 { return math.Max(0, math.Min(v, 1)) }
 	return &chart.ManualLayout{X: clamp(x / w), Y: clamp(y / h), Width: clamp(bw / w), Height: clamp(bh / h), Inner: inner}
+}
+
+// placeTitle keeps the title t of the chart ch, read as tt, at the
+// top-left corner its svg:x and svg:y state (ODF 1.3 Part 3, those
+// attributes of chart:title and chart:subtitle), where LibreOffice draws
+// it, in fractions of the chart's size.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf141914.ods's chart is 40.45 cm wide and its
+//     title "AF" stands 8.31 cm from its left edge, where LibreOffice
+//     prints it, on the chart's first page.
+func (r *chartReader) placeTitle(ch, t *Element, tt *chart.Title) {
+	if tt == nil {
+		return
+	}
+	w, okW := Length(ch.A(NSSVG, "width"))
+	h, okH := Length(ch.A(NSSVG, "height"))
+	x, okX := Length(t.A(NSSVG, "x"))
+	y, okY := Length(t.A(NSSVG, "y"))
+	if !okW || !okH || !okX || !okY || !(w > 0) || !(h > 0) {
+		return
+	}
+	tt.Layout = &chart.ManualLayout{X: math.Max(0, math.Min(x/w, 1)), Y: math.Max(0, math.Min(y/h, 1))}
 }
 
 // title reads a chart:title or chart:subtitle.

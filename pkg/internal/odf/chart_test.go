@@ -452,3 +452,16 @@ func TestChartFromDocument_ScatterSeriesTakeTheFirstDomain(t *testing.T) {
 		t.Errorf("second series x values = %+v, want the first series' %+v", b.Categories, a.Categories)
 	}
 }
+
+// TestChartFromDocument_PlacedTitle keeps a title at the top-left corner
+// the file states, in fractions of the chart's size, and leaves one
+// without a position to the layout.
+func TestChartFromDocument_PlacedTitle(t *testing.T) {
+	c := readODFChart(t, chartContent("", "bar", `<chart:title svg:x="4cm" svg:y="0.9cm"><text:p>Sales</text:p></chart:title><chart:subtitle><text:p>2025</text:p></chart:subtitle>`, series))
+	if l := c.Title.Layout; l == nil || math.Abs(l.X-0.25) > 1e-9 || math.Abs(l.Y-0.1) > 1e-9 {
+		t.Errorf("title layout = %+v, want 0.25, 0.1", l)
+	}
+	if c.Subtitle == nil || c.Subtitle.Layout != nil {
+		t.Errorf("subtitle without a position = %+v", c.Subtitle)
+	}
+}
