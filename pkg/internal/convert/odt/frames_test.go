@@ -264,3 +264,31 @@ func TestDefaultFillFillsNoFrame(t *testing.T) {
 		}
 	}
 }
+
+// TestBuiltinFrame locks that a frame whose style's parent is Frame, which
+// the document does not define, takes Writer's built-in Frame (see
+// [builtinFrame], which holds the measurements): centred, its text inside
+// a padding and a border, and that a document's own Frame replaces it.
+func TestBuiltinFrame(t *testing.T) {
+	auto := `<style:style style:name="fr1" style:family="graphic" style:parent-style-name="Frame"/>`
+	words := strings.Repeat("word ", 120)
+	body := `<text:p>Before.</text:p><text:p><draw:frame draw:style-name="fr1" draw:name="F" text:anchor-type="paragraph" svg:width="4cm" svg:height="2cm"><draw:text-box><text:p>IN</text:p></draw:text-box></draw:frame>` + words + `</text:p>`
+	for _, tc := range []struct {
+		styles string
+		x      float64
+	}{{"", 245.26}, {`<style:style style:name="Frame" style:family="graphic"/>`, 56.69}} {
+		pg := convertDoc(t, doc{styles: tc.styles, contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+		found := false
+		for _, r := range runs(pg) {
+			if strings.TrimSpace(r.text) == "IN" {
+				found = true
+				if !near(r.x, tc.x, 0.3) {
+					t.Errorf("styles %q: IN at x %.2f, want %.2f", tc.styles, r.x, tc.x)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("styles %q: no IN", tc.styles)
+		}
+	}
+}

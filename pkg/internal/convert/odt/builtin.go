@@ -76,6 +76,63 @@ func (b *builder) builtinLayers(name, kind string) []odf.Props {
 	return out
 }
 
+// builtinFrame holds the graphic properties of Writer's built-in style
+// Frame (sw/source/core/doc/DocumentStylePoolManager.cxx,
+// RES_POOLFRM_FRAME), which a frame's style may name as its parent
+// without the document defining it: 0.201 cm margins, a 0.15 cm padding
+// inside a 0.06 pt black border, parallel wrap, at the top of its
+// paragraph's content and centred across it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/bnc800714.fodt, which defines no
+//     style, prints its frame of parent Frame in a black hairline 0.2 cm
+//     inside its line and 0.15 cm outside its text.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 4 by 2 cm frame of
+//     parent Frame anchored to the second paragraph of a document that
+//     defines no style prints 0.2 cm below the paragraph's top, centred
+//     between the margins, outlined in black, its text 0.15 cm inside,
+//     the paragraph's words on both sides of it.
+var builtinFrame = [][2]string{
+	{"fo:margin-left", "0.201cm"},
+	{"fo:margin-right", "0.201cm"},
+	{"fo:margin-top", "0.201cm"},
+	{"fo:margin-bottom", "0.201cm"},
+	{"fo:padding", "0.15cm"},
+	{"fo:border", "0.06pt solid #000000"},
+	{"style:wrap", "parallel"},
+	{"style:number-wrapped-paragraphs", "no-limit"},
+	{"style:vertical-pos", "top"},
+	{"style:vertical-rel", "paragraph-content"},
+	{"style:horizontal-pos", "center"},
+	{"style:horizontal-rel", "paragraph-content"},
+}
+
+// graphicProps returns the graphic properties of the graphic style name
+// ([odf.Styles.Resolve]), Writer's built-in Frame ([builtinFrame]) under
+// its chain when the chain ends in that name and the document does not
+// define it.
+func (b *builder) graphicProps(name string) odf.Props {
+	chain := b.styles.Chain(b.scope, odf.FamilyGraphic, name)
+	root := name
+	if len(chain) > 0 {
+		root = chain[0].Parent
+	}
+	if root != "Frame" || b.styles.Style(b.scope, odf.FamilyGraphic, root) != nil {
+		return b.styles.Resolve(b.scope, odf.FamilyGraphic, name, odf.GraphicProps)
+	}
+	el := &odf.Element{}
+	for _, a := range builtinFrame {
+		space, local := splitKey(a[0])
+		el.Attr = append(el.Attr, xmlAttr(space, local, a[1]))
+	}
+	p := b.styles.Default(odf.FamilyGraphic, odf.GraphicProps).Over(odf.PropsOf(el))
+	for _, st := range chain {
+		p = p.Over(st.Props(odf.GraphicProps))
+	}
+	return p
+}
+
 // splitKey returns the namespace and local name of a property key.
 func splitKey(key string) (string, string) {
 	for i := 0; i < len(key); i++ {

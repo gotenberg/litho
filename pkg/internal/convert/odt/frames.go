@@ -246,7 +246,7 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 	}
 	g.x, _ = odf.Length(c.A(odf.NSSVG, "x"))
 	g.y, _ = odf.Length(c.A(odf.NSSVG, "y"))
-	g.props = b.styles.Resolve(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"), odf.GraphicProps)
+	g.props = b.graphicProps(c.A(odf.NSDraw, "style-name"))
 	g.wrap = g.props.Get("style:wrap")
 	g.hpos, g.hrel = g.props.Get("style:horizontal-pos"), g.props.Get("style:horizontal-rel")
 	g.vpos, g.vrel = g.props.Get("style:vertical-pos"), g.props.Get("style:vertical-rel")
