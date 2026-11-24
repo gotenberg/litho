@@ -258,10 +258,9 @@ func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 // relative images and links resolve in [WithResources] or against
 // [WithBaseURL]. The raw HTML a Markdown document holds is kept,
 // unsanitised: no script runs. [models.Limits.MaxConvertInputBytes] caps the
-// Markdown, not the HTML it renders to. The default template states no
-// title; a template that writes <title>{{ .Title }}</title> titles the
+// Markdown, not the HTML it renders to. The default template titles the
 // document with its first heading, which a band of [WithHeader] or
-// [WithFooter] then shows as string(document-title).
+// [WithFooter] shows as string(document-title).
 func FromMarkdown(src io.Reader, opts ...MarkdownOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {

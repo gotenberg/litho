@@ -71,7 +71,6 @@ func TestConvert_BandsInMarkdown(t *testing.T) {
 	src := "# Field notes\n\nIntro.\n\n## Tides\n\nLow water at noon.\n"
 	var out bytes.Buffer
 	rep, err := FromMarkdown(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)),
-		WithMarkdownTemplate(`<!doctype html><title>{{ .Title }}</title>{{ toHTML }}`),
 		WithUserStylesheet(`h2 { string-set: section content(text); break-before: page }`),
 		WithFooter(models.PageBand{
 			HTML: `<span class="t"></span><span class="s"></span>`,

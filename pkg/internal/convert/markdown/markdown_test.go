@@ -69,7 +69,7 @@ func TestDefaultTemplate_WrapsTheRendererOutput(t *testing.T) {
 		got := toHTML(t, []byte(src))
 		body := md.ToHTML([]byte(src), nil, nil)
 		head, rest, ok := bytes.Cut(got, []byte("<body>"))
-		if !ok || !bytes.Equal(head, []byte(`<!doctype html><html><head><meta charset="utf-8"></head>`)) {
+		if !ok || !bytes.HasPrefix(head, []byte(`<!doctype html><html><head><meta charset="utf-8"><title>`)) {
 			t.Errorf("%q: wrapper %q", src, head)
 			continue
 		}
@@ -96,13 +96,8 @@ func TestFirstHeading(t *testing.T) {
 			t.Errorf("firstHeading(%.40q) = %.40q, want %.40q", src, got, want)
 		}
 	}
-	tmpl, err := parseTemplate(`<title>{{ .Title }}</title>{{ toHTML }}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, title := mustRender(t, []byte("# 1 < 2 & \"3\"\n"))
-	if got, _, err := tmpl.render(context.Background(), body, title, 1<<30); err != nil || !bytes.Contains(got, []byte("<title>1 &lt; 2 &amp; &#34;3&#34;</title>")) {
-		t.Errorf("title not escaped: %s, %v", got, err)
+	if got := toHTML(t, []byte("# 1 < 2 & \"3\"\n")); !bytes.Contains(got, []byte("<title>1 &lt; 2 &amp; &#34;3&#34;</title>")) {
+		t.Errorf("title not escaped: %s", got)
 	}
 }
 
@@ -118,10 +113,8 @@ func TestConvert_LaysOutTheMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Markdown states no title, and the default template takes none from
-	// the first heading.
-	if doc.Metadata.Title != "" {
-		t.Errorf("title %q, want none", doc.Metadata.Title)
+	if doc.Metadata.Title != "Report" {
+		t.Errorf("title %q", doc.Metadata.Title)
 	}
 	if len(doc.Warnings) != 0 {
 		t.Errorf("warnings %+v", doc.Warnings)

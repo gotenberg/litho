@@ -21,7 +21,7 @@
 // The rendered HTML is placed in a template of html/template, the
 // caller's or [DefaultTemplate]:
 //
-//	<!doctype html><html><head><meta charset="utf-8"></head><body>{{ toHTML }}</body></html>
+//	<!doctype html><html><head><meta charset="utf-8"><title>{{ .Title }}</title></head><body>{{ toHTML }}</body></html>
 //
 // The template sees one function and one field. {{ toHTML }} is the HTML
 // the Markdown renders to, inserted as HTML in element content; elsewhere
@@ -29,9 +29,7 @@
 // text of the HTML. {{ .Title }} is the text of the first heading, its
 // whitespace collapsed, empty without one, escaped for its context. The
 // template carries what Markdown cannot say: the stylesheet, the fonts,
-// the @page rules, the title. The default states no title: Markdown
-// states none, and a template titles the document with its first heading
-// only by writing {{ .Title }} into its title element.
+// the @page rules, the title.
 //
 // A template is checked before the source is read. It fails with
 // [typeset.ErrInvalidOptions] when it does not parse, when no toHTML call is

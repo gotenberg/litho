@@ -13,10 +13,9 @@ import (
 )
 
 // DefaultTemplate is the template a Markdown document renders into when
-// [Options.Template] is empty: a document without a stylesheet or a title.
-// Markdown states no title, and a heading names a part of a document, so
-// only a template that writes {{ .Title }} titles it with its first one.
-const DefaultTemplate = `<!doctype html><html><head><meta charset="utf-8"></head><body>{{ toHTML }}</body></html>`
+// [Options.Template] is empty: a document without a stylesheet whose title
+// is the first heading of the source.
+const DefaultTemplate = `<!doctype html><html><head><meta charset="utf-8"><title>{{ .Title }}</title></head><body>{{ toHTML }}</body></html>`
 
 // maxTemplateBytes caps the text of a template: 1 MiB. Anti-DoS guard, not
 // spec-mandated: the template is caller text parsed in memory, and a page
