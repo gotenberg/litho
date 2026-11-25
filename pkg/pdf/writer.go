@@ -2078,10 +2078,19 @@ func (w *Writer) RemoveEncryption() {
 }
 
 // SetFormField sets the value of an AcroForm field by its fully qualified name.
-// Uses incremental update. Sets /NeedAppearances on the AcroForm so viewers
-// regenerate the visual appearance. The mutation is queued and applied when
+// Uses incremental update. The mutation is queued and applied when
 // [Writer.WriteTo] is called, which returns [ErrFormFieldNotFound] and writes
 // nothing when no field has the name.
+//
+// Each widget of a text field or a combo box is given an appearance that
+// shows the new value on one line, in the font and colour its /DA names (ISO
+// 32000-1, 12.7.3.3), so a viewer and [Writer.FlattenForm] show the new value
+// rather than the one the stored appearance drew. A value outside
+// WinAnsiEncoding is drawn with a program the fonts of [WithFieldFonts]
+// offer; one no font draws leaves the widgets with no appearance (see
+// [WithFieldFonts]). /NeedAppearances is set on the AcroForm, so a viewer
+// that honours it lays the value out itself: aligned, wrapped or combed as
+// the field asks. A password field and a list box keep their appearances.
 //
 // A check box or a radio button group takes value as the name of a state, one
 // [models.FormField.States] lists or "Off", and each of its widgets shows that
@@ -2097,13 +2106,14 @@ func (w *Writer) RemoveEncryption() {
 // A button whose widgets state no appearance, and a choice field with no
 // options, take any value. Use [Writer.SetFormFieldValues] to select several
 // items of a list box.
-func (w *Writer) SetFormField(name, value string) {
+func (w *Writer) SetFormField(name, value string, opts ...FormFieldOption) {
 	if w.refuseAfterRemediation("SetFormField") != nil {
 		return
 	}
+	fieldOpts := formFieldOptions(opts)
 	w.queue("SetFormField", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.SetFormField(ctx, alloc, doc, name, value)
+			return mutations.SetFormField(ctx, alloc, doc, name, value, fieldOpts)
 		},
 	})
 }
@@ -2116,20 +2126,30 @@ func (w *Writer) SetFormField(name, value string) {
 //
 // The field must allow several selections ([models.FormField.MultiSelect]),
 // unless values holds one value, which any field takes as SetFormField takes
-// it. [Writer.WriteTo] returns [ErrFormFieldNotFound] when no field has the
-// name, and [ErrFormFieldValue] for an empty values, for several values on a
+// it, and draws a combo box's widgets as SetFormField does. [Writer.WriteTo]
+// returns [ErrFormFieldNotFound] when no field has the name, and [ErrFormFieldValue] for an empty values, for several values on a
 // field that allows one, and for a value none of the field's options holds.
 // Nothing is written then. values is copied.
-func (w *Writer) SetFormFieldValues(name string, values []string) {
+func (w *Writer) SetFormFieldValues(name string, values []string, opts ...FormFieldOption) {
 	if w.refuseAfterRemediation("SetFormFieldValues") != nil {
 		return
 	}
 	values = slices.Clone(values)
+	fieldOpts := formFieldOptions(opts)
 	w.queue("SetFormFieldValues", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.SetFormFieldValues(ctx, alloc, doc, name, values)
+			return mutations.SetFormFieldValues(ctx, alloc, doc, name, values, fieldOpts)
 		},
 	})
+}
+
+// formFieldOptions applies opts to the options of a form field edit.
+func formFieldOptions(opts []FormFieldOption) mutations.FieldOptions {
+	var cfg formFieldOpts
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return mutations.FieldOptions{Fonts: cfg.fonts.source}
 }
 
 // FlattenForm bakes form field appearances into page content streams and

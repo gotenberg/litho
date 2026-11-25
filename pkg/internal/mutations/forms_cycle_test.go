@@ -97,7 +97,7 @@ func TestFieldValueOwner_CycleRefuses(t *testing.T) {
 func TestRootFieldRef_CycleTerminates(t *testing.T) {
 	ctx, doc := cyclicFieldParentDoc(t)
 
-	if _, ok := rootFieldRef(ctx, doc, ast.PdfIndirectRef{ObjectNum: 6}); !ok {
+	if _, ok := rootFieldRef(ctx, nil, doc, ast.PdfIndirectRef{ObjectNum: 6}); !ok {
 		t.Error("rootFieldRef found no reference to return")
 	}
 }

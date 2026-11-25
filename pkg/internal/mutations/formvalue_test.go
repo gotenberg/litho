@@ -49,7 +49,7 @@ func setValue(t *testing.T, field, value string) ast.PdfDict {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
-	if err := SetFormField(ctx, alloc, doc, field, value); err != nil {
+	if err := SetFormField(ctx, alloc, doc, field, value, FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField(%q, %q): %v", field, value, err)
 	}
 	for _, obj := range alloc.Pending() {

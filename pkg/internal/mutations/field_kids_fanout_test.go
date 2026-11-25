@@ -79,18 +79,18 @@ func TestFieldWalks_SharedKidsArrayFanOut(t *testing.T) {
 	}{
 		{"SetFormField", sharedFieldKidsPDF(), func(ctx context.Context, t *testing.T, data []byte) error {
 			doc, alloc := newMutationDoc(t, data)
-			return SetFormField(ctx, alloc, doc, "p.c", "y")
+			return SetFormField(ctx, alloc, doc, "p.c", "y", FieldOptions{})
 		}},
 		{"SetFormField distinct names", distinctNamesFieldsPDF(40), func(ctx context.Context, t *testing.T, data []byte) error {
 			doc, alloc := newMutationDoc(t, data)
-			if err := SetFormField(ctx, alloc, doc, "absent", "y"); err == nil {
+			if err := SetFormField(ctx, alloc, doc, "absent", "y", FieldOptions{}); err == nil {
 				return fmt.Errorf("setting an absent field succeeded")
 			}
 			return nil
 		}},
 		{"SetFormField distinct names found", distinctNamesFieldsPDF(3), func(ctx context.Context, t *testing.T, data []byte) error {
 			doc, alloc := newMutationDoc(t, data)
-			return SetFormField(ctx, alloc, doc, "b.a.b.leaf", "y")
+			return SetFormField(ctx, alloc, doc, "b.a.b.leaf", "y", FieldOptions{})
 		}},
 		{"signedFieldWalk", sharedFieldKidsPDF(), func(ctx context.Context, t *testing.T, data []byte) error {
 			doc, _ := newMutationDoc(t, data)

@@ -375,6 +375,15 @@ func resolveDictAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	return document.ResolveDict(ctx, doc, obj)
 }
 
+// fieldParentAllocFirst is [document.ResolveFieldParent] preferring the parent
+// alloc has queued at its number: a widget whose field an earlier edit set
+// reads the value that edit wrote.
+func fieldParentAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dict ast.PdfDict, seen map[int]bool) (ast.PdfObject, ast.PdfDict, bool) {
+	return document.ResolveFieldParentWith(dict, seen, func(obj ast.PdfObject) (ast.PdfDict, error) {
+		return resolveDictAllocFirst(ctx, alloc, doc, obj)
+	})
+}
+
 // resolveArrayAllocFirst resolves obj to an array as [document.ResolveArray]
 // does, preferring the object alloc has queued at its number.
 func resolveArrayAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (ast.PdfArray, error) {

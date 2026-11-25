@@ -266,7 +266,7 @@ func (t *flattenTags) bake(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	t.replaceKid(ownerRef, annotObj, kid)
 	if isFormElement(ctx, alloc, doc, t.root, owner) {
 		if _, set := t.roles[ownerRef.ObjectNum]; !set {
-			t.roles[ownerRef.ObjectNum] = fieldRole(ctx, doc, annotDict)
+			t.roles[ownerRef.ObjectNum] = fieldRole(ctx, doc, alloc, annotDict)
 		}
 	}
 	return fmt.Sprintf("%s <</MCID %d>> BDC ", tag.String(), mcid), " EMC"
@@ -824,12 +824,12 @@ func isFormElement(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // whose value was converted to text in a non-interactive document, which is
 // what flattening does to a text or choice field; it has no role for a
 // signature field, whose flattened appearance is static content like any other.
-func fieldRole(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
-	fieldType, _ := inheritedFieldTypeAndValue(ctx, doc, annotDict)
+func fieldRole(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) ast.PdfName {
+	fieldType, _ := inheritedFieldTypeAndValue(ctx, doc, alloc, annotDict)
 	if fieldType != "Btn" {
 		return "tv"
 	}
-	flags := inheritedFieldFlags(ctx, doc, annotDict)
+	flags := inheritedFieldFlags(ctx, doc, alloc, annotDict)
 	switch {
 	case flags&buttonFlagPushbutton != 0:
 		return "pb"
@@ -841,14 +841,14 @@ func fieldRole(ctx context.Context, doc *document.Document, annotDict ast.PdfDic
 
 // inheritedFieldFlags reads /Ff from the widget or the nearest ancestor that
 // states it (ISO 32000-1, 12.7.3.1).
-func inheritedFieldFlags(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) int {
+func inheritedFieldFlags(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) int {
 	dict := annotDict
 	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldAncestorDepth && dict != nil; depth++ {
 		if flags, ok := intEntry(ctx, doc, dict["Ff"]); ok {
 			return flags
 		}
-		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		_, parent, ok := fieldParentAllocFirst(ctx, alloc, doc, dict, seen)
 		if !ok {
 			break
 		}

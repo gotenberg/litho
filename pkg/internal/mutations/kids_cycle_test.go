@@ -33,7 +33,7 @@ func TestSetFormField_KidsCycleTerminates(t *testing.T) {
 	ctx, doc, alloc := setFormDoc(t, kidsCycleObjs())
 
 	// A name the document does not carry, so the walk cannot exit early.
-	err := SetFormField(ctx, alloc, doc, "no-such-field", "bob")
+	err := SetFormField(ctx, alloc, doc, "no-such-field", "bob", FieldOptions{})
 	if err == nil {
 		t.Fatal("setting an absent field reported success")
 	}
@@ -56,7 +56,7 @@ func TestSetFormField_NestedKidStillSettable(t *testing.T) {
 		"<< /FT /Tx /T (inner) >>",
 	})
 
-	if err := SetFormField(ctx, alloc, doc, "outer.inner", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "outer.inner", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField on a nested field: %v", err)
 	}
 	field, ok := alloc.Pending()[5].(ast.PdfDict)
@@ -96,7 +96,7 @@ func TestSetFormField_SharedSubtreeFoundByTheSecondPath(t *testing.T) {
 		"<< /FT /Tx /T (leaf) >>",
 	})
 
-	if err := SetFormField(ctx, alloc, doc, "b.mid.leaf", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "b.mid.leaf", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField on the second path: %v", err)
 	}
 	field, ok := alloc.Pending()[7].(ast.PdfDict)

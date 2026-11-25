@@ -40,6 +40,18 @@ func ResolveFieldParent(
 	dict ast.PdfDict,
 	seen map[int]bool,
 ) (ast.PdfObject, ast.PdfDict, bool) {
+	return ResolveFieldParentWith(dict, seen, func(obj ast.PdfObject) (ast.PdfDict, error) {
+		return ResolveDict(ctx, doc, obj)
+	})
+}
+
+// ResolveFieldParentWith is [ResolveFieldParent] resolving the parent with
+// resolve, for a caller that holds newer copies of the fields than doc.
+func ResolveFieldParentWith(
+	dict ast.PdfDict,
+	seen map[int]bool,
+	resolve func(ast.PdfObject) (ast.PdfDict, error),
+) (ast.PdfObject, ast.PdfDict, bool) {
 	parentObj, ok := dict["Parent"]
 	if !ok {
 		return nil, nil, false
@@ -50,7 +62,7 @@ func ResolveFieldParent(
 		}
 		seen[ref.ObjectNum] = true
 	}
-	parent, err := ResolveDict(ctx, doc, parentObj)
+	parent, err := resolve(parentObj)
 	if err != nil || parent == nil {
 		return nil, nil, false
 	}

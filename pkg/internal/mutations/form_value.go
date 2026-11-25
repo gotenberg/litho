@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -13,8 +14,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// Field flags, bit n of /Ff being 1<<(n-1) (ISO 32000-1, Tables 226 and 230).
+// Field flags, bit n of /Ff being 1<<(n-1) (ISO 32000-1, Tables 226, 228 and
+// 230).
 const (
+	fieldFlagPassword    = 1 << 13
 	fieldFlagPushbutton  = 1 << 16
 	fieldFlagCombo       = 1 << 17
 	fieldFlagEdit        = 1 << 18
@@ -74,9 +77,11 @@ func (e fieldEntries) with(ctx context.Context, doc *document.Document, obj ast.
 
 // writeFieldValue checks val against the field dict, the field named name
 // whose entries are e, and writes it: /V, the /I a list box's selections take,
-// and the appearance state of each widget of a button. The field is written
-// at ref, and not at all when ref is zero, a field written directly in its
-// parent's /Kids, which no update can address.
+// the appearance state of each widget of a button, and the appearance of each
+// widget of a text field or a combo box, which look draws (see
+// [drawFieldAppearances]). The field is written at ref, and not at all when
+// ref is zero, a field written directly in its parent's /Kids, which no update
+// can address.
 //
 // A value the field cannot hold returns [ErrFormFieldValue] and writes
 // nothing (see [checkFieldValue]).
@@ -85,7 +90,7 @@ func (e fieldEntries) with(ctx context.Context, doc *document.Document, obj ast.
 //
 //   - pdfjs checkbox-bad-appearance.pdf: a check box set to a string /V hid
 //     the whole form from litho's reader, on entirely well-formed input.
-func writeFieldValue(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, ref ast.PdfIndirectRef, dict ast.PdfDict, name string, e fieldEntries, val fieldValue) error {
+func writeFieldValue(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, ref ast.PdfIndirectRef, dict ast.PdfDict, name string, e fieldEntries, val fieldValue, look *fieldAppearances) error {
 	if err := checkFieldValue(ctx, doc, alloc, dict, name, e, val); err != nil {
 		return err
 	}
@@ -114,8 +119,85 @@ func writeFieldValue(ctx context.Context, doc *document.Document, alloc *writer.
 	if ref.ObjectNum > 0 {
 		alloc.AllocAt(ref.ObjectNum, newDict)
 	}
-	if e.ft == "Btn" {
+	switch {
+	case e.ft == "Btn":
 		setButtonAppearanceStates(ctx, doc, alloc, newDict, val.values[0])
+	case ref.ObjectNum > 0 && drawsTextAppearance(e):
+		// The widgets read the value from the field written above.
+		return drawFieldAppearances(ctx, doc, alloc, name, newDict, look)
+	}
+	return nil
+}
+
+// fieldAppearances is what [drawFieldAppearances] draws a field's value
+// with: the catalog, whose form holds the fonts a /DA names, the form's own
+// /DA, and the fonts that draw a value outside WinAnsiEncoding.
+type fieldAppearances struct {
+	catalog ast.PdfDict
+	da      ast.PdfObject
+	fonts   *textFonts
+}
+
+// drawsTextAppearance reports whether a field with entries e shows its value
+// as one line of text, the appearance [generatedAppearance] draws: a text
+// field that does not mask its value, and a combo box (ISO 32000-1, 12.7.4.3
+// and 12.7.4.4). A password field shows its value masked, and a list box
+// lists its options with the selections marked.
+func drawsTextAppearance(e fieldEntries) bool {
+	switch e.ft {
+	case "Tx":
+		return e.ff&fieldFlagPassword == 0
+	case "Ch":
+		return e.ff&fieldFlagCombo != 0
+	}
+	return false
+}
+
+// drawFieldAppearances draws the value the field dict, named name, now holds
+// into the normal appearance of each of its widgets, as a viewer builds it
+// from /V and /DA (ISO 32000-1, 12.7.3.3), and drops the other appearances,
+// which show the previous value. A widget keeps no appearance when the value
+// is empty, and when no font draws it, which is logged as a warning: a viewer
+// that honours the form's /NeedAppearances draws it from the value, and
+// [FlattenForm] draws it with the fonts it is offered.
+//
+// The stored appearance showed the previous value, and [FlattenForm] bakes a
+// stored appearance that draws text, so a flattened form showed the value the
+// field had before it was set, as did every viewer that ignores
+// /NeedAppearances.
+func drawFieldAppearances(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, name string, dict ast.PdfDict, look *fieldAppearances) error {
+	for _, w := range fieldWidgets(ctx, doc, alloc, dict) {
+		ap, built, err := generatedWidgetAppearance(ctx, doc, alloc, look.catalog, w.dict, look.da, look.fonts)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			doc.Logger.Warn("no font draws the value of a form field: its widget keeps no appearance, and a viewer draws it from the value",
+				slog.String("field", name),
+				slog.Any("err", err),
+			)
+		}
+		if _, had := w.dict["AP"]; !built && !had {
+			continue
+		}
+		widget := w.dict
+		if w.obj != nil {
+			widget = make(ast.PdfDict, len(w.dict)+1)
+			maps.Copy(widget, w.dict)
+		}
+		if built {
+			widget["AP"] = ast.PdfDict{"N": alloc.Alloc(ap)}
+		} else {
+			delete(widget, "AP")
+		}
+		if w.obj == nil {
+			// The field is its own widget, and dict is the copy its caller
+			// wrote.
+			continue
+		}
+		if ref, ok := w.obj.(ast.PdfIndirectRef); ok {
+			alloc.AllocAt(ref.ObjectNum, widget)
+		}
 	}
 	return nil
 }
@@ -189,31 +271,39 @@ func buttonStates(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	return states
 }
 
-// buttonWidget is a widget of a button field: its object and dictionary.
-type buttonWidget struct {
+// fieldWidget is a widget of a field: its object and dictionary. The object
+// is nil when the field is its own widget.
+type fieldWidget struct {
 	obj  ast.PdfObject
 	dict ast.PdfDict
 }
 
-// buttonWidgets returns the widgets of the button field dict that carry an
-// appearance: the field itself when it is its widget, its kids otherwise. They
-// are read from alloc first.
-func buttonWidgets(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, dict ast.PdfDict) []buttonWidget {
+// fieldWidgets returns the widgets of the field dict: the field itself when
+// it is its widget (ISO 32000-1, 12.5.6.19), its kids otherwise. They are
+// read from alloc first.
+func fieldWidgets(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, dict ast.PdfDict) []fieldWidget {
 	kids, err := resolveArrayAllocFirst(ctx, alloc, doc, dict["Kids"])
 	if err != nil || kids == nil {
-		if _, hasAP := dict["AP"]; hasAP {
-			return []buttonWidget{{dict: dict}}
-		}
-		return nil
+		return []fieldWidget{{dict: dict}}
 	}
-	var out []buttonWidget
+	var out []fieldWidget
 	for _, kidObj := range kids {
 		kidDict, err := resolveDictAllocFirst(ctx, alloc, doc, kidObj)
 		if err != nil || kidDict == nil {
 			continue
 		}
-		if _, hasAP := kidDict["AP"]; hasAP {
-			out = append(out, buttonWidget{obj: kidObj, dict: kidDict})
+		out = append(out, fieldWidget{obj: kidObj, dict: kidDict})
+	}
+	return out
+}
+
+// buttonWidgets returns the [fieldWidgets] of the button field dict that
+// carry an appearance.
+func buttonWidgets(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, dict ast.PdfDict) []fieldWidget {
+	var out []fieldWidget
+	for _, w := range fieldWidgets(ctx, doc, alloc, dict) {
+		if _, hasAP := w.dict["AP"]; hasAP {
+			out = append(out, w)
 		}
 	}
 	return out

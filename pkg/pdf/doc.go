@@ -194,6 +194,8 @@
 //     [WithFlattenPrintedAnnotations], [WithFlattenJPEGQuality],
 //     [WithFlattenOverprintSimulation].
 //   - [Writer.FlattenForm] takes [FlattenFormOption]: [WithFlattenFonts].
+//   - [Writer.SetFormField] and [Writer.SetFormFieldValues] take
+//     [FormFieldOption]: [WithFieldFonts].
 //   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced

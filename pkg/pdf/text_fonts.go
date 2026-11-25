@@ -12,8 +12,9 @@ import (
 // FontSource offers the font programs that draw text the standard 14 fonts
 // cannot. A standard font writes its text in WinAnsiEncoding (ISO 32000-1,
 // Annex D.2), which covers Western European text and nothing else. For a
-// line outside it, [Writer.FlattenForm] with [WithFlattenFonts] and
-// [Writer.StampText] with [TextStamp.Fonts] take the first program the source
+// line outside it, [Writer.FlattenForm] with [WithFlattenFonts],
+// [Writer.SetFormField] and [Writer.SetFormFieldValues] with [WithFieldFonts],
+// and [Writer.StampText] with [TextStamp.Fonts] take the first program the source
 // offers that has a glyph for every character of the line, matched to the
 // standard font's family and style first, then any other, subset it to the
 // glyphs the line uses, and embed it as a Type0 font with the Identity-H
@@ -121,6 +122,25 @@ type flattenFormOpts struct {
 // [ErrNoFontCovers].
 func WithFlattenFonts(src FontSource) FlattenFormOption {
 	return func(o *flattenFormOpts) {
+		o.fonts = src
+	}
+}
+
+// FormFieldOption tunes [Writer.SetFormField] and [Writer.SetFormFieldValues].
+type FormFieldOption func(*formFieldOpts)
+
+type formFieldOpts struct {
+	fonts FontSource
+}
+
+// WithFieldFonts offers the fonts that draw a field's new value into the
+// appearance of its widgets when the form's own font cannot: a value outside
+// WinAnsiEncoding. Without it, or when no font it offers covers the value,
+// the widgets keep no appearance, which the Reader's logger records as a
+// warning: a viewer draws them from the value, and [Writer.FlattenForm] with
+// [WithFlattenFonts] draws them with its fonts.
+func WithFieldFonts(src FontSource) FormFieldOption {
+	return func(o *formFieldOpts) {
 		o.fonts = src
 	}
 }

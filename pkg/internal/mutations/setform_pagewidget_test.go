@@ -93,7 +93,7 @@ func TestSetFormFieldOnAPageOnlyWidget(t *testing.T) {
 	t.Parallel()
 
 	ctx, doc, alloc := setFormDoc(t, pageWidgetObjs("<< /Type /Catalog /Pages 2 0 R >>"))
-	if err := SetFormField(ctx, alloc, doc, "username", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "username", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestSetFormFieldRegistersIntoAnExistingForm(t *testing.T) {
 
 	ctx, doc, alloc := setFormDoc(t, pageWidgetObjs(
 		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [] /DA (/Helv 0 Tf 0 g) >> >>"))
-	if err := SetFormField(ctx, alloc, doc, "username", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "username", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField: %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestSetFormFieldOnARegisteredFieldIsUnchanged(t *testing.T) {
 
 	ctx, doc, alloc := setFormDoc(t, pageWidgetObjs(
 		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>"))
-	if err := SetFormField(ctx, alloc, doc, "username", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "username", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField: %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestSetFormFieldUsesTheQualifiedName(t *testing.T) {
 		"<< /T (outer) >>",
 	})
 
-	if err := SetFormField(ctx, alloc, doc, "outer.inner", "bob"); err != nil {
+	if err := SetFormField(ctx, alloc, doc, "outer.inner", "bob", FieldOptions{}); err != nil {
 		t.Fatalf("SetFormField: %v", err)
 	}
 	field, ok := alloc.Pending()[5].(ast.PdfDict)
@@ -209,7 +209,7 @@ func TestSetFormFieldUnknownNameStillFails(t *testing.T) {
 	t.Parallel()
 
 	ctx, doc, alloc := setFormDoc(t, pageWidgetObjs("<< /Type /Catalog /Pages 2 0 R >>"))
-	err := SetFormField(ctx, alloc, doc, "not-a-field", "bob")
+	err := SetFormField(ctx, alloc, doc, "not-a-field", "bob", FieldOptions{})
 	if err == nil {
 		t.Fatal("setting an absent field reported success")
 	}
@@ -245,7 +245,7 @@ func TestSetFormFieldUnknownNameIsErrFormFieldNotFound(t *testing.T) {
 			t.Parallel()
 
 			ctx, doc, alloc := setFormDoc(t, tc.objs)
-			err := SetFormField(ctx, alloc, doc, "not-a-field", "bob")
+			err := SetFormField(ctx, alloc, doc, "not-a-field", "bob", FieldOptions{})
 			if !errors.Is(err, ErrFormFieldNotFound) {
 				t.Fatalf("error = %v, want ErrFormFieldNotFound", err)
 			}
