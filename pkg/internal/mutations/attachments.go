@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // maxAttachmentTreeDepth caps EmbeddedFiles name-tree recursion in
@@ -181,6 +182,35 @@ func AddAttachment(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return AddAttachmentWithOptions(ctx, alloc, doc, name, data, AttachmentOptions{MimeType: mimeType})
 }
 
+// embeddedFileStream returns the embedded file stream for data, compressed
+// with FlateDecode (ISO 32000-1, 7.4.4) when that makes it smaller. /Params
+// /Size keeps the decoded length (ISO 32000-1, Table 46). ISO 19005-3 admits
+// FlateDecode on an embedded file, and readers decode it.
+//
+// # Corpus evidence
+//
+//   - probe, facturx: the 3,814-byte EN 16931 sample invoice embedded by
+//     remediation to Factur-X took 1,052 bytes compressed; veraPDF passes
+//     the PDF/A-3b output and the Factur-X validation finds what it found
+//     before.
+func embeddedFileStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
+	// The compressed bytes must save the /Filter entry they add. A negative
+	// limit would mean none, so a file too small to save it stays as it is.
+	limit := len(data) - len("/Filter /FlateDecode")
+	if limit <= 0 {
+		return ast.NewStream(dict, data), nil
+	}
+	compressed, ok, err := filter.CompressFlate(data, limit)
+	if err != nil {
+		return ast.PdfStream{}, err
+	}
+	if !ok {
+		return ast.NewStream(dict, data), nil
+	}
+	dict["Filter"] = ast.PdfName("FlateDecode")
+	return ast.NewStream(dict, compressed), nil
+}
+
 // AddAttachmentWithOptions embeds a file with full control over PDF/A-3+
 // associated-file metadata. Sets /Subtype, /AFRelationship, and optionally
 // adds the filespec to the catalog /AF array.
@@ -193,7 +223,10 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	if opts.MimeType != "" {
 		streamDict["Subtype"] = ast.PdfName(opts.MimeType)
 	}
-	fileStream := ast.NewStream(streamDict, data)
+	fileStream, err := embeddedFileStream(streamDict, data)
+	if err != nil {
+		return fmt.Errorf("compressing embedded file %q: %w", name, err)
+	}
 	fileStreamRef := alloc.Alloc(fileStream)
 
 	// Create the Filespec dictionary.
