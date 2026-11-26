@@ -78,3 +78,54 @@ func TestDedupICCInXObjects_SharedColourSpaceIndependentOfOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestInjectDefaultColorSpace_SharedFormResourcesIndependentOfOrder pins
+// which form the walk rewrites when two forms share one /Resources.
+//
+// /X1 and /X2 are identical forms whose /Resources is one indirect
+// dictionary. The walk patches that dictionary once, at its own object
+// number, and rewrites the form it reached it through, leaving the other as it
+// was (see [recurseColorSpacePatch]). It met the forms in Go's map order, so
+// which one was rewritten changed from run to run (CONTRIBUTING "Deterministic
+// output"). A full rewrite writes the same bytes either way, the two forms
+// being identical, so only the staged objects show the order.
+func TestInjectDefaultColorSpace_SharedFormResourcesIndependentOfOrder(t *testing.T) {
+	t.Parallel()
+
+	form := "0 0 10 10 re f"
+	formObj := fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources 6 0 R /Length %d >>\nstream\n%s\nendstream",
+		len(form), form)
+	data := walkOrderPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /X1 4 0 R /X2 5 0 R >> >> >>",
+		formObj,
+		formObj,
+		"<< /ProcSet [/PDF] >>",
+	})
+
+	ctx := context.Background()
+	outcomes := make(map[string]int)
+	// Go's map order walked /X2 first in about 1 run in 8 (1,259 of 10,240),
+	// so 256 runs all agreeing on the unsorted walk happen far less than once
+	// in a trillion.
+	const runs = 256
+	for range runs {
+		doc, alloc := newTestDoc(t, data)
+		catalog := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 1})
+		csArr := func() ast.PdfArray { return ast.PdfArray{ast.PdfName("DeviceRGB")} }
+		if _, err := injectDefaultColorSpace(ctx, alloc, doc, catalog, "DefaultCMYK", csArr, nil); err != nil {
+			t.Fatalf("injectDefaultColorSpace: %v", err)
+		}
+		pending := alloc.Pending()
+		_, x1 := pending[4]
+		_, x2 := pending[5]
+		_, shared := pending[6]
+		outcomes[fmt.Sprintf("shared=%v X1=%v X2=%v", shared, x1, x2)]++
+	}
+	// /X1 is walked first, so it is the form rewritten.
+	want := "shared=true X1=true X2=false"
+	if len(outcomes) != 1 || outcomes[want] != runs {
+		t.Fatalf("%d runs gave %v, want %q every run", runs, outcomes, want)
+	}
+}
