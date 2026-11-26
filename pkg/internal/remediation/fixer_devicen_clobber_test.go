@@ -122,7 +122,7 @@ func injectTestDefaultRGB(t *testing.T, alloc *writer.ObjAllocator, doc *documen
 		}
 		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
 	}
-	n, err := injectDefaultColorSpace(ctx, alloc, doc, catalog, "DefaultRGB", csArr)
+	n, err := injectDefaultColorSpace(ctx, alloc, doc, catalog, "DefaultRGB", csArr, nil)
 	if err != nil {
 		t.Fatalf("injectDefaultColorSpace: %v", err)
 	}

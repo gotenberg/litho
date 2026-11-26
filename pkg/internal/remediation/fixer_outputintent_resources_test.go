@@ -33,7 +33,7 @@ func TestInjectDefaultColorSpace_KeepsInheritedResources(t *testing.T) {
 	csArr := func() ast.PdfArray {
 		return ast.PdfArray{ast.PdfName("ICCBased"), ast.PdfIndirectRef{ObjectNum: 4}}
 	}
-	n, err := injectDefaultColorSpace(ctx, alloc, doc, catalog.Dict, "DefaultCMYK", csArr)
+	n, err := injectDefaultColorSpace(ctx, alloc, doc, catalog.Dict, "DefaultCMYK", csArr, nil)
 	if err != nil {
 		t.Fatalf("injectDefaultColorSpace: %v", err)
 	}

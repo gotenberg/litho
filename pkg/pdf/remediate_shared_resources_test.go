@@ -10,13 +10,14 @@ import (
 )
 
 // sharedFormResourcesPDF builds a page painting in DeviceRGB that draws two
-// identical forms, /X1 and /X2, whose /Resources is one indirect dictionary.
-// A PDF/A-1b remediation adds an sRGB output intent and injects /DefaultCMYK
-// into every resource dictionary the page reaches (ISO 19005-1, 6.2.3.3),
-// the shared one included.
+// identical forms painting in DeviceCMYK, /X1 and /X2, whose /Resources is
+// one indirect dictionary. The page mixes both device families, so a PDF/A-1b
+// remediation adds a CMYK output intent and injects /DefaultRGB into every
+// resource dictionary the page reaches (ISO 19005-1, 6.2.3.3), the shared one
+// included.
 func sharedFormResourcesPDF() []byte {
 	const content = "1 0 0 rg 10 10 50 50 re f\nq /X1 Do Q q /X2 Do Q\n"
-	const form = "0 0 1 rg 0 0 10 10 re f\n"
+	const form = "1 0 0 0 k 0 0 10 10 re f\n"
 	formObj := fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources 7 0 R /Length %d >>\nstream\n%s\nendstream",
 		len(form), form)
 	return buildPDF([]string{
@@ -63,12 +64,12 @@ func TestRemediation_SharedFormResourcesWritesTheSameBytes(t *testing.T) {
 		// walk this test pins never ran.
 		injected := false
 		for _, fix := range rep.Fixed {
-			if bytes.Contains([]byte(fix), []byte("DefaultCMYK")) {
+			if bytes.Contains([]byte(fix), []byte("DefaultRGB")) {
 				injected = true
 			}
 		}
 		if !injected {
-			t.Fatalf("remediation injected no /DefaultCMYK, fixes %q", rep.Fixed)
+			t.Fatalf("remediation injected no /DefaultRGB, fixes %q", rep.Fixed)
 		}
 		var out bytes.Buffer
 		if err := w.WriteTo(ctx, &out); err != nil {

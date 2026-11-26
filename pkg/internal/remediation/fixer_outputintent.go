@@ -548,16 +548,21 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 
 	// Inject a Default{RGB,CMYK} for the colorspace the OutputIntent
-	// does not cover. Validators only report a single colorspace
-	// violation even when a page mixes DeviceCMYK and DeviceRGB, so
-	// pre-stage the paired default whenever an OI was added.
+	// does not cover: DefaultRGB on every page, pre-staged whenever an OI
+	// was added, and DefaultCMYK on the pages that paint DeviceCMYK alone
+	// (see [defaultCMYKPages]).
 	var defaultColor ast.PdfName
 	var profile func() ast.PdfStream
+	var only map[int]bool
 	switch {
 	case oiIsCMYK && !oiIsRGB:
 		defaultColor, profile = "DefaultRGB", sRGBICCStream
 	case oiIsRGB && !oiIsCMYK:
 		defaultColor, profile = "DefaultCMYK", cmykICCStream
+		var all bool
+		if only, all = defaultCMYKPages(violations); !all && len(only) == 0 {
+			return fixes, nil
+		}
 	default:
 		return fixes, nil
 	}
@@ -577,7 +582,7 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		}
 		return ast.PdfArray{ast.PdfName("ICCBased"), iccRef}
 	}
-	if n, err := injectDefaultColorSpace(ctx, alloc, doc, catalogDict, defaultColor, csArr); err == nil && n > 0 {
+	if n, err := injectDefaultColorSpace(ctx, alloc, doc, catalogDict, defaultColor, csArr, only); err == nil && n > 0 {
 		fix := fmt.Sprintf("injected /%s into %d page(s)", string(defaultColor), n)
 		if reused {
 			fix += fmt.Sprintf(", over the document's CMYK profile %d 0 R", iccRef.ObjectNum)
@@ -586,6 +591,58 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 
 	return fixes, nil
+}
+
+// defaultCMYKPages returns the pages, numbered from 1 in page tree order,
+// that the violations find painting DeviceCMYK with no Default colour space
+// or output intent to cover it, the ones a DefaultCMYK must reach. all is
+// true when the violations do not place the device colours: none names a
+// device family, or one names a family on no page the decision can place.
+// The DefaultCMYK then goes on every page, pre-staged.
+//
+// ISO 19005-1, 6.2.3.3 and ISO 19005-2/3/4, 6.2.4.3 condition DeviceCMYK on
+// a CMYK output intent or a DefaultCMYK in the resources it is painted with
+// (ISO 32000-1, 8.6.5.6). A page that paints no DeviceCMYK needs none, and
+// each copy references a CMYK profile of some 28 KB the file would carry for
+// nothing. litho's validator states each device family a page uses
+// ([compliance.DeviceColorPage]), so violations that place every device
+// colour they name say which pages need it.
+//
+// # Corpus evidence
+//
+//   - probe, text: a page painting DeviceGray and DeviceRGB converted to
+//     PDF/A-2b took 35.6 KB, 32 KB of it the CMYK profile, and 7.0 KB once
+//     the DefaultCMYK followed the pages that paint DeviceCMYK; veraPDF
+//     passes both.
+//   - probe, html: a one-page Chromium invoice painting DeviceRGB alone
+//     (gotenberg/litho#8) remediated to PDF/A-3b took 48,203 bytes, and
+//     19,608 with no DefaultCMYK; veraPDF passes both.
+func defaultCMYKPages(violations []compliance.Violation) (pages map[int]bool, all bool) {
+	placed := false
+	for _, v := range violations {
+		lower := strings.ToLower(v.Context)
+		if !strings.Contains(lower, "devicergb") && !strings.Contains(lower, "devicecmyk") && !strings.Contains(lower, "devicegray") {
+			continue
+		}
+		if page, ok := compliance.DeviceColorPage(v, "DeviceCMYK"); ok {
+			if pages == nil {
+				pages = make(map[int]bool)
+			}
+			pages[page] = true
+			placed = true
+			continue
+		}
+		_, rgb := compliance.DeviceColorPage(v, "DeviceRGB")
+		_, gray := compliance.DeviceColorPage(v, "DeviceGray")
+		if !rgb && !gray {
+			return nil, true
+		}
+		placed = true
+	}
+	if !placed {
+		return nil, true
+	}
+	return pages, false
 }
 
 // addOutputIntent makes a GTS_PDFA1 output intent carrying a CMYK profile,
@@ -978,6 +1035,8 @@ func formBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 // §6.2.3.3 treats as independent scopes, so a page-only fix leaves
 // "used in pattern/form" violations behind. A shading pattern has none, so
 // its shading takes the Default space in place of the device family itself.
+// A non-nil only limits the walk to the pages it holds, numbered from 1 in
+// page tree order.
 //
 // # Corpus evidence
 //
@@ -988,7 +1047,7 @@ func formBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 //     litho and veraPDF, default and aggressive. Each now gets its node's,
 //     and /F5, an unembedded font, adds a check to the embedding rule no
 //     repair meets (6.2.11.4.1 t1, and 6.3.4 t1 at PDF/A-1b).
-func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, key ast.PdfName, csArr func() ast.PdfArray) (int, error) {
+func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, key ast.PdfName, csArr func() ast.PdfArray, only map[int]bool) (int, error) {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
 		return 0, nil
@@ -998,9 +1057,12 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 
 	visited := make(map[int]bool)
 	count := 0
-	for _, pe := range pages {
+	for i, pe := range pages {
 		if ctx.Err() != nil {
 			return count, ctx.Err()
+		}
+		if only != nil && !only[i+1] {
+			continue
 		}
 		// A page with no /Resources of its own inherits them from an ancestor
 		// (ISO 32000-2, 7.7.3.4). Writing a fresh dictionary here would SHADOW

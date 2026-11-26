@@ -231,7 +231,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 			rule := family.rule(part)
 			if n := counts[i].plain[f]; n > 0 {
 				*results = append(*results, repeatViolation(rule, n,
-					fmt.Sprintf("page %d: %s used without %s or %s", i+1, family.name, family.defaultName, intentPhrase(family.intent)))...)
+					fmt.Sprintf(deviceUseContext, i+1, family.name, family.defaultName, intentPhrase(family.intent)))...)
 			}
 			if n := counts[i].group[f]; n > 0 {
 				*results = append(*results, repeatViolation(rule, n,
@@ -239,6 +239,36 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 			}
 		}
 	}
+}
+
+// deviceUseContext is the context of a violation of the device colour rules
+// for a page's content, as [DeviceColorPage] reads it back: the page number,
+// the device family, its Default colour space and the output intent that
+// covers it.
+const deviceUseContext = "page %d: %s used without %s or %s"
+
+// DeviceColorPage returns the page number, from 1 in page tree order, of a
+// violation of the device colour rules of ISO 19005-1, 6.2.3.3 and ISO
+// 19005-2/3/4, 6.2.4.3 that the page's content, or a form or pattern it
+// paints, uses family ("DeviceRGB", "DeviceCMYK" or "DeviceGray") through,
+// and true; 0 and false for any other violation, a transparency group's
+// blending space among them. A remediation reads it to cover the family on
+// the pages that paint it and on no other.
+func DeviceColorPage(v Violation, family string) (int, bool) {
+	i := deviceFamilyIndex(family)
+	if i < 0 {
+		return 0, false
+	}
+	rules := deviceFamilies[i].rule
+	if v.Rule != rules(1) && v.Rule != rules(2) && v.Rule != rules(3) && v.Rule != rules(4) {
+		return 0, false
+	}
+	var page int
+	var name string
+	if n, err := fmt.Sscanf(v.Context, "page %d: %s used without", &page, &name); err != nil || n != 2 || name != family || page < 1 {
+		return 0, false
+	}
+	return page, true
 }
 
 // intentPhrase names the output intent that covers a device family whose
