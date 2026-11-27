@@ -341,6 +341,13 @@ type Office struct {
 	// that glyph does, never to its left. It applies to the characters of
 	// the inline box that sets it.
 	NonNegativeAdvance bool
+	// ZigzagWave draws a wavy underline as PowerPoint does: a filled strip
+	// as tall as a unit, the face's underline thickness on PowerPoint's
+	// grid of a hundredth of an inch, zigzagging down and up by that unit
+	// at 45 degrees from the face's underline position, where a wave
+	// otherwise strokes a zigzag over twice the decoration's thickness. It
+	// applies to the decorations the inline box that sets it draws.
+	ZigzagWave bool
 	// BaselineAtBottom gives the inline-level block container that sets
 	// it its bottom margin edge as its baseline, whatever lines it holds,
 	// as Word sits an inline drawing on the line by its bottom edge

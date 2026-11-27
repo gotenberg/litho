@@ -1027,6 +1027,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.KeepClosed = powerPointKeepsClosed(b.doc)
 	st.ClusterAlone = powerPointClusterAlone(b.doc)
 	st.NonNegativeAdvance = powerPointFloorsAdvances(b.doc)
+	st.ZigzagWave = powerPointZigzagWave(b.doc)
 	if tp := st.TextPaint; tp != nil && (tp.NoFill || len(tp.Gradient) >= 2) && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their paint: a text of
 		// no fill, or of a gradient whose first stop is transparent,
@@ -1341,6 +1342,21 @@ func powerPointClusterAlone(doc *Document) bool {
 //   - openxmlsdk/pptx: O14ISOStrict/PowerPoint/spc-400000_rPr_CharacterSpacingMinimum
 //     prints its run at -4000 points as glyphs set on one another.
 func powerPointFloorsAdvances(doc *Document) bool {
+	return doc != nil && doc.Fallback != text.FallbackLibreOffice
+}
+
+// powerPointZigzagWave reports whether the runs of doc draw a wavy
+// underline (ECMA-376 Part 1, 20.1.10.82 ST_TextUnderlineType wavy) as a
+// filled zigzag strip ([css.Office.ZigzagWave]): under PowerPoint's
+// rules; Impress strokes a wave.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: Calibri 12, 18, 36 and 54 point runs underlined wavy
+//     print a strip of 0.72, 1.44, 2.16 and 3.6 points zigzagging over a
+//     band of twice that, 0.67, 1.32, 2.66 and 3.2 points below the
+//     baseline.
+func powerPointZigzagWave(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 

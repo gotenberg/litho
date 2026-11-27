@@ -2037,6 +2037,13 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, which css.
 				dl.x, dl.w = lo, hi-lo
 			}
 			dl.y, dl.under, dl.through = g.y[k], line == css.Underline, line == css.LineThrough
+			dl.zigzag, dl.thick = false, g.thick
+			if d.style == css.DecorationWavy && it.box.st.ZigzagWave && dl.under && it.ulThick > 0 {
+				// The strip starts at the face's underline position and
+				// is as tall as its underline thickness.
+				dl.zigzag = true
+				dl.y, dl.thick = it.baseline+it.ulPos, it.ulThick
+			}
 			dl.skip = nil
 			if line != css.LineThrough {
 				// Only underlines and overlines skip ink (CSS Text
@@ -2295,6 +2302,9 @@ type decoLine struct {
 	dx, dy, x0 float64
 	under      bool
 	through    bool
+	// zigzag draws a wavy line as PowerPoint does ([css.Office.ZigzagWave]),
+	// thick then being the face's underline thickness.
+	zigzag bool
 	// skip are the glyph runs whose ink the line skips, nil for none.
 	skip []*lineItem
 }
@@ -2326,6 +2336,9 @@ func (p *painter) decoLine(dl decoLine) {
 		}
 	case css.DecorationWavy:
 		b0, b1 = top-thick, top+2*thick
+		if dl.zigzag {
+			b0, b1 = top, top+float64(2*zigzagUnit(thick))
+		}
 		if p.blink() {
 			w := blinkWave(thick, dl.under, dl.through)
 			reach := float64(waveCrest*w.control) + float64(thick/2)
@@ -2407,6 +2420,19 @@ func (p *painter) decoLine(dl decoLine) {
 				keep = [][2]float64{{x0, x0 + w}}
 			}
 			stroke(ops, &typeset.Stroke{Color: col, Width: thick})
+			return
+		}
+		if dl.zigzag {
+			path := &typeset.Path{Ops: zigzagOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top, zigzagUnit(thick)), Fill: &typeset.Fill{Color: col}}
+			if keep == nil {
+				emit(path)
+				return
+			}
+			var clip []typeset.PathOp
+			for _, k := range keep {
+				clip = append(clip, rectOps(typeset.Rect{X: k[0], Y: b0, Width: k[1] - k[0], Height: b1 - b0})...)
+			}
+			emit(&typeset.Group{Clip: &typeset.Path{Ops: clip}, Content: []typeset.Fragment{path}})
 			return
 		}
 		stroke(waveOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+float64(thick/2), thick), &typeset.Stroke{Color: col, Width: thick})
@@ -2507,6 +2533,75 @@ func (w wave) ops(origin, x0, x1, mid float64) []typeset.PathOp {
 		x += w.length
 	}
 	return ops
+}
+
+// zigzagUnit returns the unit of a PowerPoint wave for a face whose
+// underline is thick points thick: that thickness rounded to a hundredth
+// of an inch, at least one.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: Calibri 12, 18, 36 and 54 points, whose underline is
+//     0.0654 em thick, print wavy underlines in units of 0.72, 1.44, 2.16
+//     and 3.6 points.
+func zigzagUnit(thick float64) float64 {
+	return float64(max(math.Round(thick/zigzagGrid), 1) * zigzagGrid)
+}
+
+// zigzagGrid is PowerPoint's grid of a hundredth of an inch, in points.
+const zigzagGrid = 0.72
+
+// zigzagOps returns the outline of a PowerPoint wave from x0 to x1, its
+// phase starting at origin: a strip u tall whose top lies at top where
+// the phase is an even number of units from origin and u lower an odd
+// number, straight between.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint prints a wavy underline as one filled
+//     polygon whose top edge steps a unit along and a unit down, then up,
+//     from the start of the run at the top of the band, its bottom edge a
+//     unit below it, the band two units tall.
+//   - openxmlsdk/pptx: O14ISOStrict/PowerPoint/uWavy_rprU_UnderlineWavy
+//     prints its Calibri 18 run's wave 2.88 points tall.
+func zigzagOps(origin, x0, x1, top, u float64) []typeset.PathOp {
+	at := func(x float64) float64 {
+		t := math.Mod((x-origin)/u, 2)
+		if t < 0 {
+			t += 2
+		}
+		if t > 1 {
+			t = 2 - t
+		}
+		return top + float64(t*u)
+	}
+	xs := []float64{x0}
+	k := 0
+	if x0 > origin {
+		k = min(int((x0-origin)/u), maxWaveSegments) // fits int: capped
+	}
+	for n := 0; n < maxWaveSegments; n, k = n+1, k+1 {
+		v := origin + float64(float64(k)*u)
+		if v >= x1 {
+			break
+		}
+		if v > x0 {
+			xs = append(xs, v)
+		}
+	}
+	xs = append(xs, x1)
+	ops := make([]typeset.PathOp, 0, 2*len(xs)+1)
+	for i, x := range xs {
+		kind := typeset.LineTo
+		if i == 0 {
+			kind = typeset.MoveTo
+		}
+		ops = append(ops, typeset.PathOp{Kind: kind, P: [3]typeset.Point{{X: x, Y: at(x)}}})
+	}
+	for i := len(xs) - 1; i >= 0; i-- {
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: xs[i], Y: at(xs[i]) + u}}})
+	}
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // waveOps returns the zigzag of a wavy line from x0 to x1 about mid, its

@@ -163,6 +163,73 @@ func TestTextDecoration_WavyLineJoinsRuns(t *testing.T) {
 	}
 }
 
+// TestTextDecoration_ZigzagWave checks that css.Office.ZigzagWave draws a
+// wavy underline as one filled strip, from the face's underline position
+// down two units of its underline thickness on a 0.72-point grid, across
+// the run; without it the wave is a stroke.
+func TestTextDecoration_ZigzagWave(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	wavy := func(zigzag bool) *css.Style {
+		return sty(func(s *css.Style) {
+			s.FontSize = 20
+			s.TextDecoration = css.Underline
+			s.TextDecorationStyle = css.DecorationWavy
+			s.TextDecorationColor = lime
+			s.ZigzagWave = zigzag
+		})
+	}
+	st := wavy(true)
+	res := runWith(t, doc(el(st, txt(st, "aaaa"))), Options{Page: page(200, 60)})
+	f := res.Pages[0]
+	var fills, strokes int
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, fr := range fs {
+			switch v := fr.(type) {
+			case *typeset.Path:
+				if v.Fill != nil && v.Fill.Color.G == 1 && v.Fill.Color.R == 0 {
+					fills++
+				}
+				if v.Stroke != nil && v.Stroke.Color.G == 1 && v.Stroke.Color.R == 0 {
+					strokes++
+				}
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(f.Content)
+	got := decoPaths(res, lime)
+	if fills != 1 || strokes != 0 || len(got) != 1 {
+		t.Fatalf("%d fills, %d strokes, %+v, want one filled strip", fills, strokes, got)
+	}
+	u := zigzagUnit(got[0].Height / 2)
+	if !near(got[0].Height, 2*u) || !near(math.Mod(u, zigzagGrid), 0) && !near(math.Mod(u, zigzagGrid), zigzagGrid) || !near(got[0].Width, 80) {
+		t.Errorf("strip %+v, want two units of 0.72-point multiples tall and 80 points long", got[0])
+	}
+	st = wavy(false)
+	res = runWith(t, doc(el(st, txt(st, "aaaa"))), Options{Page: page(200, 60)})
+	fills, strokes = 0, 0
+	walk(res.Pages[0].Content)
+	if fills != 0 || strokes != 1 {
+		t.Errorf("%d fills, %d strokes without ZigzagWave, want one stroke", fills, strokes)
+	}
+}
+
+// TestZigzagUnit checks the unit of a PowerPoint wave for Calibri's
+// underline thickness, 134 of 2048 units, at 12, 18, 36 and 54 points:
+// 0.72, 1.44, 2.16 and 3.6 points, and one grid step for a hairline.
+func TestZigzagUnit(t *testing.T) {
+	for _, tt := range []struct{ size, want float64 }{{12, 0.72}, {18, 1.44}, {36, 2.16}, {54, 3.6}} {
+		if got := zigzagUnit(tt.size * 134 / 2048); !near(got, tt.want) {
+			t.Errorf("unit at %v points %v, want %v", tt.size, got, tt.want)
+		}
+	}
+	if got := zigzagUnit(0.01); !near(got, 0.72) {
+		t.Errorf("unit of a hairline %v, want 0.72", got)
+	}
+}
+
 // CSS Text Decoration 4, 2.10.5: an underline of skip-ink auto or all
 // stops short of the glyphs it crosses, by its thickness on each side; one
 // of none crosses them.

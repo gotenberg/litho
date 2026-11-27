@@ -2355,6 +2355,9 @@ func equalOffice(a, b *Office) bool {
 	if a.NonNegativeAdvance != b.NonNegativeAdvance {
 		return false
 	}
+	if a.ZigzagWave != b.ZigzagWave {
+		return false
+	}
 	if a.BaselineAtBottom != b.BaselineAtBottom {
 		return false
 	}
@@ -2399,6 +2402,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.KeepClosed)
 	h = mixBool(h, x.ClusterAlone)
 	h = mixBool(h, x.NonNegativeAdvance)
+	h = mixBool(h, x.ZigzagWave)
 	h = mixBool(h, x.BaselineAtBottom)
 	h = mixBool(h, x.WordSmallCaps)
 	h = mixBool(h, x.TextEffects != nil)
