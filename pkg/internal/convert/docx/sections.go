@@ -503,14 +503,13 @@ func (d *document) body(root *ooxml.Element) []*section {
 		}
 		next()
 		kids := mergeDeleted(body.Kids())
-		for i, e := range kids {
+		for _, e := range kids {
 			if d.ctx.Err() != nil {
 				break
 			}
 			if e.Is(w, "sectPr") {
 				continue
 			}
-			d.bodyFollows = holdsParagraph(kids[i+1:])
 			sp := e.Child(w, "pPr").Child(w, "sectPr")
 			if !e.Is(w, "p") {
 				sp = nil
@@ -528,7 +527,7 @@ func (d *document) body(root *ooxml.Element) []*section {
 		}
 	}
 	closeSection(body.Child(w, "sectPr"))
-	d.inBody, d.bodyFollows = false, false
+	d.inBody = false
 	d.linePitch, d.page, d.columned = 0, nil, false
 	// Name the pages: a continuous break keeps the page when its size
 	// does not change; any other break starts a page, where the first

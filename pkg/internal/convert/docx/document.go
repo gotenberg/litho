@@ -135,12 +135,6 @@ type document struct {
 	// columned reports that the body section being read sets its text in
 	// more than one column.
 	columned bool
-	// anchorless reports that no paragraph follows the table being read
-	// in its container, the paragraph a floating table is anchored to.
-	anchorless bool
-	// bodyFollows reports that a paragraph follows, in the body, the
-	// body element being read.
-	bodyFollows bool
 	// columnBreaks collects the paragraphs of the section being read
 	// that a column break starts.
 	columnBreaks []*layout.Node

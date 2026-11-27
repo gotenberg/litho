@@ -237,14 +237,14 @@ func TestTables_CellSpacing(t *testing.T) {
 
 // TestTables_Floating locks where a floating table of the body is placed
 // (17.4.58 tblpPr): at its offsets or alignments in the areas its anchors
-// name, as Word places an anchored drawing; in the flow when no paragraph
-// follows it; as a float of its cell when nested.
+// name, as Word places an anchored drawing, whether a paragraph follows
+// it or not; as a float of its cell when nested.
 //
 // # Corpus evidence
 //
-//   - libreoffice/docx: ooxmlimport/table_width.docx ends its body with a
-//     table of vertAnchor page and tblpY 10261, which Word prints at the
-//     top margin, where the flow puts it.
+//   - probe, docx: Word prints a table of vertAnchor page and tblpY 10261
+//     that ends its body, no paragraph after it, 513 points down the
+//     page, the paragraph before it at the top margin.
 func TestTables_Floating(t *testing.T) {
 	t.Parallel()
 	table := func(tblpPr string, width int) string {
@@ -282,11 +282,14 @@ func TestTables_Floating(t *testing.T) {
 	if gap := role(b.root, "Table")[0].Style.WrapGap; gap != [4]float64{0, 9, 0, 9} {
 		t.Errorf("wrap gap %v, want 9 points on both sides", gap)
 	}
-	// A table no paragraph follows has none to anchor it: it stays in the
-	// flow.
-	b = build(t, table(`<w:tblpPr w:vertAnchor="page" w:tblpY="10261"/>`, 2000), nil)
-	if st := role(b.root, "Table")[0].Style; st.WordAnchor.Set || st.Float != css.FloatNone || len(b.secs[0].pending) != 0 {
-		t.Errorf("unanchored table: float %v, anchor %+v; want it in the flow", st.Float, st.WordAnchor)
+	// A table no paragraph follows is placed all the same.
+	b = build(t, `<w:p/>`+table(`<w:tblpPr w:vertAnchor="page" w:tblpY="10261"/>`, 2000), nil)
+	if len(b.secs[0].pending) != 1 {
+		t.Fatalf("table ending the body: %d tables placed, want 1", len(b.secs[0].pending))
+	}
+	b.secs[0].pending[0].resolve(b.secs[0])
+	if st := role(b.root, "Table")[0].Style; !st.WordAnchor.Set || !st.WordAnchor.FromPage || math.Abs(st.WordAnchor.Y-(513.05-72)) > 1e-9 {
+		t.Errorf("table ending the body: anchor %+v; want it 513.05 points down its page", st.WordAnchor)
 	}
 	// A table nested in a cell is a float of the cell.
 	nested := `<w:tbl><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>` + table(`<w:tblpPr w:tblpXSpec="right"/>`, 2000) + `<w:p/></w:tc></w:tr></w:tbl>`

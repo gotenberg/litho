@@ -484,7 +484,6 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		d.warn(warn.LimitReached, warn.Omitted, "a table nested too deep is left out")
 		return nil
 	}
-	anchorless := d.anchorless
 	direct := d.parseTableProps(t.Child(w, "tblPr"))
 	chain := d.styles.tableStyle(direct.style)
 	var tp tableProps
@@ -617,9 +616,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		tableSt.Direction = css.RTL
 	}
 	// A floating table in a section of several columns stays a float of
-	// its column. One no paragraph follows has no paragraph to anchor it
-	// and stays in the flow.
-	floating := tp.floating != nil && !anchorless
+	// its column. One no paragraph follows floats too: Word places it as
+	// one the paragraph after it anchors.
+	floating := tp.floating != nil
 	anchored := floating && d.pageAnchors() && !d.columned
 	if floating && !anchored {
 		d.floatTable(tableSt, tp.floating)

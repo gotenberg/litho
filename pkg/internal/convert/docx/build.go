@@ -97,21 +97,6 @@ func (d *document) blocks(s *story, c *cond, parent *ooxml.Element, depth int) [
 	return out
 }
 
-// holdsParagraph reports whether one of the block-level elements kids is
-// or may hold a paragraph.
-func holdsParagraph(kids []*ooxml.Element) bool {
-	for _, e := range kids {
-		if e.Space != w {
-			continue
-		}
-		switch e.Local {
-		case "p", "sdt", "customXml", "ins", "moveTo", "smartTag", "altChunk":
-			return true
-		}
-	}
-	return false
-}
-
 // blocksInto appends the block-level content of parent to out.
 func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth int, out *[]blockNode) {
 	if depth > maxNesting {
@@ -122,7 +107,7 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 	if d.opts.DerivedAltText {
 		d.markCaptions(kids)
 	}
-	for i, e := range kids {
+	for _, e := range kids {
 		if e.Space != w || d.ctx.Err() != nil {
 			continue
 		}
@@ -132,9 +117,7 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 				d.addBlock(out, b)
 			}
 		case "tbl":
-			d.anchorless = !holdsParagraph(kids[i+1:]) && !d.bodyFollows
 			n := d.table(s, e, depth+1)
-			d.anchorless = false
 			if n != nil {
 				d.addTable(out, blockNode{node: n}, e)
 			}
