@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -550,6 +551,58 @@ func TestFrames_Placed(t *testing.T) {
 	}
 	if w := frames[0].Style.Width; w != css.Pts(144) {
 		t.Errorf("columns: frame of several paragraphs: width %v, want the column's 144", w)
+	}
+}
+
+// TestFrames_AfterABreak locks that a page or column break before a
+// paragraph of a text frame moves the frame: the frame prints on the
+// page or in the column the break opens, with the text after it.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a frame of vAnchor page whose paragraph
+//     follows a page break on the second page, the text after it beside
+//     it, and a frame naming no hAnchor after a column break in the
+//     second column, its x from that column.
+func TestFrames_AfterABreak(t *testing.T) {
+	t.Parallel()
+	frame := `<w:p><w:pPr><w:framePr w:w="1440" w:wrap="around" w:vAnchor="page" w:x="720" w:y="4320"/></w:pPr><w:r><w:t>framed</w:t></w:r></w:p>`
+	for _, tc := range []struct {
+		name, sect string
+		page       int
+		minX       float64
+	}{
+		// Letter, 72-point margins: the frame 36 points right of the
+		// column it lands in.
+		{"page", "", 1, 100},
+		{"column", `<w:cols w:num="2" w:space="720"/>`, 0, 350},
+	} {
+		body := `<w:p><w:r><w:t>before</w:t></w:r></w:p><w:p><w:r><w:br w:type="` + tc.name + `"/></w:r></w:p>` + frame + `<w:p><w:r><w:t>after</w:t></w:r></w:p>` +
+			`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>` + tc.sect + `</w:sectPr>`
+		doc := convertBytes(t, docx(t, body, nil), office.Options{})
+		at := map[string][2]float64{}
+		for p, pg := range doc.Pages {
+			var walk func([]typeset.Fragment, float64)
+			walk = func(frags []typeset.Fragment, dx float64) {
+				for _, f := range frags {
+					switch v := f.(type) {
+					case *typeset.Text:
+						var b strings.Builder
+						for _, g := range v.Glyphs {
+							b.WriteString(g.Text)
+						}
+						at[b.String()] = [2]float64{float64(p), dx + v.Origin.X}
+					case *typeset.Group:
+						walk(v.Content, dx+v.Transform.E)
+					}
+				}
+			}
+			walk(pg.Content, 0)
+		}
+		f, a := at["framed"], at["after"]
+		if int(f[0]) != tc.page || int(a[0]) != tc.page || f[1] < tc.minX {
+			t.Errorf("%s break: frame on page %d at %.1f, text after it on page %d; want page %d, past %.0f", tc.name, int(f[0])+1, f[1], int(a[0])+1, tc.page+1, tc.minX)
+		}
 	}
 }
 

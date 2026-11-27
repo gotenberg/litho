@@ -496,12 +496,18 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		hardBreak := i > 0 || s.breakNext
 		column := i > 0 && seg.column || i == 0 && s.breakNext && s.breakColumn
 		switch {
+		case hardBreak && i == 0 && d.framePlaced(pp.framePr):
+			// A break before a paragraph of a text frame moves the frame:
+			// an empty block before it carries the break, which Word
+			// prints on the page or in the column the break opens, where
+			// a break inside the frame's float would move nothing.
+			d.breakBlock(&out, column)
 		case hardBreak && column:
 			// A column break is a page break in a section of one column
 			// (17.18.3 ST_BrType column); the section's properties, at its
 			// end, say which.
 			d.columnBreaks = append(d.columnBreaks, n)
-		case hardBreak || boolOf(pp.pageBreakBefore):
+		case hardBreak:
 			pst.BreakBefore = css.Page
 		}
 		if boolOf(pp.pageBreakBefore) {
@@ -568,6 +574,20 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		out = append(out, blockNode{node: n, info: info})
 	}
 	return out
+}
+
+// breakBlock appends to out an empty block that a page break, or a column
+// break when column is set, moves (17.18.3 ST_BrType).
+func (d *document) breakBlock(out *[]blockNode, column bool) {
+	cs := d.blockOf()
+	n := &layout.Node{Kind: layout.Element}
+	if column {
+		d.columnBreaks = append(d.columnBreaks, n)
+	} else {
+		cs.BreakBefore = css.Page
+	}
+	n.Style = d.share(&cs)
+	*out = append(*out, blockNode{node: n})
 }
 
 // measureFromTop moves the drawings ns, positioned from the top of a
