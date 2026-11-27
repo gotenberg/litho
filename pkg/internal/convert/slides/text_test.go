@@ -248,12 +248,13 @@ func TestText_OfficeEmoji(t *testing.T) {
 	}
 }
 
-// TestText_KeepClosed checks that under PowerPoint's rules a line breaks
-// after a closing parenthesis only at a space: "(b)+cdef" starts the second
-// line, where under Impress's rules the line breaks after ")".
-func TestText_KeepClosed(t *testing.T) {
-	starts := func(fallback text.Fallback) []string {
-		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 75, 200, para("Aa (b)+cdefg", arial(20)))}})
+// TestText_KeepInWord checks that under PowerPoint's rules a line breaks
+// after a closing parenthesis or a solidus only at a space: "(b)+cdef" and
+// "b/cdefg" start the second line, where under Impress's rules the line
+// breaks after ")" and "/".
+func TestText_KeepInWord(t *testing.T) {
+	starts := func(fallback text.Fallback, s string) []string {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 75, 200, para(s, arial(20)))}})
 		d.Fallback = fallback
 		var out []string
 		for _, r := range runs(convert(t, d, office.Options{}).Pages[0]) {
@@ -261,11 +262,17 @@ func TestText_KeepClosed(t *testing.T) {
 		}
 		return out
 	}
-	if got := starts(text.FallbackFontconfig); len(got) < 2 || !strings.HasPrefix(got[1], "(b)+") {
+	if got := starts(text.FallbackFontconfig, "Aa (b)+cdefg"); len(got) < 2 || !strings.HasPrefix(got[1], "(b)+") {
 		t.Errorf("lines %q under PowerPoint's rules, want the second to start with (b)+", got)
 	}
-	if got := starts(text.FallbackLibreOffice); len(got) < 2 || !strings.HasPrefix(got[1], "+") {
+	if got := starts(text.FallbackLibreOffice, "Aa (b)+cdefg"); len(got) < 2 || !strings.HasPrefix(got[1], "+") {
 		t.Errorf("lines %q under Impress's rules, want the second to start with +", got)
+	}
+	if got := starts(text.FallbackFontconfig, "Aa bc/defgh"); len(got) < 2 || !strings.HasPrefix(got[1], "bc/") {
+		t.Errorf("lines %q under PowerPoint's rules, want the second to start with bc/", got)
+	}
+	if got := starts(text.FallbackLibreOffice, "Aa bc/defgh"); len(got) < 2 || !strings.HasPrefix(got[1], "defgh") {
+		t.Errorf("lines %q under Impress's rules, want the second to start with defgh", got)
 	}
 }
 

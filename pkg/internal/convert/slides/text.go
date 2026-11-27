@@ -1024,7 +1024,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	// breaks no line between an emoji and an emoji or a letter.
 	st.OfficeEmoji = b.doc != nil && b.doc.Fallback != text.FallbackLibreOffice
 	st.KeepEmoji = st.OfficeEmoji
-	st.KeepClosed = powerPointKeepsClosed(b.doc)
+	st.KeepInWord = powerPointKeepsInWord(b.doc)
 	st.ClusterAlone = powerPointClusterAlone(b.doc)
 	st.NonNegativeAdvance = powerPointFloorsAdvances(b.doc)
 	st.ZigzagWave = powerPointZigzagWave(b.doc)
@@ -1295,10 +1295,12 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	return node
 }
 
-// powerPointKeepsClosed reports whether the runs of doc keep a closing
-// bracket with the character after it ([css.Office.KeepClosed]): under
-// PowerPoint's rules, which break a line after a closing parenthesis only
-// at a space; Impress breaks where UAX #14 does.
+// powerPointKeepsInWord reports whether the runs of doc keep a closing
+// bracket, a solidus, a question or an exclamation mark with the
+// character after it ([css.Office.KeepInWord]): under PowerPoint's rules,
+// which break a line inside a word only after a hyphen, or where the line
+// ends when no other opportunity is left; Impress breaks where UAX #14
+// does.
 //
 // # Corpus evidence
 //
@@ -1308,7 +1310,11 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 //     "(Circle)+Shadow(Outer_Diagonal" and "(3D_Bevel(Riblet)+Reflection(full,8"
 //     whole on their lines, moved down a line where they do not fit,
 //     though UAX #14 breaks between ")" and "+".
-func powerPointKeepsClosed(doc *Document) bool {
+//   - probe, pptx: in 70-point Calibri 18 boxes, "aaaa/bbbb/cccc" prints
+//     "aaaa/bbb" and "b/cccc", "aaaa?bbbb!cccc" "aaaa?bb" and "bb!cccc",
+//     "aaaa(bb)(cccc" "aaaa(bb)(" and "cccc", each broken where the line
+//     ends, and "aaaa-bbbb-cccc" breaks after each hyphen.
+func powerPointKeepsInWord(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 

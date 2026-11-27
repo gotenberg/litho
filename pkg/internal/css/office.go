@@ -322,13 +322,16 @@ type Office struct {
 	// (see text.EmojiJoins). It applies to the characters of the inline
 	// box that sets it.
 	KeepEmoji bool
-	// KeepClosed keeps a closing parenthesis or square bracket on one line
-	// with the character after it unless that is a space, as PowerPoint
-	// breaks a run, where UAX #14 breaks after a closing punctuation (class
-	// CP) before a prefix, an opening punctuation or a symbol (LB31): a
-	// line breaks there only at another opportunity, a space. It applies to
-	// the characters of the inline box that sets it.
-	KeepClosed bool
+	// KeepInWord keeps a closing parenthesis or square bracket, a solidus,
+	// a question mark or an exclamation mark on one line with the
+	// character after it unless that is a space, as PowerPoint breaks a
+	// run, where UAX #14 breaks after a closing punctuation (class CP)
+	// before a prefix, an opening punctuation or a symbol, and after a
+	// solidus (SY) or an exclamation (EX) before a letter (LB31): a line
+	// breaks there only at another opportunity, a space or a hyphen, or
+	// where the line ends. It applies to the characters of the inline box
+	// that sets it.
+	KeepInWord bool
 	// ClusterAlone sets a grapheme cluster too wide for its line, with
 	// nothing before it there, alone on the line under overflow-wrap
 	// break-word or anywhere, as CSS Text 3, 5.5 and PowerPoint set it,

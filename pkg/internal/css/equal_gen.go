@@ -2346,7 +2346,7 @@ func equalOffice(a, b *Office) bool {
 	if a.KeepEmoji != b.KeepEmoji {
 		return false
 	}
-	if a.KeepClosed != b.KeepClosed {
+	if a.KeepInWord != b.KeepInWord {
 		return false
 	}
 	if a.ClusterAlone != b.ClusterAlone {
@@ -2399,7 +2399,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.KeepHangul)
 	h = mixBool(h, x.OfficeEmoji)
 	h = mixBool(h, x.KeepEmoji)
-	h = mixBool(h, x.KeepClosed)
+	h = mixBool(h, x.KeepInWord)
 	h = mixBool(h, x.ClusterAlone)
 	h = mixBool(h, x.NonNegativeAdvance)
 	h = mixBool(h, x.ZigzagWave)
