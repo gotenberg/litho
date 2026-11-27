@@ -153,6 +153,10 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 				a, b := officefx.WordRunReach(it.box.st.TextEffects, it.text.Size, it.descent)
 				up, down = up+a, down+b
 			}
+			if st.WriterLines {
+				a, b := s.writerEdges(it.box)
+				up, down = up+a, down+b
+			}
 			textAbove = max(textAbove, up-shift)
 			textBelow = max(textBelow, down+shift)
 		case it.atomic == nil:
@@ -162,6 +166,33 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 		below = max(below, down+shift)
 	}
 	return above, below, textAbove + textBelow
+}
+
+// writerEdges returns the padding and border widths above and below the
+// glyph runs of inline box b, b's and those of the inline boxes around it,
+// which grow a line under css.Office.WriterLines as Writer grows a line by
+// the spacing and the border of a character border (ODF 1.3, Part 3,
+// 20.183 fo:border and 20.240 fo:padding on text properties), where CSS
+// leaves an inline box's vertical edges out of the line's height (CSS 2.1,
+// 10.8.1).
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/charborder.odt prints a paragraph whose
+//     text has a 0.45 cm character padding and a 1.05 point border 2 * (0.45
+//     cm + 1.05 pt) taller than its text, and a line holding a run of 0.4
+//     cm top and 0.3 cm bottom padding with a 1.05 point top and a 3 point
+//     bottom border with its run's border box from the line's top.
+func (s *inlineState) writerEdges(b *box) (above, below float64) {
+	if b != nil && b.kind == kindText {
+		b = s.parentInline(b)
+	}
+	for ; b != nil && b != s.root; b = s.parentInline(b) {
+		pd, bd, m := edgesOf(b, 0)
+		above += max(m[css.Top], 0) + pd[css.Top] + bd[css.Top]
+		below += max(m[css.Bottom], 0) + pd[css.Bottom] + bd[css.Bottom]
+	}
+	return above, below
 }
 
 // gridExtent returns the extent of l above and below its baseline that

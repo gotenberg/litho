@@ -367,3 +367,35 @@ func TestFrameOverflowsItsCell(t *testing.T) {
 		}
 	}
 }
+
+// TestCharacterBorder locks that a character border draws around its run,
+// its spacing between them, casts its shadow, and grows the line by the
+// spacing, the border and the shadow above and below the text, as Writer
+// lays a character border out (see [applyText] and the layout's
+// writerEdges): a 0.2 cm spacing, a 1 point border and a shadow 0.1 cm
+// down lower the next line by 0.2 cm, 1 point and 0.1 cm below the run,
+// and the run's own text by 0.2 cm and 1 point above it.
+func TestCharacterBorder(t *testing.T) {
+	red := typeset.Color{R: 1, A: 1}
+	plain := convertDoc(t, doc{body: `<text:p>ab<text:line-break/>cd</text:p>`}.pack(t), office.Options{}).Pages[0]
+	auto := `<style:style style:name="T1" style:family="text"><style:text-properties fo:border="1pt solid #ff0000" fo:padding="0.2cm" style:shadow="#000000 0.1cm 0.1cm"/></style:style>`
+	pg := convertDoc(t, doc{contentAuto: auto, body: `<text:p><text:span text:style-name="T1">ab</text:span><text:line-break/>cd</text:p>`}.pack(t), office.Options{}).Pages[0]
+	if !pathColours(pg.Content)[red] {
+		t.Errorf("no red border")
+	}
+	ys := func(pg *typeset.Page) map[string]float64 {
+		out := map[string]float64{}
+		for _, r := range runs(pg) {
+			out[strings.TrimSpace(r.text)] = r.y
+		}
+		return out
+	}
+	p, b := ys(plain), ys(pg)
+	cm := 72 / 2.54
+	if d := b["ab"] - p["ab"]; !near(d, 0.2*cm+1, 0.05) {
+		t.Errorf("bordered run lowered by %.2f, want %.2f", d, 0.2*cm+1)
+	}
+	if d := b["cd"] - p["cd"]; !near(d, 2*(0.2*cm+1)+0.1*cm, 0.05) {
+		t.Errorf("next line lowered by %.2f, want %.2f", d, 2*(0.2*cm+1)+0.1*cm)
+	}
+}

@@ -170,6 +170,21 @@ func applyText(st *css.Style, t textState, inline bool) {
 			st.TextDecorationThickness = css.Pts(math.Max(st.FontSize/10, 1))
 		}
 	}
+	// A character border draws around the run's text, its spacing
+	// between them, and casts its shadow (20.183, 20.240, 20.349).
+	st.Border = t.border
+	for i, pt := range t.padding {
+		st.Padding[i] = css.Pts(pt)
+	}
+	st.BoxShadow = t.boxShadow
+	for _, sh := range t.boxShadow {
+		// Writer gives a character shadow its room beside the run, on
+		// the sides it falls (see [layout] writerEdges).
+		st.Margin[css.Left] = css.Pts(max(-sh.X, 0))
+		st.Margin[css.Right] = css.Pts(max(sh.X, 0))
+		st.Margin[css.Top] = css.Pts(max(-sh.Y, 0))
+		st.Margin[css.Bottom] = css.Pts(max(sh.Y, 0))
+	}
 	st.TextShadow = nil
 	if t.shadow != nil {
 		st.TextShadow = []css.Shadow{*t.shadow}

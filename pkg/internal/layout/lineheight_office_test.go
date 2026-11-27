@@ -234,6 +234,13 @@ func TestWriterLines_LineHeight(t *testing.T) {
 	img := func() *Node {
 		return &Node{Kind: Replaced, Style: inlineSty(), Picture: pic(color.NRGBA{R: 255, A: 255}, 10, 10)}
 	}
+	edged := inlineSty(func(s *css.Style) {
+		s.FontSize = px(10)
+		s.Padding[css.Top], s.Padding[css.Bottom] = css.Pts(px(3)), css.Pts(px(4))
+		s.Margin[css.Top] = css.Pts(px(2))
+		bd := css.Border{Width: 0.75, Style: css.Solid, Color: css.Color{A: 1}}
+		s.Border = [4]css.Border{bd, bd, bd, bd}
+	})
 	tests := []struct {
 		name      string
 		f         float64
@@ -248,6 +255,10 @@ func TestWriterLines_LineHeight(t *testing.T) {
 		// below it.
 		{"picture", 1, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 28}},
 		{"picture 150%", 1.5, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 43}},
+		// A run's padding, border and margin above and below grow its
+		// line: 3 + 1 + 2 above the 8px ascent, 4 + 1 below the 2px
+		// descent, so the next line's baseline is 2 + 5 + 8 lower.
+		{"edges", 1, []*Node{el(edged, txt(edged, "ab")), nil, el(small, txt(small, "cd"))}, [2]float64{14, 29}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

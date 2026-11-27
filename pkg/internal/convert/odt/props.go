@@ -53,14 +53,20 @@ type textState struct {
 	letter    float64
 	letterSet bool
 	// kern is style:letter-kerning, false when no style sets it.
-	kern    bool
-	scale   float64
-	shadow  *css.Shadow
-	relief  string
-	outline bool
-	hidden  bool
-	lang    string
-	country string
+	kern   bool
+	scale  float64
+	shadow *css.Shadow
+	// border, padding and boxShadow are a character border, its spacing
+	// and its shadow (ODF 1.3, Part 3, 20.183, 20.240 and 20.349 on text
+	// properties).
+	border    [4]css.Border
+	padding   [4]float64
+	boxShadow []css.Shadow
+	relief    string
+	outline   bool
+	hidden    bool
+	lang      string
+	country   string
 	// scripts are the size, weight, posture and language of Asian and
 	// complex text, which a style sets apart from the Western text's.
 	scripts [2]scriptText
@@ -328,6 +334,10 @@ func (b *builder) foldText(t textState, layer odf.Props, pct percentRule) textSt
 	}
 	if v, ok := layer.Lookup("fo:text-shadow"); ok {
 		t.shadow = textShadow(v)
+	}
+	t.border, t.padding = foldBox(t.border, t.padding, layer)
+	if v, ok := layer.Lookup("style:shadow"); ok {
+		t.boxShadow = boxShadow(v)
 	}
 	if v, ok := layer.Lookup("style:font-relief"); ok {
 		t.relief = v
