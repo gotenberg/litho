@@ -80,6 +80,9 @@ type Control struct {
 	Swatch typeset.Color
 }
 
+// isControl reports the box of a form control.
+func isControl(b *box) bool { return b.node != nil && b.node.Control != nil }
+
 // ControlLabel is one row of a select: an option's label, or an option
 // group's heading, set bold, and indented by Indent points.
 type ControlLabel struct {
