@@ -586,10 +586,23 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		indent = *tp.ind
 	}
 	firstLeft := cellMar["left"]
+	leftBorder := tp.borders["left"]
 	if cells := placed[0].cells; len(cells) > 0 {
 		if m, ok := cells[0].props.margins["left"]; ok {
 			firstLeft = m
 		}
+		if b, ok := cells[0].props.borders["left"]; ok {
+			leftBorder = b
+		}
+	}
+	// outdent is how far left of the first cell's text Word sets the
+	// outer side of the table's left border before Word 2013: the edge
+	// the border is centred on sits the cell's left margin out, or half
+	// the border when that is wider.
+	outdent := firstLeft
+	if leftBorder != nil && leftBorder.Width > 0 {
+		half := float64(leftBorder.Width / 2)
+		outdent = max(firstLeft, half) + half
 	}
 	if d.settings.compat < 15 && tp.ind != nil && d.inCell == 0 {
 		// Before Word 2013 an indent places the first cell's text, so the
@@ -598,7 +611,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		// indent keeps its edge at the margin. Word places a nested
 		// table's edge at its indent from the cell's text whatever the
 		// mode (see [tableIndent]).
-		indent -= firstLeft
+		indent -= outdent
 	}
 	tableSt.Margin[css.Left] = css.Pts(indent)
 	// Only the table's own alignment (17.4.28) places it: Word prints a
@@ -625,11 +638,11 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	}
 	tbl := &layout.Node{Kind: layout.Element, Style: tableSt, Role: "Table"}
 	if anchored {
-		outdent := 0.0
+		shift := 0.0
 		if d.settings.compat < 15 {
-			outdent = firstLeft
+			shift = outdent
 		}
-		d.anchorTable(tbl, tp.floating, outdent)
+		d.anchorTable(tbl, tp.floating, shift)
 	}
 	for _, g := range grid {
 		cs := d.blockOf()

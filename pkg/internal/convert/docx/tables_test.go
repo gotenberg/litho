@@ -86,6 +86,12 @@ func TestTables(t *testing.T) {
 //   - litho/docx tables-row-heights: Word prints the table whose last row
 //     carries a centred row alignment at the left margin, the text of its
 //     first column at 77.8 pt on a 72 pt margin, as every other table.
+//   - openxmlsdk/docx O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx:
+//     Word, in the Word 2007 mode, draws a table's left border of sz 255
+//     (31.875 pt) from 40 to 72 pt on a 72 pt margin, centred 16 pt out,
+//     where the cell margin of 5.4 pt is narrower than half the border.
+//   - probe, docx: Word draws the left border of a floating table of
+//     Table Grid, 0.5 pt wide, from 66.3 pt on a 72 pt margin.
 func TestTables_LegacyIndent(t *testing.T) {
 	t.Parallel()
 	table := func(tblPr, rowPr string) string {
@@ -103,6 +109,9 @@ func TestTables_LegacyIndent(t *testing.T) {
 		{"no indent", ``, ``, css.Pts(0)},
 		{"row alignment", ``, `<w:jc w:val="center"/>`, css.Pts(0)},
 		{"table alignment first", `<w:jc w:val="left"/>`, `<w:jc w:val="right"/>`, css.Pts(0)},
+		// The border is centred on the edge: half of it lies further out.
+		{"thin border", `<w:tblInd w:w="0" w:type="dxa"/><w:tblBorders><w:left w:val="single" w:sz="4"/></w:tblBorders>`, ``, css.Pts(-defaultCellMargin - 0.25)},
+		{"border wider than twice the cell margin", `<w:tblInd w:w="0" w:type="dxa"/><w:tblBorders><w:left w:val="single" w:sz="255"/></w:tblBorders>`, ``, css.Pts(-31.875)},
 	} {
 		b := build(t, table(tc.tblPr, tc.rowPr), nil)
 		if m := role(b.root, "Table")[0].Style.Margin[css.Left]; m != tc.want {
