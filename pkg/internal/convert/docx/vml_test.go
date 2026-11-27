@@ -213,7 +213,7 @@ func TestVML_ArcSize(t *testing.T) {
 	for _, tc := range []struct {
 		attr string
 		want float64
-	}{{``, 20000}, {` arcsize="2637f"`, 2637.0 / 65536 * 100000}, {` arcsize="10%"`, 10000}, {` arcsize="0.9"`, 50000}} {
+	}{{``, 20000}, {` arcsize="2637f"`, 2637.0 / 65536 * 100000}, {` arcsize="10%"`, 10000}, {` arcsize="0.1"`, 10000}, {` arcsize="50%"`, 50000}, {` arcsize="16384f"`, 25000}, {` arcsize="0.9"`, 50000}} {
 		root, err := ooxml.Parse(t.Context(), []byte(`<w:pict `+nsDecl+`><v:roundrect`+tc.attr+`/></w:pict>`), nil)
 		if err != nil {
 			t.Fatal(err)

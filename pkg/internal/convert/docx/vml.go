@@ -322,6 +322,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 //     corners whose straight edges start 18 to 19.5 points from the
 //     corner, a radius of about 22.6 points, arcsize times its shorter
 //     side.
+//   - probe, docx: Word rounds v:roundrect shapes of 200 by 100 points
+//     with radii of 20, 10, 50 and 25 points for arcsize absent, 0.1, 50%
+//     and 16384f.
 func arcSize(k *ooxml.Element) float64 {
 	f, ok := ooxml.VMLFraction(attrOr(k, "arcsize"))
 	if !ok {
