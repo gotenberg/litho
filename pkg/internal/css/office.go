@@ -273,8 +273,22 @@ type Office struct {
 	// natural height from its glyph runs and atomic inlines alone; a line
 	// of atomic inlines alone is as tall as they are, the container's font
 	// sizing only the room a proportional spacing above 1 adds below them;
-	// an empty line is a line of the container's font. It applies to a
-	// block container whose [Style.WordRules] is 0.
+	// an empty line is a line of the container's font. A container too
+	// short to leave its orphans before a page break and its widows after
+	// it moves whole to the next page, as Writer moves such a paragraph.
+	// It applies to a block container whose [Style.WordRules] is 0.
+	//
+	// # Corpus evidence
+	//
+	//   - libreoffice/odt: odfexport/DUMMY2.odt prints the three lines of
+	//     "Integer sodales tincidunt tristique..." at the top of page 3,
+	//     page 2 being a picture, where two of them fit at the foot of
+	//     page 1; widows and orphans are 2.
+	//   - probe, odt: through gotenberg/gotenberg:9.4.1, a paragraph of 3
+	//     lines with room for 2 at the page's foot prints whole on the next
+	//     page at widows and orphans 2, and 1 then 2 lines at orphans 1; one
+	//     of 4 lines prints 2 then 2 at widows 2, whole on the next page at
+	//     widows 3.
 	WriterLines bool
 	// WriterIndents measures the lines of a block container beside the
 	// exclusions of [Office.FrameWrap] and [Office.WordAnchor] boxes as
