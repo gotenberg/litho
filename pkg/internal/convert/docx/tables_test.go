@@ -478,6 +478,10 @@ func TestFrames_Placed(t *testing.T) {
 			css.WordAnchor{X: 10, FromPage: true}, css.FrameWrapNone, css.Pts(100), css.Dimension{Kind: css.Auto}},
 		{"at the bottom right of the page, as wide as its text", `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:xAlign="right" w:yAlign="bottom"/>`,
 			css.WordAnchor{X: 540, Y: 720, AlignX: 1, AlignY: 1, FromPage: true}, css.FrameWrapBoth, css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}},
+		{"naming no anchor, from the column and the margins", `<w:framePr w:w="2880" w:wrap="around" w:x="2880" w:y="2880"/>`,
+			css.WordAnchor{X: 144, Y: 144, FromPage: true}, css.FrameWrapBoth, css.Pts(144), css.Dimension{Kind: css.Auto}},
+		{"naming no vAnchor, at the bottom margin", `<w:framePr w:w="2880" w:wrap="around" w:hAnchor="text" w:yAlign="bottom"/>`,
+			css.WordAnchor{Y: 648, AlignY: 1, FromPage: true}, css.FrameWrapBoth, css.Pts(144), css.Dimension{Kind: css.Auto}},
 	} {
 		b := build(t, para(tc.framePr, "framed")+`<w:p/>`, nil)
 		for _, a := range b.secs[0].pending {
@@ -500,10 +504,16 @@ func TestFrames_Placed(t *testing.T) {
 			t.Errorf("%s: frame holds %q", tc.name, textOf(frames[0]))
 		}
 	}
+	// A frame of yAlign inline naming no vertical anchor stays at its
+	// paragraph.
+	b := build(t, para(`<w:framePr w:wrap="auto" w:hAnchor="text" w:xAlign="left" w:yAlign="inline"/>`, "inline")+`<w:p/>`, nil)
+	if frames := find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set }); len(frames) != 0 {
+		t.Errorf("yAlign inline: %d frames placed, want none", len(frames))
+	}
 	f := `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="3000" w:y="4000"/>`
 	other := `<w:framePr w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="3000" w:y="9000"/>`
 	tbl := `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>` + para(f, "cell") + `</w:tc></w:tr></w:tbl>`
-	b := build(t, para(f, "one")+tbl+para(f, "two")+para(other, "three")+para("", "flow"), nil)
+	b = build(t, para(f, "one")+tbl+para(f, "two")+para(other, "three")+para("", "flow"), nil)
 	frames := find(b.root, func(n *layout.Node) bool { return n.Style != nil && n.Style.WordAnchor.Set })
 	if len(frames) != 2 || textOf(frames[0]) != "onecelltwo" || textOf(frames[1]) != "three" {
 		t.Fatalf("frames %d, want onecelltwo and three", len(frames))

@@ -800,11 +800,10 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 
 // framePlaced reports whether the text frame of properties f (17.3.1.11
 // framePr) is placed as Word places a frame of the body
-// ([document.placeFrame]): a frame that is no drop cap, names its
-// horizontal and vertical anchors, has a position or an alignment, and
-// wraps the text around it or keeps it above and below (wrap around,
-// auto, tight, through or notBeside), in the body outside tables and text
-// boxes. In a section of several columns, a frame positioned from the
+// ([document.placeFrame]): a frame that is no drop cap, has a position
+// or an alignment, and wraps the text around it or keeps it above and
+// below (wrap around, auto, tight, through or notBeside), in the body
+// outside tables and text boxes. In a section of several columns, a frame positioned from the
 // page or its margins counts from the first column
 // (css.WordAnchor.FromFirstColumn).
 //
@@ -814,6 +813,10 @@ func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 //     columns, Word sets the text of a frame of x 4569 from the page at
 //     228.6 points across, in the second column, and draws a frame of x
 //     4014 from the page a column wide from 200.7 points across.
+//   - openxmlsdk/docx
+//     v2FxTestFiles/wordprocessing/O12_templates/UrbanLetter_TP10192756.dotx:
+//     Word prints a frame of hAnchor text, xAlign left and yAlign inline
+//     where its paragraph stands, the next paragraph below it.
 func (d *document) framePlaced(f *ooxml.Element) bool {
 	if f == nil || !d.pageAnchors() || d.inCell > 0 || hasAttr(f, "dropCap") && attrOr(f, "dropCap") != "none" {
 		return false
@@ -823,9 +826,9 @@ func (d *document) framePlaced(f *ooxml.Element) bool {
 	default:
 		return false
 	}
-	if !hasAttr(f, "hAnchor") || !hasAttr(f, "vAnchor") {
-		// The areas a frame that names no anchor is placed in are not
-		// measured: such a frame floats as before.
+	if attrOr(f, "yAlign") == "inline" && !hasAttr(f, "vAnchor") {
+		// A frame of yAlign inline (17.18.104 ST_YAlign) that names no
+		// vertical anchor is printed at its paragraph's place.
 		return false
 	}
 	for _, name := range [4]string{"x", "y", "xAlign", "yAlign"} {
@@ -863,14 +866,15 @@ type frameGroup struct {
 // and places it as Word places a drawing that wraps the text
 // ([document.placeWord]): its left edge, where its paragraphs' text
 // starts, x right of the area hAnchor names (the page, the margins, or
-// the column for text), or aligned in it by xAlign; its top edge y below
-// the top of the area vAnchor names, or below the paragraph after the
-// frame for text, or aligned by yAlign, in the margins for a frame
-// anchored to the text. A frame wraps the text on both sides, at hSpace
-// beside it and vSpace above and below; one of wrap notBeside keeps it
-// above and below. w sets its width, h its height, exact or at least by
-// hRule (17.18.37 ST_HeightRule); a frame without a width is as wide as
-// its text, at most its column.
+// the column for text, and when it names none), or aligned in it by
+// xAlign; its top edge y below the top of the area vAnchor names (the
+// page, or the margins, also when it names none), or below the paragraph
+// after the frame for text, or aligned by yAlign, in the margins for a
+// frame anchored to the text. A frame wraps the text on both sides, at
+// hSpace beside it and vSpace above and below; one of wrap notBeside
+// keeps it above and below. w sets its width, h its height, exact or at
+// least by hRule (17.18.37 ST_HeightRule); a frame without a width is as
+// wide as its text, at most its column.
 //
 // # Corpus evidence
 //
@@ -887,6 +891,11 @@ type frameGroup struct {
 //   - libreoffice/docx layout/tdf124423.docx: a frame anchored to the
 //     text has the top of its border y below the top of the paragraph
 //     after it, its text starting at its x, the border outside.
+//   - probe, docx: Word sets the text of a frame of x 2880 and y 2880
+//     naming no anchor at 216 points across and 218 down, x and y from
+//     the margins; one of yAlign bottom naming no vAnchor ends at the
+//     bottom margin; one of xAlign right naming no hAnchor ends at the
+//     right margin.
 func (d *document) placeFrame(f *ooxml.Element) *layout.Node {
 	twips := func(name string) float64 {
 		v, _ := ooxml.Twips(attrOr(f, name))
@@ -917,11 +926,13 @@ func (d *document) placeFrame(f *ooxml.Element) *layout.Node {
 	switch a := attrOr(f, "vAnchor"); a {
 	case "margin", "page":
 		p.relV = a
-	default:
+	case "text":
 		p.relV = "paragraph"
 		if p.alignV != "" {
 			p.relV = "margin"
 		}
+	default:
+		p.relV = "margin"
 	}
 	if w := twips("w"); w > 0 {
 		st.Width = css.Pts(w)
