@@ -362,6 +362,12 @@ func arabicFormat(format string) bool {
 //   - libreoffice/odt odfexport/chapter-number-new-line.odt: Writer prints
 //     the number "1" of a heading whose outline level says newline on a
 //     line of its own, the heading's text on the line below.
+//   - libreoffice/odt: layout/abi11870-2.odt: its first level 1 heading
+//     the outline numbers, after level 2 headings and none of level 1,
+//     prints "2.".
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, the headings of
+//     levels 2, 1, 1, 2 of an outline of formats "1." and "(a)" print
+//     "(a)", "2.", "3.", "(a)".
 func (b *builder) outlineLabel(level int) string {
 	os := b.styles.Outline
 	if os == nil || level < 1 || level > odf.MaxListLevels || os.Levels[level-1] == nil {
@@ -370,7 +376,17 @@ func (b *builder) outlineLabel(level int) string {
 	if b.lists == nil {
 		b.lists = &listState{last: map[string]*listCounter{}, byID: map[string]*listCounter{}}
 	}
-	lc := &listCtx{style: os, level: level, counter: &b.lists.outline}
+	cnt := &b.lists.outline
+	// A level no heading has numbered yet below which a heading is
+	// numbered stands at its start value, the next heading of that level
+	// counting on from it.
+	for d := range level - 1 {
+		if !cnt.used[d] {
+			cnt.n[d] = levelStart(os.Levels[d])
+			cnt.used[d] = true
+		}
+	}
+	lc := &listCtx{style: os, level: level, counter: cnt}
 	item := &itemCtx{lvl: os.Levels[level-1]}
 	b.number(item, lc, &odf.Element{})
 	if item.label == "" {

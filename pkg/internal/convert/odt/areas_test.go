@@ -578,6 +578,27 @@ func TestConvert_ListedHeadingTakesItsListsLabel(t *testing.T) {
 	}
 }
 
+// TestConvert_SkippedOutlineLevelStandsAtItsStart counts a level 1
+// heading after level 2 ones from the start the level 2 heading gave its
+// unnumbered level 1.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, headings of levels
+//     2, 1, 1, 2 print "(a)", "2.", "3.", "(a)".
+func TestConvert_SkippedOutlineLevelStandsAtItsStart(t *testing.T) {
+	styles := `<text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-suffix="." style:num-format="1"/>` +
+		`<text:outline-level-style text:level="2" style:num-prefix="(" style:num-suffix=")" style:num-format="a"/></text:outline-style>`
+	h := func(level, s string) string {
+		return `<text:h text:outline-level="` + level + `">` + s + `</text:h>`
+	}
+	body := h("2", "AA") + h("1", "BB") + h("1", "CC") + h("2", "DD")
+	got := pageText(convertDoc(t, doc{styles: styles, body: body}.pack(t), office.Options{}).Pages[0])
+	if got != "(a)AA\n2.BB\n3.CC\n(a)DD" {
+		t.Errorf("headings = %q", got)
+	}
+}
+
 // TestConvert_ListHeadingOutlineTitle bookmarks a heading in a numbered
 // list with its label first.
 //
