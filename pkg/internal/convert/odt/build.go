@@ -76,6 +76,9 @@ type builder struct {
 	// cellStyle names the style of the table cell whose content is being
 	// built, "" outside a cell ([builder.cellLayers]).
 	cellStyle string
+	// inCell reports that the content being built is a table cell's,
+	// outside any text box or note in it.
+	inCell bool
 	// boxed counts the table cells, text boxes and notes being built, in
 	// which a paragraph's frames keep floating.
 	boxed int

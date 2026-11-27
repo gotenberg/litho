@@ -22,6 +22,9 @@ type floatRect struct {
 	// marks one of css.WordAnchor.Writer.
 	word, writer bool
 	border       [4]float64
+	// overflows marks the exclusion of a float of
+	// css.Office.FloatOverflows, which [bfc.bottom] leaves out.
+	overflows bool
 	// initial marks the margin box of an initial letter
 	// (initialletter.go).
 	initial bool
@@ -482,7 +485,14 @@ func (c *bfc) besideInitial(side css.Float, y float64) float64 {
 	return out
 }
 
-// bottom returns the lowest float margin edge, -Inf without floats.
+// bottom returns the lowest float margin edge, -Inf without floats, the
+// floats of css.Office.FloatOverflows left out.
 func (c *bfc) bottom() float64 {
-	return c.clearTo(css.ClearBoth)
+	y := math.Inf(-1)
+	for _, f := range c.floats {
+		if f.wrap == css.FrameWrapThrough && !f.overflows {
+			y = max(y, f.y1)
+		}
+	}
+	return y
 }

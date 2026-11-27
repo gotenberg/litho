@@ -191,6 +191,13 @@ type Office struct {
 	// [WordAnchor]. It applies to a float of a block formatting context
 	// other than a table cell's alone.
 	WordAnchor WordAnchor
+	// FloatOverflows leaves a float out of the auto height of the root of
+	// its block formatting context, which it may then reach past: Writer
+	// sizes a table cell by its text alone, the lines beside an object
+	// anchored in it wrapping as they do, and the object, when it does
+	// not follow the text flow (ODF 1.3 Part 3, 20.267
+	// style:flow-with-text false), standing where its offsets put it.
+	FloatOverflows bool
 	// WrapPolygon is the contour the text wraps along beside a box of
 	// [Office.WordAnchor] (ECMA-376 Part 1, 20.4.2.16 wrapPolygon, the
 	// contour of wrapTight and wrapThrough), its points in fractions of

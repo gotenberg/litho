@@ -317,3 +317,29 @@ func TestFrameCentredInCell(t *testing.T) {
 	}
 	t.Error("no IN")
 }
+
+// TestFrameOverflowsItsCell sizes a table cell by its text alone when
+// the frame anchored in it does not follow the text flow, and grows it to
+// the frame when it does.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 3 cm rectangle
+//     anchored 0.5 cm below the top of a one-line cell's paragraph,
+//     wrapped parallel, leaves the row one line tall under
+//     flow-with-text false or none and grows it to the rectangle under
+//     flow-with-text true.
+func TestFrameOverflowsItsCell(t *testing.T) {
+	for flow, grows := range map[string]bool{"": false, ` style:flow-with-text="false"`: false, ` style:flow-with-text="true"`: true} {
+		auto := `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties style:wrap="parallel" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"` + flow + `/></style:style>`
+		body := `<table:table table:name="T"><table:table-column/><table:table-row><table:table-cell><text:p>Cell<draw:rect text:anchor-type="paragraph" draw:style-name="gr1" svg:width="3cm" svg:height="3cm" svg:x="2cm" svg:y="0.5cm"/></text:p></table:table-cell></table:table-row></table:table><text:p>After</text:p>`
+		ls := lines(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0])
+		if len(ls) != 2 {
+			t.Fatalf("flow %q: lines %+v", flow, ls)
+		}
+		// The rectangle ends 3.5 cm, 99 pt, below the cell's top.
+		if got := ls[1].y-ls[0].y > 90; got != grows {
+			t.Errorf("flow %q: After %.1f pt below Cell, grown %v, want %v", flow, ls[1].y-ls[0].y, got, grows)
+		}
+	}
+}

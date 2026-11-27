@@ -216,6 +216,8 @@ type frameGeom struct {
 	// bare marks a text frame Writer paints as a shape: see
 	// [builder.bareFrame].
 	bare bool
+	// inCell marks a frame anchored in a table cell's content.
+	inCell bool
 }
 
 // geometry reads a drawing element's geometry and graphic style.
@@ -226,7 +228,7 @@ type frameGeom struct {
 //     linked custom shape to its paragraph on its draw:a alone, and
 //     LibreOffice prints it 4.1 cm and 5 cm from the paragraph.
 func (b *builder) geometry(c *odf.Element) frameGeom {
-	g := frameGeom{anchor: c.A(odf.NSText, "anchor-type")}
+	g := frameGeom{anchor: c.A(odf.NSText, "anchor-type"), inCell: b.inCell}
 	if g.anchor == "" {
 		// LibreOffice writes the anchor of a drawing that is a link on
 		// its draw:a, which ODF 1.3 Part 3, 10.4.12 gives no anchor, and
@@ -692,6 +694,7 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	if g.vpos == "from-top" || g.vpos == "" {
 		st.Margin[css.Top] = css.Pts(margins[css.Top] + max(g.y, 0))
 	}
+	st.FloatOverflows = overflowsCell(g)
 	if g.wrap != "none" {
 		if b.floats == nil {
 			b.floats = map[*layout.Node]frameGeom{}
@@ -847,6 +850,25 @@ func (b *builder) anchorFrame(n *layout.Node, g frameGeom, st *css.Style) {
 	fs := *n.Style
 	fs.WordAnchor = a
 	n.Style = &fs
+}
+
+// overflowsCell reports a frame of geometry g anchored in a table cell
+// that does not follow the text flow (ODF 1.3 Part 3, 20.267
+// style:flow-with-text, false when absent): Writer sizes the cell by its
+// text alone, the frame reaching past its bottom.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/tdf116830.odt: a 5.8 cm square anchored in
+//     a one-line cell, of a default style of flow-with-text false, leaves
+//     the row one line tall.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 3 cm rectangle or
+//     text frame 0.5 cm below the top of a one-line cell's paragraph
+//     leaves the row one line tall under flow-with-text false or none,
+//     wrapped parallel, none or run-through, and grows it to the frame's
+//     bottom under flow-with-text true, wrapped parallel or none.
+func overflowsCell(g frameGeom) bool {
+	return g.inCell && g.props.Get("style:flow-with-text") != "true"
 }
 
 // frameFirst moves the frames of kids, a paragraph's inline content, that
@@ -1472,10 +1494,10 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	}
 	restore := b.comments.apart()
 	b.boxed++
-	cell := b.cellStyle
-	b.cellStyle = ""
+	cell, inCell := b.cellStyle, b.inCell
+	b.cellStyle, b.inCell = "", false
 	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
-	b.cellStyle = cell
+	b.cellStyle, b.inCell = cell, inCell
 	b.boxed--
 	restore()
 	return n

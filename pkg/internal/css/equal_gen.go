@@ -2294,6 +2294,9 @@ func equalOffice(a, b *Office) bool {
 	if !equalWordAnchor(&a.WordAnchor, &b.WordAnchor) {
 		return false
 	}
+	if a.FloatOverflows != b.FloatOverflows {
+		return false
+	}
 	if (a.WrapPolygon == nil) != (b.WrapPolygon == nil) || len(a.WrapPolygon) != len(b.WrapPolygon) {
 		return false
 	}
@@ -2371,6 +2374,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 		h = mix(h, math.Float64bits(x.WrapGap[i1]))
 	}
 	h = hashWordAnchor(h, &x.WordAnchor)
+	h = mixBool(h, x.FloatOverflows)
 	h = mixBool(h, x.WrapPolygon == nil)
 	h = mix(h, uint64(len(x.WrapPolygon)))
 	for i1 := range x.WrapPolygon {

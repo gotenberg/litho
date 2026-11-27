@@ -478,3 +478,20 @@ func TestFloats_ReadInDocumentOrder(t *testing.T) {
 		})
 	}
 }
+
+// TestFloats_OverflowingFloatLeavesTheAutoHeight sizes a formatting
+// context root by its in-flow content alone when its float sets
+// css.Office.FloatOverflows, and by the float too otherwise.
+func TestFloats_OverflowingFloatLeavesTheAutoHeight(t *testing.T) {
+	for _, tc := range []struct {
+		overflows bool
+		want      float64
+	}{{false, 100}, {true, 20}} {
+		fl := sty(float(css.FloatLeft), width(30), height(100))
+		fl.FloatOverflows = tc.overflows
+		rb := boxes(t, doc(el(sty(display(css.FlowRoot)), el(fl), el(sty(height(20))))), page(100, 200))
+		if got := rect(kid(t, rb, 0, 0)); got[3] != tc.want {
+			t.Errorf("overflows %v: root %v tall, want %v", tc.overflows, got[3], tc.want)
+		}
+	}
+}

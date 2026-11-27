@@ -351,6 +351,7 @@ func (e *engine) addFloatRect(f *box, bc *bfc, initial bool) int {
 	bc.floats = append(bc.floats, floatRect{
 		side: f.float, x0: f.x - f.m[css.Left], y0: f.y - f.m[css.Top],
 		x1: f.x - f.m[css.Left] + f.marginW(), y1: f.y - f.m[css.Top] + f.marginH(), initial: initial,
+		overflows: f.st.FloatOverflows,
 	})
 	return len(bc.floats) - 1
 }
