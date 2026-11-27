@@ -409,7 +409,8 @@ type Office struct {
 // its anchor's page, moved up to end inside the page box when it reaches
 // past it; one without [Office.PageClamp] that is taller than its page
 // box, a floating table (17.4.58), breaks across the pages it reaches
-// instead.
+// instead, and the box in flow after it starts no higher than the top of
+// the last of those pages.
 //
 // AlignX and AlignY move the float left and up by those fractions of its
 // own border box's width and height, laid out: 1 sets its right or bottom

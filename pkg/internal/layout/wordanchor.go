@@ -176,7 +176,7 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 		f.shift(float64(2*axis)-float64(2*f.x)-f.borderW(), 0)
 	}
 	e.noPaginate--
-	breaks := !f.st.PageClamp && f.kind != kindReplaced && e.paginating() && f.borderH() > e.box(page).Height
+	breaks := e.wordBreaks(f, page)
 	if breaks {
 		// A float that may break, a floating table, taller than its page
 		// runs on across the pages it reaches, laid out where it stands.
@@ -201,6 +201,39 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	}
 	bc.floats = append(bc.floats, wordRect(f))
 	return len(bc.floats) - 1
+}
+
+// wordBreaks reports whether the float f of css.Office.WordAnchor,
+// anchored on page, breaks across the pages it reaches: one that may
+// break, a floating table, taller than its page box.
+func (e *engine) wordBreaks(f *box, page int) bool {
+	return !f.st.PageClamp && f.kind != kindReplaced && e.paginating() && f.borderH() > e.box(page).Height
+}
+
+// wordFloatResume returns the top of the last page the float f of
+// css.Office.WordAnchor reaches when it breaks across pages
+// ([engine.wordBreaks]); -Inf otherwise. The box in flow after it starts
+// no higher, as Word starts the text that follows a floating table on
+// the page where the table ends, beside its last rows (ECMA-376 Part 1,
+// 17.4.58 tblpPr states no rule for a table that breaks). A float of
+// css.WordAnchor.Writer leaves the flow where it stands.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a 60-row table of tblpY 1440 from the page
+//     after a one-line paragraph with 45 rows on page 1, 15 on page 2,
+//     and the paragraph after the table at the top of page 2, beside
+//     them.
+func (e *engine) wordFloatResume(f *box) float64 {
+	a := f.st.WordAnchor
+	if !a.Set || a.Writer || !f.laidOut || e.cols != nil || !e.wordBreaks(f, e.pageOf(f.anchorTop+eps)) {
+		return math.Inf(-1)
+	}
+	last := e.pageOf(f.y + f.borderH() - eps)
+	if last <= e.pageOf(f.y+eps) {
+		return math.Inf(-1)
+	}
+	return e.pageTop(last)
 }
 
 // columnShift returns how far right of the first column's start edge the

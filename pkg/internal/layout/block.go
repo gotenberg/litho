@@ -1507,6 +1507,9 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// reached is the column the children laid out so far reached, -1 for
 	// none ([engine.pinToColumn]).
 	reached := -1
+	// resume is where the box in flow after a float that breaks across
+	// pages starts at the earliest ([engine.wordFloatResume]).
+	resume := math.Inf(-1)
 	release := e.releasing(b)
 	for i, k := range b.kids {
 		if e.err != nil {
@@ -1535,6 +1538,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			}
 			mc.alignFloats(top)
 			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
+			resume = max(resume, e.wordFloatResume(k))
 			if e.floatBreaks(k, k.st.BreakAfter) {
 				after = k
 			}
@@ -1545,6 +1549,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			mc.absPending(k, nil)
 			continue
 		}
+		if resume > cursor+mc.strut.sum()+eps {
+			mc.commit(cursor + mc.strut.sum())
+			cursor = resume
+		}
+		resume = math.Inf(-1)
 		snap := take(cursor)
 		mode := breakNone
 		switch {

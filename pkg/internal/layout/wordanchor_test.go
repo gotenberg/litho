@@ -215,6 +215,39 @@ func TestWordAnchor_TallFloatBreaks(t *testing.T) {
 	}
 }
 
+// TestWordAnchor_TextAfterBreakingFloat starts the paragraph in flow after
+// a float of css.Office.WordAnchor that breaks across pages on the last
+// page the float reaches, beside it, as Word starts the text after a
+// floating table that breaks on the table's last page; a Writer frame
+// leaves it below the paragraph before.
+func TestWordAnchor_TextAfterBreakingFloat(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		mods []func(*css.Style)
+		page int
+		want string
+	}{
+		{"word", nil, 3, "X@0,8 X@0,18 X@0,28 X@0,38 X@0,48 X@0,58 X@0,68 X@0,78 b@20,8 "},
+		{"writer", []func(*css.Style){writer}, 1, "X@0,18 X@0,28 X@0,38 X@0,48 X@0,58 X@0,68 X@0,78 X@0,88 a@0,8 b@20,18 "},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := make([]*Node, 0, 25)
+			for range 25 {
+				lines = append(lines, el(sty(), txt(sty(), "X")))
+			}
+			f := el(sty(append([]func(*css.Style){func(s *css.Style) {
+				s.Float = css.FloatLeft
+				s.WordAnchor = css.WordAnchor{Set: true}
+				s.FrameWrap = css.FrameWrapBoth
+			}, width(20)}, tt.mods...)...), lines...)
+			res := run(t, doc(wpara("a"), f, wpara("b")), page(100, 95))
+			if got := linePlaces(res, tt.page); got != tt.want {
+				t.Errorf("page %d lines %s, want %s", tt.page, got, tt.want)
+			}
+		})
+	}
+}
+
 // writer marks a float of css.WordAnchor.Writer.
 func writer(s *css.Style) { s.WordAnchor.Writer = true }
 
