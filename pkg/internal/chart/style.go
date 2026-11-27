@@ -66,13 +66,26 @@ const maxMarkerSize = 100
 func lined(k Kind) bool { return k == Line || k == Scatter || k == Radar }
 
 // fillOf returns the fill of point j of series s in group g, j -1 for the
-// series itself.
+// series itself. Under Office's rules a pie's point without a fill of its
+// own takes its series' fill when the series states one, whether the
+// group varies its colours or not; LibreOffice varies them over it.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 45540_classic_Footer.xlsx, 45540_classic_Header.xlsx and
+//     45544.xlsx fill the first sector of each of their 3-D pies, which
+//     varies its colours and has no c:dPt for that point, in the series'
+//     9999FF, as Excel prints them.
 func (rd *renderer) fillOf(g *Group, s *Series, j int) *Paint {
 	if p := rd.point(s, j); p != nil && p.Fill != nil {
 		return p.Fill
 	}
 	if g.Kind == Waterfall && j >= 0 {
 		return rd.waterfallFill(s, rd.waterfallKind(s, j))
+	}
+	// Office fills a pie's point with the series' fill.
+	if s.Fill != nil && (g.Kind == Pie || g.Kind == Doughnut) && rd.office() {
+		return s.Fill
 	}
 	// A pie varies its colours over the series' fill; another kind only
 	// when the series has none (oox's SeriesConverter::createDataSeries).

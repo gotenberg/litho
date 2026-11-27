@@ -231,3 +231,26 @@ func TestRender_OfficePieLayout(t *testing.T) {
 		t.Errorf("a labelled pie %.2f high, want LibreOffice's layout", lo.Height)
 	}
 }
+
+// TestRender_OfficePieSeriesFill holds a varied Office pie's point without
+// a fill of its own to its series' fill, where LibreOffice's rule varies
+// it.
+func TestRender_OfficePieSeriesFill(t *testing.T) {
+	blue := typeset.Color{B: 1, A: 1}
+	for _, rules := range []Rules{OfficeRules, LibreOfficeRules} {
+		s := &Series{Values: Data{Values: nums(1, 1, 1), Cached: true}, Fill: &Paint{Color: red},
+			Points: []Point{{Index: 1, Fill: &Paint{Color: blue}}}}
+		c := &Chart{Rules: rules, Groups: []*Group{{Kind: Pie, VaryColors: true, XAxis: -1, YAxis: -1, Series: []*Series{s}}}}
+		frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 300, Height: 200})
+		want := 2
+		if rules != OfficeRules {
+			want = 0
+		}
+		if n := len(paths(frags, red)); n != want {
+			t.Errorf("rules %v: %d sectors in the series' fill, want %d", rules, n, want)
+		}
+		if n := len(paths(frags, blue)); n != 1 {
+			t.Errorf("rules %v: %d sectors in the point's fill, want 1", rules, n)
+		}
+	}
+}
