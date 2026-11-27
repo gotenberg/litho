@@ -228,3 +228,30 @@ func TestWritingMode_OrthogonalInlineBlockBaseline(t *testing.T) {
 		t.Errorf("the inline-block does not end on the baseline:\n%s", strings.Join(g, "\n"))
 	}
 }
+
+// TestWritingMode_OrthogonalRootFitsItsContainingBlockHeight fits the
+// lines of an orthogonal flow root of auto height in its containing
+// block's definite height, its available inline space (CSS Writing Modes
+// 4, 7.3.1), not in the initial containing block's: a vertical-rl block in
+// a box 3 px tall breaks "X X X X" into two lines of three pixels.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 breaks a
+//     vertical-rl block of auto size in a 200px tall box into lines 200px
+//     long, four lines of 16px/20px text.
+func TestWritingMode_OrthogonalRootFitsItsContainingBlockHeight(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	st := sty(font(1), wm, fg(red))
+	root := doc(el(sty(width(6), height(3), bg(lime)), el(st, txt(st, "X X X X"))))
+	assertPixels(t, runWith(t, root, Options{Page: page(6, 8), BrowserRules: true}), 1, `
+		RRGGGG
+		GGGGGG
+		RRGGGG
+		______
+		______
+		______
+		______
+		______`)
+}

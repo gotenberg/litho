@@ -122,7 +122,9 @@ func innerTurner(b *box) *box {
 //
 // The inline size is the root's height when definite, a percentage
 // resolving against the initial containing block when the containing
-// block's is not, else its table row's, else the content's fit-content width in the space
+// block's is not, else its table row's, else the content's fit-content
+// width in the available space: the containing block's height when
+// definite, which is the root's available inline space, else the space
 // [engine.orthoAvailable] gives (CSS Writing Modes 4, 7.3.1).
 type orthoFormatter struct{}
 
@@ -234,7 +236,11 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 		}
 	}
 	lo, hi := formatterFor(b.kids[0]).intrinsic(e, b.kids[0])
-	return min(max(lo, e.orthoAvailable(b)-vEdges(b)-b.m[css.Top]-b.m[css.Bottom]), hi)
+	avail := e.orthoAvailable(b)
+	if cb.availSet {
+		avail = cb.avail
+	}
+	return min(max(lo, avail-vEdges(b)-b.m[css.Top]-b.m[css.Bottom]), hi)
 }
 
 // orthoAvailable returns the space an orthogonal flow root b whose

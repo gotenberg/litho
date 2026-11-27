@@ -66,10 +66,14 @@ func (e *engine) captionsHeight(w *box, cb cblock, y float64) float64 {
 }
 
 // wrapperCB returns the containing block kcb the box b gives its content,
-// but for a table wrapper box the height of cb, its own containing block:
+// with the definite height of cb for an orthogonal flow root (see
+// [cblock.avail]), but for a table wrapper box the height of cb, its own containing block:
 // the table box's percentage height resolves against it (CSS 2.1, 17.4
 // and 10.5), the wrapper's height being auto.
 func wrapperCB(b *box, kcb, cb cblock) cblock {
+	if b.ortho && cb.hDefinite {
+		kcb.avail, kcb.availSet = cb.h, true
+	}
 	if b.tpart == partWrapper {
 		kcb.h, kcb.hDefinite = cb.h, cb.hDefinite
 		kcb.quirk = cb.quirk

@@ -15,6 +15,11 @@ type cblock struct {
 	// h is the height percentages resolve against when definite.
 	h         float64
 	hDefinite bool
+	// avail is, for the content box of an orthogonal flow root, the
+	// definite height of the root's own containing block, its available
+	// inline space (CSS Writing Modes 4, 7.3.1); availSet reports one.
+	avail    float64
+	availSet bool
 	// shrinkScrollers reports a table cell measured before its height
 	// is known, whose percentage-height scroll containers then take
 	// their min-height alone ([engine.layoutCell]).
