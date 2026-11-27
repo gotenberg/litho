@@ -51,7 +51,9 @@ const (
 // Render draws c into r, as LibreOffice draws a chart: the chart area,
 // the title and subtitle at the top, the legend at its side, and the plot
 // area in the space left, with its axes, gridlines, series and data labels.
-// Every fragment lies inside r: the content is clipped to it. Text is shaped
+// The content is clipped to r; under [OfficeRules], outside a presentation,
+// the chart area's border follows it, centred on r's edge and unclipped,
+// as Excel and Word stroke it ([renderer.borderOnTop]). Text is shaped
 // with fonts and emitted as [typeset.Text] runs, so extraction reads it.
 //
 // It returns nil for a nil chart, a nil font index, or a rectangle without
@@ -94,16 +96,48 @@ func render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect, sh
 	}
 	rd := &renderer{ctx: ctx, fonts: fonts, c: boxed(arranged(binned(c))), page: r, shown: shown}
 	rd.render(r)
-	if len(rd.out) == 0 {
+	var border *typeset.Path
+	if rd.borderOnTop() {
+		border = paintPath(rectPath(r).Ops, nil, rd.c.Area.Border)
+	}
+	if len(rd.out) == 0 && border == nil {
 		return nil
 	}
-	return []typeset.Fragment{&typeset.Group{Clip: rectPath(r), Content: rd.out}}
+	out := []typeset.Fragment{&typeset.Group{Clip: rectPath(r), Content: rd.out}}
+	if border != nil {
+		out = append(out, border)
+	}
+	return out
+}
+
+// borderOnTop reports a chart area whose border Excel and Word stroke
+// last, over the chart's content and centred on the edge of the chart's
+// box, unclipped by it: a chart under [OfficeRules] outside a
+// presentation. Other charts stroke it under their content, inside the
+// clip of the box.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: spreadsheet/56557.xlsx, a chartsheet's empty chart, prints
+//     its 0.75-point frame centred on the drawing's 732.92 by 478.96 point
+//     box after its fill, clipped by the page alone.
+//   - libreoffice/xlsx: chart2/chart-area-style-border.xlsx strokes the
+//     chart area's border after the plot, the series and the legend, with
+//     no clip around it.
+//   - litho/docx: charts-bar-column, Word strokes the frame of the chart
+//     last, in a clip wider than the chart's box.
+func (rd *renderer) borderOnTop() bool {
+	return rd.office() && !rd.c.PowerPoint && rd.c.Area.Border.compose() != nil
 }
 
 // render lays the chart out into r and paints it.
 func (rd *renderer) render(r typeset.Rect) {
 	c := rd.c
-	rd.frame(r, c.Area)
+	area := c.Area
+	if rd.borderOnTop() {
+		area.Border = nil
+	}
+	rd.frame(r, area)
 	if rd.ctx.Err() != nil {
 		return
 	}

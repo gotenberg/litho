@@ -601,3 +601,42 @@ func TestAreaOrder_ByRules(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_OfficeBorderOnTop holds the chart area's border under
+// OfficeRules outside a presentation: stroked after the content, outside
+// the clip of the chart's box, on its edge; a presentation's and a chart
+// under LibreOffice's rules stroke it first, inside the clip.
+func TestRender_OfficeBorderOnTop(t *testing.T) {
+	border := &Stroke{Color: typeset.Color{R: 0.525, G: 0.525, B: 0.525, A: 1}, Width: 0.75}
+	for _, tc := range []struct {
+		name       string
+		rules      Rules
+		powerPoint bool
+		onTop      bool
+	}{
+		{"excel", OfficeRules, false, true},
+		{"powerpoint", OfficeRules, true, false},
+		{"libreoffice", LibreOfficeRules, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := barChart(1, 2, 3)
+			c.Rules, c.PowerPoint = tc.rules, tc.powerPoint
+			c.Area = Frame{Fill: &Paint{Color: typeset.Color{R: 1, G: 1, B: 1, A: 1}}, Border: border}
+			frags := Render(context.Background(), ahem(t), c, chartRect)
+			last, ok := frags[len(frags)-1].(*typeset.Path)
+			onTop := ok && len(frags) == 2 && last.Stroke != nil && last.Fill == nil && reflect.DeepEqual(bounds(last), chartRect)
+			if onTop != tc.onTop {
+				t.Fatalf("border stroked over the clipped content: %v, want %v (%d top fragments)", onTop, tc.onTop, len(frags))
+			}
+			strokes := 0
+			walk(frags, 0, func(fr typeset.Fragment, _ int) {
+				if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && reflect.DeepEqual(bounds(p), chartRect) {
+					strokes++
+				}
+			})
+			if strokes != 1 {
+				t.Errorf("the chart area's border is stroked %d times, want once", strokes)
+			}
+		})
+	}
+}

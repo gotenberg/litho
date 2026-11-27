@@ -53,7 +53,9 @@ func FuzzChartFromElement(f *testing.F) {
 		if d := time.Since(start); d > 2*time.Second {
 			t.Fatalf("rendering took %v", d)
 		}
-		if len(frags) > 1 {
+		// The clipped drawing, and the chart area's border Excel and Word
+		// stroke over it.
+		if len(frags) > 2 {
 			t.Fatalf("got %d top fragments", len(frags))
 		}
 	})
@@ -88,7 +90,9 @@ func FuzzChartExFromElement(f *testing.F) {
 		if d := time.Since(start); d > 2*time.Second {
 			t.Fatalf("rendering took %v", d)
 		}
-		if len(frags) > 1 {
+		// The clipped drawing, and the chart area's border Excel and Word
+		// stroke over it.
+		if len(frags) > 2 {
 			t.Fatalf("got %d top fragments", len(frags))
 		}
 	})
