@@ -220,7 +220,13 @@ func (rd *renderer) pies(plot typeset.Rect) {
 			if !lb.Any() {
 				continue
 			}
-			b := rd.measure(rd.labelText(g, s, j, v, lb, math.Abs(v)/total), lb.Style, 0)
+			wrap := 0.0
+			if rd.office() {
+				// Office wraps a pie's label at a share of the chart's
+				// width (officeLabelShare).
+				wrap = math.Max(float64(rd.page.Width*officeLabelShare)-2*officeLabelInsetX, 1)
+			}
+			b := rd.measure(rd.labelText(g, s, j, v, lb, math.Abs(v)/total), lb.Style, wrap)
 			if b == nil {
 				continue
 			}
