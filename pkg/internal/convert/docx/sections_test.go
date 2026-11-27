@@ -177,6 +177,16 @@ func TestHeaders_GrowTheMargin(t *testing.T) {
 	if box.Margin[css.Top] <= 36 {
 		t.Errorf("top margin %v not grown for a six-line header", box.Margin[css.Top])
 	}
+	// A title page prints its first header, none here, and keeps its
+	// margin; the pages after it print the default one and grow.
+	b = build(t, strings.Replace(body, `</w:sectPr>`, `<w:titlePg/></w:sectPr>`, 1), extra)
+	pg = b.d.newPages(b.secs)
+	if first := pg.box(layout.PageInfo{Name: b.secs[0].name}); first.Margin[css.Top] != 36 {
+		t.Errorf("title page top margin %v, want 36: it prints no header", first.Margin[css.Top])
+	}
+	if next := pg.box(layout.PageInfo{Name: b.secs[0].name, Index: 1}); next.Margin[css.Top] <= 36 {
+		t.Errorf("second page top margin %v not grown for its six-line header", next.Margin[css.Top])
+	}
 }
 
 func TestSections_ColumnBreaks(t *testing.T) {

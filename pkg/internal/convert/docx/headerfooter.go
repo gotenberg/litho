@@ -33,12 +33,15 @@ type pages struct {
 	// tall lays a single page out past [office.MaxPageSide], once the
 	// content was found to pass it.
 	tall bool
+	// firstPage holds, by page name, the index of the first page the
+	// layout asked a box of that name for: the section's first page.
+	firstPage map[string]int
 }
 
 // newPages measures the headers and footers of every section and returns
 // the page setup.
 func (d *document) newPages(secs []*section) *pages {
-	p := &pages{d: d, secs: secs, byName: map[string]*section{}, hfParts: map[string]*ooxml.Element{}}
+	p := &pages{d: d, secs: secs, byName: map[string]*section{}, hfParts: map[string]*ooxml.Element{}, firstPage: map[string]int{}}
 	for _, s := range secs {
 		if _, ok := p.byName[s.name]; !ok {
 			p.byName[s.name] = s
@@ -144,7 +147,11 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	if s == nil {
 		s = p.secs[0]
 	}
-	return p.sectionBox(s, info.Index)
+	first, ok := p.firstPage[info.Name]
+	if !ok || info.Index < first {
+		p.firstPage[info.Name], first = info.Index, info.Index
+	}
+	return p.sectionBox(s, info.Index, s.titlePage && info.Index == first)
 }
 
 // singleBox returns the page box of a single page: the first section's
@@ -153,8 +160,8 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 // [pages.tall] is set, the page the layout trims to its content, or the
 // height its content measured once it is known.
 func (p *pages) singleBox() layout.PageBox {
-	b := p.sectionBox(p.secs[0], 0)
-	b.Margin[css.Bottom] = p.sectionBox(p.secs[len(p.secs)-1], 0).Margin[css.Bottom]
+	b := p.sectionBox(p.secs[0], 0, false)
+	b.Margin[css.Bottom] = p.sectionBox(p.secs[len(p.secs)-1], 0, false).Margin[css.Bottom]
 	b.Height = office.MaxPageSide
 	if p.tall {
 		b.Height = p.d.opts.FittedPageLimit()
@@ -166,16 +173,27 @@ func (p *pages) singleBox() layout.PageBox {
 }
 
 // sectionBox returns the page box of a page of section s, index being
-// the page's 0-based position in the document (see [pages.box]).
-func (p *pages) sectionBox(s *section, index int) layout.PageBox {
+// the page's 0-based position in the document (see [pages.box]). The
+// first page of a section with a title page grows its margins by the
+// first header and footer alone, the parts it prints (17.10.1), any other
+// page by the section's taller default or even part.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/FDO76312.docx: Word prints a text box
+//     placed at 35% of the first page, a title page without a first
+//     header, at 294.6 points down, where a default header 55 points
+//     taller than its distance leaves grows the top margin of the pages
+//     after it.
+func (p *pages) sectionBox(s *section, index int, titlePage bool) layout.PageBox {
 	m := s.margin
 	top, bottom := math.Abs(m[css.Top]), math.Abs(m[css.Bottom])
 	hh, fh := 0.0, 0.0
-	for _, h := range s.headerH {
-		hh = max(hh, h)
-	}
-	for _, h := range s.footerH {
-		fh = max(fh, h)
+	for _, kind := range [...]string{"default", "even", "first"} {
+		if titlePage != (kind == "first") {
+			continue
+		}
+		hh, fh = max(hh, s.headerH[kind]), max(fh, s.footerH[kind])
 	}
 	if m[css.Top] >= 0 && hh > 0 {
 		top = max(top, s.header+hh)
