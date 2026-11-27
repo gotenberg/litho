@@ -442,8 +442,26 @@ func (r *reader) lineOf(srcs []lineSource) slides.Line {
 	l.Dash, l.Cap = officeDash(l.Dash, unit, l.Cap)
 	l.Head = arrowOf(srcs, "headEnd")
 	l.Tail = arrowOf(srcs, "tailEnd")
+	if !l.Hairline && (l.Head.Kind != slides.ArrowNone || l.Tail.Kind != slides.ArrowNone) {
+		l.Width = max(l.Width, minArrowedWidth)
+	}
 	return l
 }
+
+// minArrowedWidth is the width PowerPoint strokes a line with an
+// arrowhead at least, in points: a thinner line with a head or a tail
+// prints a point wide, its arrowheads with it (ECMA-376 Part 1,
+// 20.1.2.2.24 ln w leaves the printed width to the application). A line
+// without an arrowhead keeps its width.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: lines of 0.25, 0.5, 0.75 and 1 point with an open or a
+//     triangle tail print their shafts 1 point wide, one of 1.5 points 1.5
+//     wide; the same lines without arrowheads print at their widths.
+//   - libreoffice/pptx: sd-data/fdo47434.pptx's arrowed connectors of
+//     0.75 point print 1 point wide.
+const minArrowedWidth = 1.0
 
 // officeDash returns the dash array dash of a line width wide and the cap
 // c as PowerPoint strokes them, by the rule Word and Excel share

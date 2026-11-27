@@ -85,6 +85,16 @@ func TestShapes_FillsAndLines(t *testing.T) {
 				t.Errorf("line %+v", s.Line)
 			}
 		}},
+		{"a thin line with an arrowhead strokes a point wide", `<a:ln w="3175"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:tailEnd type="arrow"/></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
+			if s.Line.Width != 1 {
+				t.Errorf("width %v, want 1", s.Line.Width)
+			}
+		}},
+		{"a thin line without an arrowhead keeps its width", `<a:ln w="3175"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
+			if s.Line.Width != 0.25 {
+				t.Errorf("width %v, want 0.25", s.Line.Width)
+			}
+		}},
 		{"solid fill and dashed line with arrows", `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill>` +
 			`<a:ln w="25400" cap="rnd"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:prstDash val="dash"/><a:bevel/><a:headEnd type="triangle" w="lg" len="sm"/><a:tailEnd type="oval"/></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
 			if s.Geometry == nil || s.Geometry.Preset != "roundRect" || len(s.Geometry.Adjust) != 1 || s.Geometry.Adjust[0].Value != 25000 {
