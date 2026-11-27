@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-27T21:48:15Z",
+  "captured_at": "2026-11-27T23:14:57Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -23991,8 +23991,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 238,
-          "mismatched": 18,
+          "matched": 240,
+          "mismatched": 16,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -24930,12 +24930,12 @@
               "text_f1": 1
             },
             "sc/move-cell-anchored-shapes.ods": {
-              "layout": 0.1511,
+              "layout": 0.9987,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.75
+              "text_f1": 1
             },
             "sc/multilineoptimal.ods": {
               "layout": 0.9646,
@@ -25308,12 +25308,12 @@
             },
             "sc/tdf106181.ods": {
               "field_recall": 0,
-              "layout": 0.5648,
+              "layout": 0.962,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.75
+              "text_f1": 0.9091
             },
             "sc/tdf108188_pagestyle.ods": {
               "layout": 0.998,
@@ -31475,8 +31475,8 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 163,
-          "mismatched": 32,
+          "matched": 165,
+          "mismatched": 30,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -31894,19 +31894,19 @@
               "text_f1": 1
             },
             "odfexport/DUMMY2.odt": {
-              "layout": 0.7443,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.4,
-              "text_f1": 0.9175
-            },
-            "odfexport/DUMMY2B.odt": {
-              "layout": 0.7323,
+              "layout": 0.8406,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6,
+              "text_f1": 0.9685
+            },
+            "odfexport/DUMMY2B.odt": {
+              "layout": 0.8972,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.8,
               "text_f1": 1
             },
             "odfexport/IsLegal.fodt": {
@@ -32030,11 +32030,11 @@
               "text_f1": 1
             },
             "odfexport/charborder.odt": {
-              "layout": 0,
+              "layout": 0.7354,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "odfexport/colored-sections-separators.fodt": {
@@ -119818,8 +119818,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5946,
-          "mismatched": 548,
+          "matched": 5967,
+          "mismatched": 527,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -125308,7 +125308,7 @@
             "css/css-writing-modes/available-size-014.html": "fail",
             "css/css-writing-modes/available-size-015.html": "fail",
             "css/css-writing-modes/available-size-016.html": "fail",
-            "css/css-writing-modes/available-size-017.html": "fail",
+            "css/css-writing-modes/available-size-017.html": "pass",
             "css/css-writing-modes/available-size-018.html": "pass",
             "css/css-writing-modes/available-size-019.html": "fail",
             "css/css-writing-modes/available-size-020.html": "fail",
@@ -125625,38 +125625,38 @@
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-001.xht": "fail",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-003.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-006.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vlr-007.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vlr-007.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-008.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-009.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vlr-010.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vlr-010.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-011.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-012.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-013.xht": "fail",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-015.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-016.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-018.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vlr-019.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vlr-019.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-020.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-021.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vlr-022.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vlr-022.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-023.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vlr-024.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-003.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-006.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vrl-007.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vrl-007.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-008.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-009.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vrl-010.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vrl-010.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-011.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-012.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-013.xht": "fail",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-015.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-016.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-018.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vrl-019.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vrl-019.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-020.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-021.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-htb-in-vrl-022.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-htb-in-vrl-022.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-023.xht": "pass",
             "css/css-writing-modes/sizing-orthog-htb-in-vrl-024.xht": "pass",
             "css/css-writing-modes/sizing-orthog-prct-htb-in-vlr-001.xht": "pass",
@@ -125695,48 +125695,48 @@
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-003.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-004.xht": "fail",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-006.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vlr-in-htb-007.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vlr-in-htb-007.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-008.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-009.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vlr-in-htb-010.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vlr-in-htb-010.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-011.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-012.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-013.xht": "fail",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-015.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-016.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-018.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vlr-in-htb-019.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vlr-in-htb-019.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-020.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-021.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vlr-in-htb-022.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vlr-in-htb-022.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-023.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vlr-in-htb-024.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-001.xht": "fail",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-003.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-004.xht": "fail",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-006.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vrl-in-htb-007.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vrl-in-htb-007.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-008.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-009.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vrl-in-htb-010.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vrl-in-htb-010.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-011.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-012.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-013.xht": "fail",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-015.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-016.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-018.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vrl-in-htb-019.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vrl-in-htb-019.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-020.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-021.xht": "pass",
-            "css/css-writing-modes/sizing-orthog-vrl-in-htb-022.xht": "fail",
+            "css/css-writing-modes/sizing-orthog-vrl-in-htb-022.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-023.xht": "pass",
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-024.xht": "pass",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-001.html": "fail",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-002.html": "fail",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-001.html": "pass",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-002.html": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-003.html": "fail",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-004.html": "fail",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-005.html": "fail",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-006.html": "fail",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-005.html": "pass",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-006.html": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-007.html": "fail",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-008.html": "fail",
             "css/css-writing-modes/sizing-percentages-replaced-orthogonal-001.html": "fail",
