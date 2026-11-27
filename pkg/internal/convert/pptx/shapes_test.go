@@ -129,6 +129,12 @@ func TestShapes_FillsAndLines(t *testing.T) {
 				t.Errorf("shape %+v", s)
 			}
 		}},
+		{"the later of two last stops at one position moves to the end", `<a:gradFill><a:gsLst><a:gs pos="50000"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="50000"><a:srgbClr val="0070C0"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
+			g := s.Fill.Gradient
+			if len(g.Stops) != 2 || g.Stops[0].Position != 0.5 || g.Stops[1].Position != 1 || !sameColor(g.Stops[1].Color, rgb(0x0070C0)) {
+				t.Errorf("stops %+v", g.Stops)
+			}
+		}},
 		{"gradient", `<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
 			g := s.Fill.Gradient
 			if s.Fill.Kind != slides.FillGradient || g.Angle != 90 || g.Radial || len(g.Stops) != 2 || len(g.Blend) < 3 || !sameColor(g.Blend[0].Color, rgb(0xFF0000)) || !sameColor(g.Blend[len(g.Blend)-1].Color, rgb(0x0000FF)) {

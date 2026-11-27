@@ -157,6 +157,7 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	if len(g.Stops) == 1 {
 		g.Stops = []slides.Stop{{Position: 0, Color: g.Stops[0].Color}, {Position: 1, Color: g.Stops[0].Color}}
 	}
+	spreadLastStop(g.Stops)
 	g.Blend = officeRamp(g.Stops)
 	if lin := k.Child(ooxml.NSA, "lin"); lin != nil {
 		a, _ := intAttr(lin, "ang")
@@ -176,6 +177,23 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 		}
 	}
 	return g
+}
+
+// spreadLastStop moves the last of the sorted stops to the end of the
+// gradient when it shares its position with the stop before it, as
+// PowerPoint paints such a gradient: the earlier colour up to the shared
+// position, then a blend to the later one at the end, where the clause
+// draws a hard edge (ECMA-376 Part 1, 20.1.8.36 gs pos).
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf112088.pptx's bg1 and accent1 both at 50%
+//     print white down the first half, then a straight blend to 0070C0 at
+//     the bottom edge.
+func spreadLastStop(stops []slides.Stop) {
+	if n := len(stops); n >= 2 && stops[n-1].Position == stops[n-2].Position {
+		stops[n-1].Position = 1
+	}
 }
 
 // officeRamp returns stops that paint a gradient as PowerPoint blends
