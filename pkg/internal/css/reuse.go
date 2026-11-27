@@ -65,7 +65,9 @@ type reuseCache struct {
 // nothing but the declarations and the key. A custom property, a var()
 // or attr() value (which reads the element's attributes), a container
 // query unit (which reads the element's containers), an animation
-// (which reads the element's ancestors), a presentational hint or a style
+// (which reads the element's ancestors), a counter style name of a shadow
+// tree that defines counter styles (resolved from the tree outwards), a
+// presentational hint or a style
 // attribute (parsed again for each element, never equal to another's)
 // and a restricted set of longhands (::first-line) keep it out.
 func (cs *computeState) reusable(cands []cand, only *[numProps]bool) bool {
@@ -76,8 +78,9 @@ func (cs *computeState) reusable(cands []cand, only *[numProps]bool) bool {
 		if c.ord < 0 || c.spec == styleAttrSpec || c.d.isCustom || len(c.d.pending) > 0 || c.d.containerUnits {
 			return false
 		}
+		scoped := c.scope != nil && len(cs.r.counterScopes.names) > 0
 		for _, e := range c.d.entries {
-			if e.id == pAnimationName {
+			if e.id == pAnimationName || scoped && (e.id == pListStyleType || e.id == pContent) {
 				return false
 			}
 		}

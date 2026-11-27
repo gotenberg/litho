@@ -88,6 +88,9 @@ type Resolver struct {
 	// counters holds the counter styles, the predefined ones and those
 	// of the @counter-style rules whose media conditions match.
 	counters *CounterStyles
+	// counterScopes holds the names of the counter styles shadow trees
+	// define.
+	counterScopes counterScopes
 	// keyframes holds the @keyframes rules whose media conditions match,
 	// the last of each name.
 	keyframes keyframesAt
@@ -262,6 +265,9 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		}
 		for _, cr := range sh.Sheet.counterStyles {
 			if cr.cond.matches(media, cache) {
+				if sh.Origin == Author && sh.Scope != nil {
+					cr = r.counterScopes.add(sh.Scope, cr)
+				}
 				counterRules = append(counterRules, cr)
 				counterPos = append(counterPos, lay.of(si, sh.Origin, cr.layer))
 			}
@@ -363,6 +369,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	// listed in layer order, a later face winning (CSS Fonts 4, 4.7).
 	r.faces = sortedByLayer(r.faces, facePos)
 	r.warns = w.result()
+	r.counterScopes.rescope(counterRules)
 	r.counters = newCounterStyles(sortedByLayer(counterRules, counterPos))
 	return r
 }
@@ -1240,8 +1247,19 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 	}
 	var winners [numProps]any
-	// nameScope is the tree of the declaration animation-name takes.
-	var nameScope *html.Node
+	// nameScope is the tree of the declaration animation-name takes,
+	// listScope and contentScope those list-style-type and content take.
+	var nameScope, listScope, contentScope *html.Node
+	scopes := func(c cand, id propID) {
+		switch id { //nolint:exhaustive // the longhands that refer to tree-scoped names
+		case pAnimationName:
+			nameScope = c.scope
+		case pListStyleType:
+			listScope = c.scope
+		case pContent:
+			contentScope = c.scope
+		}
+	}
 	// imp records the longhands an !important declaration sets, which an
 	// animation does not override (CSS Cascade 4, 6.2).
 	var imp [numProps]bool
@@ -1329,18 +1347,14 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			custom[c.d.Property] = c.d.custom
 		case len(c.d.pending) > 0:
 			for _, id := range longhandsOf(c.d.Property) {
-				if id == pAnimationName {
-					nameScope = c.scope
-				}
+				scopes(c, id)
 				winners[side(c.d, id)] = pendingRef{c.d}
 				imp[side(c.d, id)] = c.d.Important
 				written(c, side(c.d, id))
 			}
 		default:
 			for _, e := range c.d.entries {
-				if e.id == pAnimationName {
-					nameScope = c.scope
-				}
+				scopes(c, e.id)
 				winners[side(c.d, e.id)] = e.v
 				imp[side(c.d, e.id)] = c.d.Important
 				written(c, side(c.d, e.id))
@@ -1385,6 +1399,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
 	st := cs.computeStyle(&winners, &imp, vars, parentStyle, isRoot, authorStyledBits(&styled))
+	st = cs.scopeCounterNames(st, listScope, contentScope)
 	if len(customNames) > 0 {
 		vars = cs.absolutize(vars, customNames)
 	}

@@ -237,6 +237,35 @@ func TestShadow_KeyframesNamesAreTreeScoped(t *testing.T) {
 	}
 }
 
+// TestShadow_CounterStyleNamesAreTreeScoped resolves a counter style name
+// from the tree of the declaration that names it, then the trees around
+// it (CSS Scoping 1, 3.5): a shadow tree's @counter-style rules serve
+// list-style and counter() inside it and inside the trees it holds, and
+// its own extends, ahead of the document's of the same name, and the
+// document reaches none of them.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1, PDF and
+//     screenshot, draws each marker and counter of this test as it
+//     expects.
+func TestShadow_CounterStyleNamesAreTreeScoped(t *testing.T) {
+	t.Parallel()
+	src := `<!DOCTYPE html><style>@counter-style base { system: cyclic; symbols: "B"; suffix: " " }` +
+		`@counter-style sx { system: cyclic; symbols: "Q"; suffix: " " }</style>` +
+		`<div><template shadowrootmode="open"><style>@counter-style sx { system: cyclic; symbols: "X"; suffix: " " }` +
+		`@counter-style ext { system: extends sx; suffix: "> " } @counter-style extdoc { system: extends base; suffix: "] " }` +
+		`p { counter-increment: c } p::before { content: counter(c, sx) "|" } .e { list-style: ext } .d { list-style: extdoc }</style>` +
+		`<p>one</p><ol class="e"><li>two</li></ol><ol class="d"><li>three</li></ol>` +
+		`<div><template shadowrootmode="open"><ol style="list-style: sx"><li>four</li></ol></template></div></template></div>` +
+		`<ol style="list-style: sx"><li>five</li></ol>`
+	doc := convertDoc(t, src, Options{})
+	got := strings.Join(strings.Fields(pageText(doc.Pages[0])), " ")
+	if want := "X| one X> two B] three X four Q five"; got != want {
+		t.Errorf("text %q, want %q", got, want)
+	}
+}
+
 func TestShadow_FragmentsNameTheDocumentTree(t *testing.T) {
 	t.Parallel()
 	// HTML Standard, 7.4.6.4: a fragment names an element of the document
