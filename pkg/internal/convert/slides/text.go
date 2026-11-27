@@ -1026,6 +1026,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.KeepEmoji = st.OfficeEmoji
 	st.KeepClosed = powerPointKeepsClosed(b.doc)
 	st.ClusterAlone = powerPointClusterAlone(b.doc)
+	st.NonNegativeAdvance = powerPointFloorsAdvances(b.doc)
 	if tp := st.TextPaint; tp != nil && (tp.NoFill || len(tp.Gradient) >= 2) && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their paint: a text of
 		// no fill, or of a gradient whose first stop is transparent,
@@ -1056,8 +1057,15 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 			st.TextDecorationStyle = css.DecorationDouble
 		}
 	}
-	if sp := rs.Spacing; sp != 0 && !math.IsNaN(sp) && math.Abs(sp) < maxFontSize {
-		st.LetterSpacing = css.Pts(sp * k)
+	if sp := rs.Spacing; sp != 0 && !math.IsNaN(sp) {
+		switch {
+		case math.Abs(sp) < maxFontSize:
+			st.LetterSpacing = css.Pts(sp * k)
+		case sp < 0 && st.NonNegativeAdvance:
+			// A spacing past the cap takes every advance to zero, as
+			// the cap itself does once floored.
+			st.LetterSpacing = css.Pts(-maxFontSize)
+		}
 	}
 	switch rs.Caps {
 	case CapsAll:
@@ -1315,6 +1323,24 @@ func powerPointKeepsClosed(doc *Document) bool {
 //     paragraph's right margin leaves its lines no room, prints that
 //     paragraph one character a line, each space after its character.
 func powerPointClusterAlone(doc *Document) bool {
+	return doc != nil && doc.Fallback != text.FallbackLibreOffice
+}
+
+// powerPointFloorsAdvances reports whether the runs of doc floor at zero
+// each glyph's advance once their letter spacing is added
+// ([css.Office.NonNegativeAdvance]): under PowerPoint's rules, whose
+// negative spacing (ECMA-376 Part 1, 21.1.2.3.9 rPr spc) never sets a
+// glyph left of the one before it; Impress moves it back by the spacing.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: "ABCDE iiii WWWW" in Calibri 18 at spc -2, -5, -10 and
+//     -20 points prints each glyph's advance plus the spacing, at least 0,
+//     on PowerPoint's 0.72-point grid: at -5 the spaces and each "i" take
+//     no room, at -10 every glyph but W, at -20 every glyph.
+//   - openxmlsdk/pptx: O14ISOStrict/PowerPoint/spc-400000_rPr_CharacterSpacingMinimum
+//     prints its run at -4000 points as glyphs set on one another.
+func powerPointFloorsAdvances(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 

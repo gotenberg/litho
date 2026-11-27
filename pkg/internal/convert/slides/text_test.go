@@ -269,6 +269,41 @@ func TestText_KeepClosed(t *testing.T) {
 	}
 }
 
+// TestText_NonNegativeAdvance checks that under PowerPoint's rules a
+// spacing of -4000 points, past the cap, sets every glyph of "ABC" where
+// the first is, where under Impress's rules the spacing past the cap is
+// dropped and the glyphs keep their advances.
+func TestText_NonNegativeAdvance(t *testing.T) {
+	glyphX := func(fallback text.Fallback) []float64 {
+		st := arial(20)
+		st.Spacing = -4000
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 300, 100, para("ABC", st))}})
+		d.Fallback = fallback
+		var xs []float64
+		var walk func([]typeset.Fragment)
+		walk = func(frags []typeset.Fragment) {
+			for _, f := range frags {
+				switch v := f.(type) {
+				case *typeset.Text:
+					for _, g := range v.Glyphs {
+						xs = append(xs, v.Origin.X+g.X)
+					}
+				case *typeset.Group:
+					walk(v.Content)
+				}
+			}
+		}
+		walk(convert(t, d, office.Options{}).Pages[0].Content)
+		return xs
+	}
+	if got := glyphX(text.FallbackFontconfig); len(got) != 3 || got[1] != got[0] || got[2] != got[0] {
+		t.Errorf("glyphs at %v under PowerPoint's rules, want all three at one place", got)
+	}
+	if got := glyphX(text.FallbackLibreOffice); len(got) != 3 || !(got[1] > got[0] && got[2] > got[1]) {
+		t.Errorf("glyphs at %v under Impress's rules, want them apart", got)
+	}
+}
+
 // TestText_ClusterAlone checks that under PowerPoint's rules a paragraph
 // whose margins leave its lines no room prints one character a line, where
 // under Impress's rules each word overflows its line.

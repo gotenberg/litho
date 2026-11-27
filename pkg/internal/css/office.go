@@ -335,6 +335,12 @@ type Office struct {
 	// where Word and Writer let the line overflow to the next opportunity.
 	// It applies to the characters of the inline box that sets it.
 	ClusterAlone bool
+	// NonNegativeAdvance floors at zero each glyph's advance once the
+	// letter spacing is added, as PowerPoint sets a run whose negative
+	// spacing outweighs a glyph's width: the glyph after it starts where
+	// that glyph does, never to its left. It applies to the characters of
+	// the inline box that sets it.
+	NonNegativeAdvance bool
 	// BaselineAtBottom gives the inline-level block container that sets
 	// it its bottom margin edge as its baseline, whatever lines it holds,
 	// as Word sits an inline drawing on the line by its bottom edge

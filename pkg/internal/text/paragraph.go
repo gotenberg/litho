@@ -776,6 +776,9 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			// 7.2.1).
 			if c := it.glyphs[k].cluster(); last && c < n && !unicode.Is(unicode.Cf, p.text[c]) && !cursive(p.text[c]) {
 				it.glyphs[k].advance += style.LetterSpacing
+				if style.NonNegativeAdvance {
+					it.glyphs[k].advance = max(it.glyphs[k].advance, 0)
+				}
 			}
 		}
 	}
@@ -1118,6 +1121,7 @@ func shapesTogether(a, b Style) bool {
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
 		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.OfficeEmoji == b.OfficeEmoji &&
+		a.NonNegativeAdvance == b.NonNegativeAdvance &&
 		a.Orientation == b.Orientation && a.Orientation != OrientCombine && sameShaping(a.Settings, b.Settings) &&
 		(a.OfficeEmoji || a.Settings.emoji() == b.Settings.emoji())
 }

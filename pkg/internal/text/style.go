@@ -138,6 +138,11 @@ type Style struct {
 	// box. The glyphs keep the colour face's drawing. [Fonts.Layout]
 	// ignores it.
 	OfficeEmoji bool
+	// NonNegativeAdvance floors at zero the advance of a glyph that
+	// LetterSpacing takes below it, as PowerPoint sets negative spacing:
+	// the next glyph then starts where this one does. [Fonts.Layout]
+	// ignores it.
+	NonNegativeAdvance bool
 	// Orientation sets the run's characters upright or sideways in a
 	// vertical line (see [Orientation]); the zero value sets the run as
 	// horizontal text. [Fonts.Layout] ignores it.

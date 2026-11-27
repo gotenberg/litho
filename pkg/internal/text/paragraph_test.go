@@ -176,6 +176,29 @@ func TestShape_Spacing(t *testing.T) {
 	}
 }
 
+// TestShape_NonNegativeAdvance checks that Style.NonNegativeAdvance
+// floors at zero an advance that negative letter spacing takes below it,
+// and leaves one it does not alone: "AB i" at -5 points, where the space
+// and the "i" are narrower than 5 points and the "A" wider.
+func TestShape_NonNegativeAdvance(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	s := style()
+	plain := shape(t, f, []ParagraphRun{{Text: "AB i", Style: s}}, ParagraphOptions{})
+	s.LetterSpacing = -5
+	free := shape(t, f, []ParagraphRun{{Text: "AB i", Style: s}}, ParagraphOptions{})
+	s.NonNegativeAdvance = true
+	floored := shape(t, f, []ParagraphRun{{Text: "AB i", Style: s}}, ParagraphOptions{})
+	for i := range 4 {
+		want := max(plain.Advance(i)-5, 0)
+		if got := floored.Advance(i); math.Abs(got-want) > 1e-6 {
+			t.Errorf("character %d advance %v, want %v", i, got, want)
+		}
+	}
+	if free.Advance(2) >= 0 {
+		t.Errorf("space advance %v without the floor, want it negative", free.Advance(2))
+	}
+}
+
 func TestShape_FormatCharactersTakeNoSpacing(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	s := style()
