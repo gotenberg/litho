@@ -640,8 +640,11 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			h := heading{node: n, level: level, text: headingTitle(n)}
 			// A heading that is a list header takes no number and leaves
 			// the outline counters as they are (ODF 1.3, Part 3, 5.1.2
-			// text:is-list-header).
-			if el.A(odf.NSText, "is-list-header") != "true" {
+			// text:is-list-header); so does the labelled first paragraph
+			// of a list item, which its list numbers ([listedHeading]).
+			if listedHeading(ctx.item) {
+				h.label = ctx.item.label
+			} else if el.A(odf.NSText, "is-list-header") != "true" {
 				if lbl := b.outlineLabel(level); lbl != "" {
 					kids := make([]*layout.Node, 0, 2+len(n.Children))
 					if text, ok := strings.CutSuffix(lbl, "\n"); ok {
@@ -662,6 +665,23 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 		ctx.item = nil
 	}
 	return n
+}
+
+// listedHeading reports a heading that is the first paragraph of the
+// labelled list item item: Writer labels it from its list alone, prints
+// no outline number before it and leaves the outline counters as they
+// are, the heading belonging to that list and not to the outline's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/abi11870-2.odt: the headings of its list
+//     L1 print "1." to "3." alone, where litho printed both labels.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, two level 1
+//     headings in list items of a list of format "[I]" print "[I]XX" and
+//     "[II]YY", and the next level 1 heading outside the list prints the
+//     outline's "1.ZZ".
+func listedHeading(item *itemCtx) bool {
+	return item != nil && !item.header && !item.placed && (item.label != "" || item.pic != nil)
 }
 
 // hiddenParagraph reports a text:p or text:h that a hidden paragraph

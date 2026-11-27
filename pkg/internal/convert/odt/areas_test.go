@@ -557,6 +557,27 @@ func TestConvert_ListHeaderHeadingTakesNoNumber(t *testing.T) {
 	}
 }
 
+// TestConvert_ListedHeadingTakesItsListsLabel labels a heading in a
+// list item by its list alone, the outline counters left as they are.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, two level 1
+//     headings in items of a list of format "[I]" print "[I]XX" and
+//     "[II]YY", and the next level 1 heading prints "1.ZZ".
+func TestConvert_ListedHeadingTakesItsListsLabel(t *testing.T) {
+	styles := `<text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-suffix="." style:num-format="1"/></text:outline-style>` +
+		`<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-prefix="[" style:num-suffix="]" style:num-format="I"/></text:list-style>`
+	item := func(s string) string {
+		return `<text:list-item><text:h text:outline-level="1">` + s + `</text:h></text:list-item>`
+	}
+	body := `<text:list text:style-name="L1">` + item("XX") + item("YY") + `</text:list><text:h text:outline-level="1">ZZ</text:h>`
+	got := pageText(convertDoc(t, doc{styles: styles, body: body}.pack(t), office.Options{}).Pages[0])
+	if got != "[I]XX\n[II]YY\n1.ZZ" {
+		t.Errorf("headings = %q", got)
+	}
+}
+
 // TestConvert_ListHeadingOutlineTitle bookmarks a heading in a numbered
 // list with its label first.
 //
