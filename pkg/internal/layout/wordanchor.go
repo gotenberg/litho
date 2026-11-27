@@ -130,8 +130,10 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	}
 	x, y := left+a.X, top+a.Y
 	page := e.pageOf(top + eps)
+	axis := left + a.MirrorX
 	if a.FromFirstColumn {
-		x -= e.columnShift(root, page)
+		shift := e.columnShift(root, page)
+		x, axis = x-shift, axis-shift
 	}
 	switch {
 	case a.FromPage:
@@ -167,6 +169,11 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 			// aligned it.
 			f.shift(-float64(a.AlignX*f.borderW()), -float64(a.AlignY*f.borderH()))
 		}
+	}
+	if a.Mirror && !frozen && !e.isRight(page) {
+		// A left-hand page mirrors the place the float takes on a
+		// right-hand one: its left edge goes where its right edge was.
+		f.shift(float64(2*axis)-float64(2*f.x)-f.borderW(), 0)
 	}
 	e.noPaginate--
 	breaks := !f.st.PageClamp && f.kind != kindReplaced && e.paginating() && f.borderH() > e.box(page).Height

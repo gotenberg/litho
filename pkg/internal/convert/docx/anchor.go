@@ -475,6 +475,14 @@ func (a pendingAnchor) resolveWord(s *section) {
 		st.WordAnchor = css.WordAnchor{Set: true, X: hPos(s, p) - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
 	}
 	st.WordAnchor.AlignX, st.WordAnchor.AlignY = ax, ay
+	if !p.simple && (p.alignH == "inside" || p.alignH == "outside") {
+		// Inside is the left edge of an odd page's area and the right
+		// edge of an even one's, outside the other (17.18.107 ST_XAlign,
+		// 20.4.3.1 ST_AlignH): an even page, left-hand, mirrors the
+		// odd page's place about the middle of the area.
+		x0, aw := hArea(s, p.relH)
+		st.WordAnchor.Mirror, st.WordAnchor.MirrorX = true, x0+float64(aw/2)-left
+	}
 	// A position from the page or its margins stands where it says
 	// whatever column the drawing's paragraph lies in; one from the column
 	// counts from that column (20.4.3.4).

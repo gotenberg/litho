@@ -554,6 +554,68 @@ func TestFrames_Placed(t *testing.T) {
 	}
 }
 
+// TestFrames_InsideOutside locks that a text frame aligned outside sits
+// at the right edge of an odd page and the left edge of an even one, and
+// one aligned inside the other way (17.18.107 ST_XAlign).
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints frames of xAlign outside from the page
+//     flush with the right edge of the first page, its text at 521 to 612
+//     with hSpace 397, 468 to 541 for a frame 2880 wide, and flush with
+//     the left edge of the second page, its text from 0; one of xAlign
+//     inside flush with the first page's left edge.
+func TestFrames_InsideOutside(t *testing.T) {
+	t.Parallel()
+	frame := func(align, text string) string {
+		return `<w:p><w:pPr><w:framePr w:w="1440" w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:xAlign="` + align + `" w:y="1440"/></w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	body := frame("outside", "oddout") + `<w:p><w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>` +
+		frame("outside", "evenout") + `<w:p><w:r><w:t>two</w:t></w:r></w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>` +
+		frame("inside", "oddin") + `<w:p><w:r><w:t>three</w:t></w:r></w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>` +
+		frame("inside", "evenin") + `<w:p><w:r><w:t>four</w:t></w:r></w:p>` +
+		`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>`
+	doc := convertBytes(t, docx(t, body, nil), office.Options{})
+	at := textPlaces(doc)
+	// A frame 72 points wide on a page 612 wide: at 540 on the right
+	// edge, at 0 on the left.
+	for _, tc := range []struct {
+		text string
+		page int
+		x    float64
+	}{{"oddout", 0, 540}, {"evenout", 1, 0}, {"oddin", 2, 0}, {"evenin", 3, 540}} {
+		got := at[tc.text]
+		if int(got[0]) != tc.page || math.Abs(got[1]-tc.x) > 0.5 {
+			t.Errorf("%s: page %d at %.1f, want page %d at %.0f", tc.text, int(got[0])+1, got[1], tc.page+1, tc.x)
+		}
+	}
+}
+
+// textPlaces returns the page index and the x of the first glyph of
+// each text fragment of doc, by its text.
+func textPlaces(doc *typeset.Document) map[string][2]float64 {
+	at := map[string][2]float64{}
+	for p, pg := range doc.Pages {
+		var walk func([]typeset.Fragment, float64)
+		walk = func(frags []typeset.Fragment, dx float64) {
+			for _, f := range frags {
+				switch v := f.(type) {
+				case *typeset.Text:
+					var b strings.Builder
+					for _, g := range v.Glyphs {
+						b.WriteString(g.Text)
+					}
+					at[b.String()] = [2]float64{float64(p), dx + v.Origin.X}
+				case *typeset.Group:
+					walk(v.Content, dx+v.Transform.E)
+				}
+			}
+		}
+		walk(pg.Content, 0)
+	}
+	return at
+}
+
 // TestFrames_AfterABreak locks that a page or column break before a
 // paragraph of a text frame moves the frame: the frame prints on the
 // page or in the column the break opens, with the text after it.
@@ -580,25 +642,7 @@ func TestFrames_AfterABreak(t *testing.T) {
 		body := `<w:p><w:r><w:t>before</w:t></w:r></w:p><w:p><w:r><w:br w:type="` + tc.name + `"/></w:r></w:p>` + frame + `<w:p><w:r><w:t>after</w:t></w:r></w:p>` +
 			`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>` + tc.sect + `</w:sectPr>`
 		doc := convertBytes(t, docx(t, body, nil), office.Options{})
-		at := map[string][2]float64{}
-		for p, pg := range doc.Pages {
-			var walk func([]typeset.Fragment, float64)
-			walk = func(frags []typeset.Fragment, dx float64) {
-				for _, f := range frags {
-					switch v := f.(type) {
-					case *typeset.Text:
-						var b strings.Builder
-						for _, g := range v.Glyphs {
-							b.WriteString(g.Text)
-						}
-						at[b.String()] = [2]float64{float64(p), dx + v.Origin.X}
-					case *typeset.Group:
-						walk(v.Content, dx+v.Transform.E)
-					}
-				}
-			}
-			walk(pg.Content, 0)
-		}
+		at := textPlaces(doc)
 		f, a := at["framed"], at["after"]
 		if int(f[0]) != tc.page || int(a[0]) != tc.page || f[1] < tc.minX {
 			t.Errorf("%s break: frame on page %d at %.1f, text after it on page %d; want page %d, past %.0f", tc.name, int(f[0])+1, f[1], int(a[0])+1, tc.page+1, tc.minX)

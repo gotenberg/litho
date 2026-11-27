@@ -419,6 +419,11 @@ type Office struct {
 // the page or its margins in a section of several columns (ECMA-376 Part
 // 1, 20.4.3.4 ST_RelFromH; 17.3.1.11 framePr hAnchor), where a position
 // from the column counts from its own column.
+//
+// Mirror sets the float, on a left-hand page, where a mirror about the
+// vertical line MirrorX, counted as X is, puts its place on a right-hand
+// page: a float aligned inside or outside (17.18.107 ST_XAlign; 20.4.3.1
+// ST_AlignH), which X and AlignX place on a right-hand page.
 type WordAnchor struct {
 	Set             bool
 	X, Y            float64
@@ -428,6 +433,8 @@ type WordAnchor struct {
 	Writer          bool
 	Rise            float64
 	FromFirstColumn bool
+	Mirror          bool
+	MirrorX         float64
 }
 
 // WrapPoint is a point of an [Office.WrapPolygon], in fractions of the
