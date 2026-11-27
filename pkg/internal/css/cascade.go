@@ -267,6 +267,14 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 			}
 		}
 		for i := range sh.Sheet.faces {
+			if sh.Origin == Author && sh.Scope != nil {
+				// An @font-face rule of a shadow tree names a face for
+				// that tree alone (CSS Scoping 1, 3.5); Chromium loads
+				// none, on screen as in print, and the shadow tree's text
+				// falls back as if the rule were absent. litho follows
+				// Chromium.
+				break
+			}
 			if f := &sh.Sheet.faces[i]; f.cond.matches(media, cache) {
 				r.faces = append(r.faces, f.face)
 				facePos = append(facePos, lay.of(si, sh.Origin, f.layer))

@@ -140,3 +140,27 @@ func TestFontFace_AutoDescriptors(t *testing.T) {
 		}
 	}
 }
+
+// TestFontFace_ShadowTreeDeclaresNone leaves the @font-face rules of a
+// shadow tree out, as Chromium reads them: CSS Scoping 1, 3.5 would name
+// the face inside the tree, Chromium loads none, on screen and in print,
+// and the tree's text takes the next family of its list. The document's
+// faces stay.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1, PDF and
+//     screenshot, draws a span of a shadow tree whose own @font-face names
+//     Ahem in the list's next family, Liberation Serif, and a span of the
+//     document naming the face in its fallback.
+func TestFontFace_ShadowTreeDeclaresNone(t *testing.T) {
+	t.Parallel()
+	r := NewResolver(a4, []Sheet{
+		{Sheet: mustParse(t, `@font-face { font-family: Doc; src: url(d.woff) }`), Origin: Author},
+		{Sheet: mustParse(t, `@font-face { font-family: Shadow; src: url(s.woff) }`), Origin: Author, Scope: NewShadowRoot()},
+	})
+	faces := r.FontFaces()
+	if len(faces) != 1 || faces[0].Family != "Doc" {
+		t.Errorf("faces %+v, want the document's alone", faces)
+	}
+}
