@@ -69,3 +69,36 @@ func ofNode(root *box, node *Node) *box {
 	}
 	return nil
 }
+
+// TestControl_PlaceholderOnTheFieldsLine sets the placeholder of a text
+// field on the baseline of the field's own line, which align-content
+// centres in the field, whatever the placeholder's font size: a larger
+// placeholder overflows the field rather than growing it or moving its
+// baseline.
+func TestControl_PlaceholderOnTheFieldsLine(t *testing.T) {
+	t.Parallel()
+	field := func(placeholder bool, size float64) (*box, *box) {
+		st := sty(font(10), display(css.Block), width(100), height(30), func(s *css.Style) { s.AlignContent = css.BoxCenter })
+		ctl := &Control{Kind: ControlTextField, Placeholder: placeholder}
+		kid := txt(st, "a")
+		if placeholder {
+			ps := sty(font(size), display(css.Block))
+			kid = el(ps, txt(ps, "a"))
+		}
+		n := &Node{Kind: Element, Style: st, Control: ctl, Children: []*Node{kid}}
+		rb := boxes(t, doc(n), page(200, 100))
+		return ofNode(rb, n), ofNode(rb, kid)
+	}
+	value, _ := field(false, 0)
+	want, _ := firstBaseline(value)
+	for _, size := range []float64{4, 10, 40} {
+		b, ph := field(true, size)
+		got, _ := firstBaseline(ph)
+		if !near(got, want) {
+			t.Errorf("%gpx placeholder: baseline at %.2f, want the field's %.2f", size, got, want)
+		}
+		if !near(b.h, value.h) {
+			t.Errorf("%gpx placeholder: field %.2f tall, want %.2f", size, b.h, value.h)
+		}
+	}
+}

@@ -985,6 +985,7 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	switch {
 	case ph != nil:
 		node.Children = []*layout.Node{ph}
+		ctl.Placeholder = true
 	case s != "" && !shownPlaceholder:
 		node.Children = []*layout.Node{{Kind: layout.Text, Style: textSt, Text: s}}
 	case ctl.Kind != layout.ControlButton:

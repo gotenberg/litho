@@ -78,10 +78,53 @@ type Control struct {
 	Level MeterLevel
 	// Swatch is a colour well's colour.
 	Swatch typeset.Color
+	// Placeholder reports a text field whose one child is the block of
+	// its placeholder text, which the layout sets on the field's own line
+	// ([engine.placeholderLine]).
+	Placeholder bool
 }
 
 // isControl reports the box of a form control.
 func isControl(b *box) bool { return b.node != nil && b.node.Control != nil }
+
+// placeholderLine sets the placeholder of the text field b, whose laid
+// out content is content tall, on the line the field's own text takes: its
+// first baseline on the baseline of a line of the field's font at the top
+// of the content box, which the field's align-content then moves as it
+// moves its text. It returns the height to align, that line's; the
+// content of any other box is returned as it is.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints the
+//     placeholder of a 13px text field, of 8, 20 and 30px and of
+//     line-height 40px, on the baseline of the field's 13px line, centred
+//     in fields of auto height, 40px tall or padded, within 0.4pt; a
+//     placeholder taller than the field's line overflows it.
+func (e *engine) placeholderLine(b *box, content float64) float64 {
+	if !isControl(b) || !b.node.Control.Placeholder || b.node.Control.Kind != ControlTextField {
+		return content
+	}
+	var ph *box
+	for _, k := range b.kids {
+		if !k.inline && k.float == css.FloatNone && !k.abs && k.kind == kindBlock && k.laidOut {
+			ph = k
+			break
+		}
+	}
+	if ph == nil {
+		return content
+	}
+	y, ok := firstBaseline(ph)
+	if !ok {
+		return content
+	}
+	m := e.faceMetrics(b.st, b.lang)
+	lh := e.lineHeight(b.st, b.lang)
+	up, _ := e.leading(lh - (m.Ascent + m.Descent))
+	ph.shift(0, b.contentY()+m.Ascent+up-y)
+	return lh
+}
 
 // ControlLabel is one row of a select: an option's label, or an option
 // group's heading, set bold, and indented by Indent points.

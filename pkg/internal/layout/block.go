@@ -1108,7 +1108,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		b.h = e.fillTo(b, cb, fill)
 	}
 	if isControl(b) {
-		e.alignContent(b, content)
+		e.alignContent(b, e.placeholderLine(b, content))
 	}
 	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
@@ -1368,6 +1368,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	if filled {
 		b.h = e.fillTo(b, cb, fill)
 	}
+	content = e.placeholderLine(b, content)
 	e.alignContent(b, content)
 	e.cloneEdges(b, hSet)
 	fillFieldset(b)

@@ -132,8 +132,9 @@ func TestPrepare_DateFieldsShowChromiumsText(t *testing.T) {
 	}
 }
 
-// TestPrepare_PlaceholdersAndFiles colours a placeholder #757575, keeps an
-// empty field's line, and builds a file input as Chromium shows it.
+// TestPrepare_PlaceholdersAndFiles colours a placeholder #757575, has the
+// layout set a text field's on the field's line, keeps an empty field's
+// line, and builds a file input as Chromium shows it.
 func TestPrepare_PlaceholdersAndFiles(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<!DOCTYPE html><input id=ph placeholder="Name"><input id=v value="x" placeholder="Name"><input id=e>`+
@@ -147,6 +148,11 @@ func TestPrepare_PlaceholdersAndFiles(t *testing.T) {
 	}
 	if e := byID(t, p.root, "e"); len(e.Children) != 1 || e.Children[0].Kind != layout.LineBreak {
 		t.Errorf("empty field children %+v, want its empty line", e.Children)
+	}
+	for id, want := range map[string]bool{"ph": true, "v": false, "e": false} {
+		if got := byID(t, p.root, id).Control.Placeholder; got != want {
+			t.Errorf("%s: placeholder set on the field's line %v, want %v", id, got, want)
+		}
 	}
 	for id, want := range map[string]string{"f": "Choose FileNo file chosen", "fm": "Choose FilesNo file chosen"} {
 		f := byID(t, p.root, id)
