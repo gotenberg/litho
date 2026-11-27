@@ -1546,6 +1546,9 @@ func equalBorder(a, b *Border) bool {
 	if a.Style != b.Style {
 		return false
 	}
+	if a.Dash != b.Dash {
+		return false
+	}
 	if !equalColor(&a.Color, &b.Color) {
 		return false
 	}
@@ -1556,6 +1559,7 @@ func equalBorder(a, b *Border) bool {
 func hashBorder(h uint64, x *Border) uint64 {
 	h = mix(h, math.Float64bits(x.Width))
 	h = mix(h, uint64(x.Style))
+	h = mix(h, uint64(x.Dash))
 	h = hashColor(h, &x.Color)
 	return h
 }

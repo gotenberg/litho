@@ -958,6 +958,71 @@ func blinkDashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed b
 	return st
 }
 
+// officeDash returns the stroke of a dashed or dotted line of width w in
+// the pattern d ([css.BorderDash]), nil for css.DashAuto.
+//
+// # Corpus evidence
+//
+//   - litho/docx para-borders-shading: Word strokes paragraph borders of
+//     sz 12 (1.5 points) with dash arrays [1.5 1.5] for dotted,
+//     [4.5 1.5] for dashed, [4.5 1.5 1.5 1.5] for dotDash and
+//     [4.5 1.5 1.5 1.5 1.5 1.5] for dotDotDash, phase 0, butt caps, and
+//     a between border of dashed and sz 4 with [1.5 0.5]; it fills
+//     dashSmallGap with tiles of a 6-point dash and a 1.5-point gap.
+//   - openxmlsdk/docx O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx:
+//     Word draws a dashSmallGap border of sz 255 in dashes four widths
+//     long and gaps of one.
+func officeDash(d css.BorderDash, c typeset.Color, w float64) *typeset.Stroke {
+	pat := d.Pattern()
+	if pat == nil {
+		return nil
+	}
+	dash := make([]float64, len(pat))
+	for i, v := range pat {
+		dash[i] = v * w
+	}
+	return &typeset.Stroke{Color: c, Width: w, Dash: dash}
+}
+
+// officeDashedSide draws the dashed side s of a border, w points wide,
+// along the line from a to z through the middle of the side, from one
+// outer corner to the other, as Word draws it: left to right or top to
+// bottom, the corner squares solid and the pattern of stroke starting
+// afresh at the inner corner where the side begins.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx O14ISOStrict/Word/rPr-bdr-Text_Border-val_dotDash_color_auto.docx:
+//     Word strokes each side of a run border of sz 12 from inner corner
+//     to inner corner, the top and bottom left to right, the sides top to
+//     bottom, each with phase 0, and each corner as a solid 1.5-point
+//     square.
+func officeDashedSide(g *ditem, s css.Side, a, z typeset.Point, w float64, stroke *typeset.Stroke) {
+	if s == css.Bottom || s == css.Left {
+		a, z = z, a
+	}
+	l := detmath.Hypot(z.X-a.X, z.Y-a.Y)
+	if !(l > 0) {
+		return
+	}
+	cw := min(w, float64(l/2))
+	ux, uy := float64(cw*(z.X-a.X))/l, float64(cw*(z.Y-a.Y))/l
+	a1 := typeset.Point{X: a.X + ux, Y: a.Y + uy}
+	z1 := typeset.Point{X: z.X - ux, Y: z.Y - uy}
+	line := func(p, q typeset.Point, st *typeset.Stroke) {
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{p}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{q}},
+		}, Stroke: st}})
+	}
+	solid := &typeset.Stroke{Color: stroke.Color, Width: stroke.Width}
+	line(a, a1, solid)
+	if l > 2*cw {
+		line(a1, z1, stroke)
+	}
+	line(z1, z, solid)
+}
+
 // blinkSquareDots reports a dotted line w points wide that Blink draws as
 // square dots: 3 pixels and less.
 func blinkSquareDots(w float64) bool { return w <= 3*css.Pt }
@@ -1222,6 +1287,10 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 			a, z = typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - float64(w/2)}, typeset.Point{X: r.X, Y: r.Y + r.Height - float64(w/2)}
 		case css.Left:
 			a, z = typeset.Point{X: r.X + float64(w/2), Y: r.Y + r.Height}, typeset.Point{X: r.X + float64(w/2), Y: r.Y}
+		}
+		if stroke := officeDash(bdr.Dash, c, w); stroke != nil {
+			officeDashedSide(g, s, a, z, w, stroke)
+			return
 		}
 		l := detmath.Hypot(z.X-a.X, z.Y-a.Y)
 		if bdr.Style == css.Dotted && !squareDots(w) {

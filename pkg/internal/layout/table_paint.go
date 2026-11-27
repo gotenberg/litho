@@ -710,9 +710,13 @@ func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 			a = typeset.Point{X: r.X + float64(r.Width/2), Y: r.Y}
 			z = typeset.Point{X: a.X, Y: r.Y + r.Height}
 		}
-		stroke := &typeset.Stroke{Color: col, Width: w, Dash: []float64{3 * w, 3 * w}}
-		if b.style == css.Dotted {
-			stroke.Dash = []float64{w, w}
+		stroke := officeDash(b.dash, col, w)
+		switch {
+		case stroke != nil:
+		case b.style == css.Dotted:
+			stroke = &typeset.Stroke{Color: col, Width: w, Dash: []float64{w, w}}
+		default:
+			stroke = &typeset.Stroke{Color: col, Width: w, Dash: []float64{3 * w, 3 * w}}
 		}
 		p.emit(t, false, &typeset.Path{Ops: []typeset.PathOp{
 			{Kind: typeset.MoveTo, P: [3]typeset.Point{a}},

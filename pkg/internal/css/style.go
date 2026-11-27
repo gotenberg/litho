@@ -337,7 +337,54 @@ type Border struct {
 	// layout engine applies that.
 	Width float64
 	Style BorderStyle
+	// Dash, when not DashAuto, is the pattern a dashed or dotted border
+	// draws in place of the one the layout picks for its Style.
+	Dash  BorderDash
 	Color Color
+}
+
+// BorderDash is the dash pattern of a word processor's dashed or dotted
+// border ([Border.Dash]): dashes and gaps in multiples of the border's
+// width, stroked from the start of each side with butt caps, never
+// stretched to fit the side.
+type BorderDash uint8
+
+// The border dash patterns: Word's dotted, dashed, dashSmallGap, dotDash
+// and dotDotDash borders (ECMA-376 Part 1, 17.18.2 ST_Border).
+const (
+	// DashAuto draws the pattern the layout picks for the style.
+	DashAuto BorderDash = iota
+	// DashWordDotted is dots one width long a width apart.
+	DashWordDotted
+	// DashWordDashed is dashes three widths long a width apart.
+	DashWordDashed
+	// DashWordSmallGap is dashes four widths long a width apart.
+	DashWordSmallGap
+	// DashWordDotDash is a dash three widths long, then a dot, each a
+	// width apart.
+	DashWordDotDash
+	// DashWordDotDotDash is a dash three widths long, then two dots, each
+	// a width apart.
+	DashWordDotDotDash
+)
+
+// Pattern returns the lengths of the dashes and gaps of d in turn, in
+// multiples of the border's width; nil for DashAuto.
+func (d BorderDash) Pattern() []float64 {
+	switch d {
+	case DashWordDotted:
+		return []float64{1, 1}
+	case DashWordDashed:
+		return []float64{3, 1}
+	case DashWordSmallGap:
+		return []float64{4, 1}
+	case DashWordDotDash:
+		return []float64{3, 1, 1, 1}
+	case DashWordDotDotDash:
+		return []float64{3, 1, 1, 1, 1, 1}
+	case DashAuto:
+	}
+	return nil
 }
 
 // Radius is one corner's border-radius: the horizontal and vertical radii,

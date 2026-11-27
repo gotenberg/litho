@@ -53,6 +53,7 @@ const (
 type cborder struct {
 	w      float64
 	style  css.BorderStyle
+	dash   css.BorderDash
 	color  css.Color
 	origin uint8
 }
@@ -115,7 +116,7 @@ func (r *resolver) add(bd css.Border, origin uint8) {
 		r.hidden = true
 		return
 	}
-	c := cborder{w: max(clamp(bd.Width), 0), style: bd.Style, color: bd.Color, origin: origin}
+	c := cborder{w: max(clamp(bd.Width), 0), style: bd.Style, dash: bd.Dash, color: bd.Color, origin: origin}
 	if bd.Style == css.BorderNone {
 		c.w = 0
 	}

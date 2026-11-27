@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -387,5 +388,53 @@ func TestTileSize_MixedCalc(t *testing.T) {
 	w, h, _, _, ok := tileSize(l, &Picture{Width: 20, Height: 10}, typeset.Rect{Width: 200, Height: 100})
 	if !ok || w != 110 || h != 55 {
 		t.Errorf("tile %v by %v (%v), want 110 by 55", w, h, ok)
+	}
+}
+
+// TestBorders_OfficeDash strokes a dashed or dotted border of a
+// css.BorderDash in its pattern scaled by the border's width, unstretched,
+// the sides of a block between solid corner squares and the collapsed
+// borders of a table alike, and a border of css.DashAuto in the pattern
+// the layout picks.
+func TestBorders_OfficeDash(t *testing.T) {
+	side := func(bs css.BorderStyle, d css.BorderDash) func(*css.Style) {
+		return func(s *css.Style) {
+			s.Border[css.Top] = css.Border{Width: 2, Style: bs, Dash: d, Color: css.Color{A: 1}}
+		}
+	}
+	tests := []struct {
+		name string
+		node *Node
+		want []float64
+	}{
+		{"dotDash", el(sty(side(css.Dashed, css.DashWordDotDash), height(4))), []float64{6, 2, 2, 2}},
+		{"dotDotDash", el(sty(side(css.Dashed, css.DashWordDotDotDash), height(4))), []float64{6, 2, 2, 2, 2, 2}},
+		{"smallGap", el(sty(side(css.Dashed, css.DashWordSmallGap), height(4))), []float64{8, 2}},
+		{"dotted", el(sty(side(css.Dotted, css.DashWordDotted), height(4))), []float64{2, 2}},
+		{"collapsed", table(mods(collapse), tr(nil, td(mods(side(css.Dashed, css.DashWordDashed), width(20), height(4)), ""))), []float64{6, 2}},
+		{"auto", el(sty(side(css.Dashed, css.DashAuto), height(4))), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []*typeset.Path
+			for _, p := range strokes(run(t, doc(tt.node), page(px(100), px(20))), 1) {
+				if p.Stroke.Dash != nil {
+					got = append(got, p)
+				}
+			}
+			if len(got) != 1 {
+				t.Fatalf("%d dashed strokes, want 1", len(got))
+			}
+			d := got[0].Stroke.Dash
+			if tt.want == nil {
+				if len(d) != 2 || d[0] == 6 && d[1] == 2 {
+					t.Errorf("dash %v, want the layout's own", d)
+				}
+				return
+			}
+			if !slices.Equal(d, tt.want) {
+				t.Errorf("dash %v, want %v", d, tt.want)
+			}
+		})
 	}
 }

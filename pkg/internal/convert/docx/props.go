@@ -941,7 +941,9 @@ const maxBorderEighths = 255
 // parseBorder reads one border element (ECMA-376 Part 1, 17.3.4: its val,
 // its sz in eighths of a point, its space in points and its colour). A
 // sz past the 96 eighths Word's interface offers is printed at its value
-// ([maxBorderEighths]).
+// ([maxBorderEighths]). A dotted, dashed, dashSmallGap, dotDash or
+// dotDotDash border draws Word's dash pattern ([css.BorderDash]); Word
+// fills dashDotStroked with a hatched tile, drawn here as dashed.
 //
 // # Corpus evidence
 //
@@ -969,8 +971,16 @@ func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
 		bs.Style = css.Double
 		bs.Width = max(bs.Width*3, 1.5)
 	case "dotted":
-		bs.Style = css.Dotted
-	case "dashed", "dashSmallGap", "dotDash", "dotDotDash", "dashDotStroked":
+		bs.Style, bs.Dash = css.Dotted, css.DashWordDotted
+	case "dashed":
+		bs.Style, bs.Dash = css.Dashed, css.DashWordDashed
+	case "dashSmallGap":
+		bs.Style, bs.Dash = css.Dashed, css.DashWordSmallGap
+	case "dotDash":
+		bs.Style, bs.Dash = css.Dashed, css.DashWordDotDash
+	case "dotDotDash":
+		bs.Style, bs.Dash = css.Dashed, css.DashWordDotDotDash
+	case "dashDotStroked":
 		bs.Style = css.Dashed
 	case "threeDEmboss":
 		bs.Style = css.Ridge
