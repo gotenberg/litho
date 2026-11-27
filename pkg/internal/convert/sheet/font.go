@@ -35,6 +35,8 @@ type font struct {
 	// excel sets a superscript or subscript as Excel does
 	// ([font.scriptShape]).
 	excel bool
+	// theme marks a font of the theme's scheme ([Font.Theme]).
+	theme bool
 }
 
 // zeroFont reports a font that names nothing, which takes the default.
@@ -51,7 +53,7 @@ func resolveFont(f, def Font) font {
 	}
 	out := font{
 		families: f.Families, size: f.Size, bold: f.Bold, italic: f.Italic, under: f.Underline,
-		strike: f.Strike, color: f.Color, script: f.Script,
+		strike: f.Strike, color: f.Color, script: f.Script, theme: f.Theme,
 	}
 	if len(out.families) == 0 {
 		out.families = def.Families
@@ -83,7 +85,7 @@ func overlay(base font, r *Font) font {
 	}
 	out := base
 	if len(r.Families) > 0 {
-		out.families = r.Families
+		out.families, out.theme = r.Families, r.Theme
 	}
 	if r.Size > 0 {
 		out.size = min(r.Size, maxFontSize)

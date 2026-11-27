@@ -187,7 +187,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err := r.readSharedStrings(main); err != nil {
 		return nil, nil, err
 	}
-	doc := &sheet.Document{Default: r.normal(), ExcelRules: true, StandardRowHeight: r.standardPrinted * printerPixel, StandardScreenRow: r.standardScreen, FitRows: !r.styles.knownFonts && !r.normalUnserved}
+	doc := &sheet.Document{Default: r.normal(), ExcelRules: true, StandardRowHeight: r.standardPrinted * printerPixel, StandardScreenRow: r.standardScreen, FitRows: !r.styles.knownFonts && !r.normalUnserved, RefitStored: r.styles.knownFonts && !r.normalUnserved}
 	cp, err := pkg.CoreProperties(ctx)
 	if err != nil {
 		return nil, nil, err

@@ -365,7 +365,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 			continue
 		}
 		next = idx + 1
-		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden")}
+		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden"), Thick: boolAttr(re, "thickTop") || boolAttr(re, "thickBot")}
 		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && numeric.PositiveFinite(v) {
 			row.Height = r.rowHeight(v)
 		} else if w.customDefault {

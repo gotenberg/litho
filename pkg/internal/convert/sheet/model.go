@@ -49,6 +49,14 @@ type Document struct {
 	// ([builder.excelDrops]). The XLSX reader sets it for a styles part
 	// without x14ac:knownFonts.
 	FitRows bool
+	// RefitStored, under ExcelRules, marks a book whose fonts Excel knows
+	// (FitRows unset): a row that stores a height without customHeight
+	// takes the height of its cells' fonts instead, lower than the one it
+	// stores too, and its bottom-aligned text sits above the deepest of
+	// them, unless what it holds keeps the stored height
+	// ([builder.refits]). The XLSX reader sets it for a styles part with
+	// x14ac:knownFonts.
+	RefitStored bool
 	// GeneralDecimals, when LimitGeneral is set, is the most decimals a
 	// number in the General format shows under Calc's rules, rounded to
 	// them (ODF 1.3 Part 3, 20.255 style:decimal-places of the default
@@ -293,6 +301,9 @@ type Row struct {
 	// it. Otherwise the builder may grow the row to fit wrapped text, as
 	// Calc computes an optimal height.
 	CustomHeight bool
+	// Thick marks a row Excel grows for a medium or thick border along its
+	// top or bottom (ECMA-376 Part 1, 18.3.1.73 thickTop, thickBot).
+	Thick bool
 	// Hidden marks a row that is not printed.
 	Hidden bool
 	// Style, when not nil, is the style the row's cells without one take,
@@ -444,6 +455,9 @@ type Font struct {
 	// script's font; the model draws a run in its Font alone. A workbook's
 	// fonts leave them zero.
 	Asian, Complex ScriptFont
+	// Theme marks a workbook font of the theme's major or minor scheme
+	// (ECMA-376 Part 1, 18.8.35 scheme).
+	Theme bool
 }
 
 // ScriptFont is the font of Asian or complex text in an OpenDocument

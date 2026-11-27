@@ -454,6 +454,7 @@ func (r *reader) fontProps(e *ooxml.Element, f *sheet.Font) {
 	if face := r.schemeFace(scheme); face != "" {
 		f.Families = []string{face}
 	}
+	f.Theme = scheme == "major" || scheme == "minor"
 }
 
 // schemeFace returns the face a font of the theme's font scheme draws in:

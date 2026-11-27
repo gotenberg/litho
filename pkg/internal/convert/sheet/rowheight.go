@@ -41,15 +41,19 @@ const maxMeasuredCells = 1 << 16
 // of its text, as Calc's optimal row height: the tallest cell's lines plus
 // its top and bottom padding. A cell merged down several rows does not
 // count. A book laid out by Excel's rules grows a row alone when it has no
-// height of its own, and to fit its lines alone ([excelHeight]). ctx's
-// error, checked every [rowsPerCheck] rows, stops it.
+// height of its own, and to fit its lines alone ([excelHeight]); a row that
+// stores a height in a book whose fonts Excel knows takes its fonts' height
+// ([builder.refits]). ctx's error, checked every [rowsPerCheck] rows, stops
+// it.
 func (b *builder) optimalHeights(g *grid) error {
 	pb := &pageBuilder{builder: b, g: g}
 	excel := b.doc.ExcelRules
 	fit := excel && b.doc.FitRows
+	refit := excel && !fit && b.doc.RefitStored
 	if fit {
-		b.excelDrops(g)
+		b.excelDrops(g, nil)
 	}
+	refitted := map[int]bool{}
 	// The fit of a cell's own font, by its format, where no conditional
 	// format changes it: a sheet holds few formats and many cells.
 	fitOf := map[*Style]float64{}
@@ -72,7 +76,16 @@ func (b *builder) optimalHeights(g *grid) error {
 			}
 		}
 		row := g.rows[ri]
-		if row.CustomHeight || row.Hidden || (excel && !fit && row.Height > 0) {
+		if row.CustomHeight || row.Hidden {
+			continue
+		}
+		if excel && !fit && row.Height > 0 {
+			if refit {
+				if h, ok := b.refits(g, ri, row, cellFit, &budget); ok {
+					g.heights[ri] = h
+					refitted[ri] = true
+				}
+			}
 			continue
 		}
 		base := g.defH
@@ -182,7 +195,92 @@ func (b *builder) optimalHeights(g *grid) error {
 			g.heights[ri] = min(need, maxSide)
 		}
 	}
+	if len(refitted) > 0 {
+		b.excelDrops(g, refitted)
+	}
 	return nil
+}
+
+// refits returns the height Excel gives the row ri of a book whose fonts
+// it knows (Document.RefitStored) when the row stores a height without
+// customHeight: the tallest fit of its cells' fonts ([builder.screenFit]),
+// empty cells with a format included, lower than the stored height too.
+// It reports false for a row that keeps the height it stores: one Excel
+// grows for a thick border (Row.Thick), one holding a font of the theme's
+// scheme, which Excel prints at the height it stores, or a face no font
+// serves, whose height litho cannot measure; and one Excel's rule is not
+// known for, holding wrapped, broken or turned text, or no cell to
+// measure. cellFit is the fit of one cell; budget counts the cells
+// measured, [maxMeasuredCells] at most.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: in a Calibri 11 book stating x14ac:knownFonts, Excel
+//     for the web prints rows stored 10, 15 and 30 points tall without
+//     customHeight, of Calibri 11 and Arial 10 text, 14.52 points tall, the
+//     standard row, and rows stored 20 and 30 points tall, of Calibri 20
+//     text or of an empty Calibri 20 cell, 25.32, as tall as a Calibri 20
+//     row that stores none; with x14ac:dyDescent or without it. Their
+//     bottom-aligned Calibri 11 labels sit on the Calibri 20 baseline,
+//     2.40 points above where a Calibri 11 row sets them.
+//   - probe, xlsx: in an Arial 10 book stating x14ac:knownFonts, rows
+//     stored 13.2, 13.8 and 20 points tall print at the standard row,
+//     12.36 points.
+//   - libreoffice/xlsx: sc/tdf130959.xlsx, of Arial and Verdana cells,
+//     prints its 981 rows stored 13.2 and 13.8 points tall at the
+//     standard row: 18 pages, where the stored heights give 19.
+//   - poi/xlsx: 56644.xlsx prints its rows of Calibri cells of the minor
+//     scheme stored 14.45 points tall as stored; 57171_57163_57165.xlsx
+//     its Verdana 24 row stored 29.25 points tall as stored; 61652.xlsx,
+//     53798.xlsx, 57423.xlsx and FillWithoutColor.xlsx their rows of a
+//     thick bottom border stored 15.75 and 16.5 points tall as stored.
+func (b *builder) refits(g *grid, ri int, row *Row, cellFit func(int, *Cell) float64, budget *int) (float64, bool) {
+	if row.Thick {
+		return 0, false
+	}
+	// known reports a cell whose fonts Excel prints the stored height of,
+	// or litho cannot measure.
+	known := func(c *Cell) bool {
+		f := b.measuredFont(g, ri, c)
+		if f.theme || !b.m.served(f) {
+			return true
+		}
+		for _, r := range c.Runs {
+			if rf := overlay(f, r.Font); r.Font != nil && (rf.theme || !b.m.served(rf)) {
+				return true
+			}
+		}
+		return false
+	}
+	need := 0.0
+	for i := range row.Cells {
+		c := &row.Cells[i]
+		if c.Column < 0 || c.Column >= maxColumns || *budget <= 0 {
+			return 0, false
+		}
+		if !hasContent(c) {
+			if c.Style != nil {
+				if known(c) {
+					return 0, false
+				}
+				need = max(need, cellFit(ri, c))
+			}
+			continue
+		}
+		if _, ok := g.covered[[2]int{ri, c.Column}]; ok {
+			continue
+		}
+		if m, ok := g.merges[[2]int{ri, c.Column}]; ok && m.LastRow > m.FirstRow {
+			continue
+		}
+		*budget--
+		al := g.style(ri, c.Column, c).Align
+		if al.Wrap || al.Rotation != 0 || al.Stacked || strings.Contains(c.Value.Text, "\n") || known(c) {
+			return 0, false
+		}
+		need = max(need, cellFit(ri, c))
+	}
+	return min(need, maxSide), need > 0
 }
 
 // calcStyledHeight returns the least optimal height Calc gives row: its
@@ -307,7 +405,7 @@ func (b *builder) screenFit(f font) float64 {
 }
 
 // excelDrops sets, for every row of a book Excel measures as it opens it
-// (FitRows), how much higher than the Default font's bottom baseline
+// (FitRows), or for the rows of only when it is not nil, how much higher than the Default font's bottom baseline
 // ([builder.bottomBaseline]) Excel sets the row's bottom-aligned text: as
 // far as the deepest descent and line gap of the fonts of the row's
 // cells, empty ones included, pass the Default font's.
@@ -324,7 +422,7 @@ func (b *builder) screenFit(f font) float64 {
 //     Calibri 11 baseline.
 //   - litho/xlsx: fonts, whose fonts Excel knows, sets every cell on the
 //     baseline of the Calibri 11 label beside it ([pageBuilder.excelShift]).
-func (b *builder) excelDrops(g *grid) {
+func (b *builder) excelDrops(g *grid, only map[int]bool) {
 	def := resolveFont(Font{}, b.doc.Default.Font)
 	def.excel = true
 	base := b.m.descent(def) + b.m.lineGap(def)
@@ -348,6 +446,9 @@ func (b *builder) excelDrops(g *grid) {
 		return d
 	}
 	for _, ri := range g.rowOrder {
+		if only != nil && !only[ri] {
+			continue
+		}
 		row := g.rows[ri]
 		deep := base
 		for i := range row.Cells {

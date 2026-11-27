@@ -133,6 +133,50 @@ func TestOptimalHeights_ExcelFitRows(t *testing.T) {
 	}
 }
 
+// TestOptimalHeights_ExcelRefitStored locks the rows of a book whose fonts
+// Excel knows (RefitStored) that store a height without customHeight:
+// each takes the fit of its cells' fonts, lower or higher than the
+// stored height, an empty styled cell's font included, and sets its
+// bottom-aligned text above the deepest font; a row of wrapped text, a
+// custom row, a row without a stored height, a row of a thick border and
+// a row holding a font of the theme's scheme keep theirs.
+func TestOptimalHeights_ExcelRefitStored(t *testing.T) {
+	c20 := &Style{Font: Font{Families: []string{"Carlito"}, Size: 20}}
+	wrap := &Style{Align: Alignment{Wrap: true}}
+	theme := &Style{Font: Font{Families: []string{"Carlito"}, Size: 20, Theme: true}}
+	stored := 250 * excelPixel
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Height: stored, Cells: []Cell{textCell(0, "label", nil)}},
+		{Index: 1, Height: 10, Cells: []Cell{textCell(0, "label", nil)}},
+		{Index: 2, Height: stored, Cells: []Cell{textCell(0, "label", nil), textCell(1, "twenty", c20)}},
+		{Index: 3, Height: stored, Cells: []Cell{textCell(0, "label", nil), {Column: 1, Style: c20}}},
+		{Index: 4, Height: stored, Cells: []Cell{textCell(0, "label", wrap)}},
+		{Index: 5, Height: stored, CustomHeight: true, Cells: []Cell{textCell(0, "custom", nil)}},
+		{Index: 6, Cells: []Cell{textCell(0, "label", nil), textCell(1, "twenty", c20)}},
+		{Index: 7, Height: stored, Thick: true, Cells: []Cell{textCell(0, "label", nil)}},
+		{Index: 8, Height: stored, Cells: []Cell{textCell(0, "label", nil), textCell(1, "theme", theme)}},
+	}}
+	for _, refit := range []bool{false, true} {
+		doc := excelDoc(sh)
+		doc.StandardScreenRow, doc.RefitStored = 20, refit
+		b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+		g := newGrid(t.Context(), doc, sh)
+		b.heightsOf(t, g)
+		want := []float64{250, math.Round(10 / excelPixel), 250, 250, 250, 250, 121, 250, 250}
+		if refit {
+			want = []float64{121, 121, 211, 211, 250, 250, 121, 250, 250}
+		}
+		for r, w := range want {
+			if got := math.Round(g.rowHeight(r) / excelPixel); got != w {
+				t.Errorf("RefitStored %v: row %d %v printer pixels, want %v", refit, r, got, w)
+			}
+		}
+		if d := g.drops[2]; refit != (d > 0) || g.drops[0] != 0 || g.drops[6] != 0 {
+			t.Errorf("RefitStored %v: drops %v, want one under the Calibri 20 rows alone", refit, g.drops)
+		}
+	}
+}
+
 // TestCalcStandardHeight locks Calc's optimal height of a row of one
 // plain line: the size in twips times 1.18, truncated, plus the top and
 // bottom margins, less 23 twips, the face playing no part.
