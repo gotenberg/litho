@@ -16,18 +16,20 @@ import (
 //     its name or point type (21.4.2.6 constr), then those its own layout
 //     node sets from its other side (a circle's h refType w).
 //   - Two neighbouring nodes stand their width plus sibSp apart, centre to
-//     centre, along the chord between them. With a first node in the
-//     centre (ctrShpMap fNode), a ring node stands the centre node's half
-//     width, sp and its own half width from the centre when that is
-//     farther.
+//     centre, along the chord between them, and never closer than the
+//     radius at which their boxes just stop overlapping ([cycleApart]).
+//     With a first node in the centre (ctrShpMap fNode), a ring node
+//     stands the centre node's half width, sp and its own half width from
+//     the centre when that is farther.
 //   - The block, its connectors with it, then scales to the largest size
 //     the box holds and sits in its middle.
 //
 // The standard gives neither the radius nor the scaling: those are read
 // from Office's pages. A cycle whose constraints size no node, or whose
 // nodes turn along the path (rotPath alongPath), keeps the quarter-box
-// layout of [cycle]: Office's radius for turned nodes follows neither
-// rule above, and no page shows a cycle of unsized nodes.
+// layout of [cycle]: Office puts three turned nodes where three upright
+// ones stand whatever their sibSp, and sixteen at a radius neither rule
+// gives; no page shows a cycle of unsized nodes.
 //
 // # Corpus evidence
 //
@@ -44,6 +46,14 @@ import (
 //     centre 197.3 points wide, the ring 127.8 from it (0.65 x 197.3 =
 //     128.2), the block 319.7 wide in the 320-point square of its
 //     composite.
+//   - probe, pptx: arrow5's three square arrows upright in a 480 by 320
+//     point frame, sibSp -0.35 and 0 of the node width: both prints put
+//     them 159.84 points wide, 0.667 widths from the centre, where the
+//     boxes of two neighbours just touch (the chord rule gives 0.375 and
+//     0.577), the block 319.7 points tall. Turned along the path, at
+//     sibSp -0.35, 0 and 0.5, the same 0.667; libreoffice/pptx
+//     sd/smartart-autoTxRot's sixteen turned arrows at sibSp -0.1 stand
+//     2.83 widths out, where the chord rule gives 2.31 and the boxes 3.08.
 func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 	if param(a, "rotPath", "none") == "alongPath" || s.W <= 0 || s.H <= 0 {
 		return false
@@ -108,6 +118,7 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 			radius = (nodeW + props[""]["sibSp"]) / float64(2*sin)
 		}
 	}
+	radius = max(radius, e.cycleApart(ring, sizeOf, stAng, step))
 	if centre != nil && n > 0 {
 		radius = max(radius, float64(centreW/2)+props[""]["sp"]+float64(nodeW/2))
 	}
@@ -171,6 +182,52 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 	}
 	return true
 }
+
+// cycleApart returns the smallest radius at which no two neighbouring
+// ring nodes overlap, each taken upright at its angle: for neighbours whose
+// centres lie dx and dy apart on a unit circle, the smaller of the radii
+// that part them across, their half widths summed over dx, or down, their
+// half heights over dy. The last node neighbours the first on a full
+// circle. One pass over the ring.
+func (e *engine) cycleApart(ring []*DiagramShape, sizeOf func(*DiagramShape) (float64, float64), stAng, step float64) float64 {
+	n := len(ring)
+	if n < 2 {
+		return 0
+	}
+	pairs := n - 1
+	if math.Abs(float64(step*float64(n))) >= 360 {
+		pairs = n
+	}
+	var r float64
+	for i := range pairs {
+		if e.step() {
+			break
+		}
+		j := (i + 1) % n
+		wi, hi := sizeOf(ring[i])
+		wj, hj := sizeOf(ring[j])
+		ai := float64(stAng+float64(float64(i)*step)) * math.Pi / 180
+		aj := float64(stAng+float64(float64(j)*step)) * math.Pi / 180
+		dx := math.Abs(detmath.Sin(ai) - detmath.Sin(aj))
+		dy := math.Abs(detmath.Cos(ai) - detmath.Cos(aj))
+		need := math.Inf(1)
+		if dx > apartEpsilon {
+			need = float64(wi+wj) / 2 / dx
+		}
+		if dy > apartEpsilon {
+			need = min(need, float64(hi+hj)/2/dy)
+		}
+		if numeric.Finite(need) {
+			r = max(r, need)
+		}
+	}
+	return r
+}
+
+// apartEpsilon is the distance on a unit circle below which two node
+// centres count as level across or down, so that only the other direction
+// can part them.
+const apartEpsilon = 1e-9
 
 // cycleLengths resolves the lengths a cycle's constraints set (21.4.2.6
 // constr): the width and height of each kid by name or point type, a

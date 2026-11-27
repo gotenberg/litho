@@ -48,6 +48,21 @@ func TestDiagramCycle(t *testing.T) {
 			w:     4000, h: 4000,
 			want: []string{"background rect 0,0 4000x4000", "node ellipse 1161,1496 1676x1676", "node ellipse 1161,155 1676x1676", "node ellipse 2323,2167 1676x1676", "node ellipse 0,2167 1676x1676"},
 		},
+		{
+			// Three squares of the box's width at sibSp -0.35: the chord
+			// rule's 0.375 widths would draw each over the next, so they
+			// stand 2/3 of a width out, where neighbours' boxes touch. The
+			// block, 2 widths tall, fills the box: a node is 1599 wide, its
+			// neighbours 924 to either side and a width down.
+			name: "neighbours never overlap",
+			layout: `<dgm:alg type="cycle"/><dgm:shape/><dgm:constrLst>` +
+				`<dgm:constr type="w" for="ch" ptType="node" refType="w"/>` +
+				`<dgm:constr type="sibSp" refType="w" refFor="ch" refPtType="node" fact="-0.35"/></dgm:constrLst>` +
+				nodeList("rect", circle),
+			texts: []string{"a", "b", "c"},
+			w:     4800, h: 3200,
+			want: []string{"background rect 0,0 4800x3200", "node rect 1600,0 1599x1599", "node rect 2523,1599 1599x1599", "node rect 676,1600 1599x1599"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
