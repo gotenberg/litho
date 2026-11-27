@@ -685,16 +685,21 @@ const officeBubbleShare = 0.25
 //     bubbles' centres.
 const officeBubbleLabelGap = 5.2
 
-// officeLabelInsetX is how far a data label's text stands from the left
-// and right edges of its box, in points.
+// officeLabelInsetX and officeLabelInsetY are how far a data label's text
+// stands from the left and top edges of its box, which a manual layout in
+// the edge mode places, in points.
 //
 // # Corpus evidence
 //
 //   - poi/xlsx: 45540_classic_Footer.xlsx, printed at 90 %, sets the text of
 //     its seven 12 pt bold Arial pie labels, centred line under line, 2.67
-//     to 2.82 pt right of the left edge their manual layouts give: 3.0 pt
-//     before the scale.
-const officeLabelInsetX = 3.0
+//     to 2.82 pt right of the edge their manual layouts give and its first
+//     baseline 11.56 pt under the top edge, 1.79 pt above the line's
+//     ascent: 3.0 and 2.0 pt before the scale.
+const (
+	officeLabelInsetX = 3.0
+	officeLabelInsetY = 2.0
+)
 
 // officeLabelShare is the widest a pie's data label grows before its text
 // wraps, as a share of the chart's width, its insets included.
@@ -707,6 +712,23 @@ const officeLabelInsetX = 3.0
 //     Company", 99.6 pt, on a line: lines no wider than 101.0 pt, a fifth
 //     of the chart less the insets 100.4.
 const officeLabelShare = 0.2
+
+// officeLeaderGap, officeLeaderStub and officeLeaderWidth draw the leader
+// line of a pie's data label: it ends officeLeaderGap points from the
+// label's text after a level stub of officeLeaderStub points, a black
+// line officeLeaderWidth points wide.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 45540_classic_Footer.xlsx, printed at 90 %, draws its seven
+//     leader lines 0.45 pt wide in black, each a 4.08 pt level stub ending
+//     1.35 to 1.47 pt from the first glyph of its label's line, joined
+//     straight to the sector's edge: 0.5, 4.5 and 1.5 pt before the scale.
+const (
+	officeLeaderGap   = 1.5
+	officeLeaderStub  = 4.5
+	officeLeaderWidth = 0.5
+)
 
 // officeInvertBorder outlines a negative bar Office fills inverted when
 // its series has no outline of its own.

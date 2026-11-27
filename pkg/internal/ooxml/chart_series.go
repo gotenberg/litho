@@ -459,6 +459,9 @@ func (p *chartReader) labels(e *Element, inherit chart.Labels) chart.Labels {
 		return chart.Labels{}
 	}
 	p.labelFlags(e, &l)
+	if e.Child(NSChart, "showLeaderLines") != nil {
+		l.Leaders = boolVal(e, "showLeaderLines", false)
+	}
 	if l.Style.Size == 0 {
 		l.Style = p.textStyle(textProps{}, 10, false, 1)
 	}
@@ -529,6 +532,7 @@ func (p *chartReader) pointLabels(e *Element, s *chart.Series) {
 			l = chart.Labels{}
 		} else {
 			p.labelFlags(d, &l)
+			l.Layout = labelLayout(d)
 			if tp := d.Child(NSChart, "txPr"); tp != nil {
 				l.Style = p.textStyle(p.textProps(tp), 10, false, 1)
 			}
@@ -549,6 +553,36 @@ func (p *chartReader) pointLabels(e *Element, s *chart.Series) {
 		}
 	}
 }
+
+// labelLayout reads the c:layout of a c:dLbl (ECMA-376 Part 1, 21.2.2.88
+// and 21.2.2.95 manualLayout), nil when automatic: x and y in the mode
+// xMode and yMode name, factor by default (21.2.2.208, 21.2.2.217). A
+// value past maxLabelShift chart sizes from where it counts is held there.
+func labelLayout(e *Element) *chart.LabelLayout {
+	ml := e.Child(NSChart, "layout").Child(NSChart, "manualLayout")
+	if ml == nil {
+		return nil
+	}
+	l := &chart.LabelLayout{EdgeX: childVal(ml, "xMode") == "edge", EdgeY: childVal(ml, "yMode") == "edge"}
+	read := func(local string) float64 {
+		v := floatVal(ml, local)
+		if math.IsNaN(v) {
+			return 0
+		}
+		return math.Max(-maxLabelShift, math.Min(v, maxLabelShift))
+	}
+	l.X, l.Y = read("x"), read("y")
+	if l.X == 0 && l.Y == 0 && !l.EdgeX && !l.EdgeY {
+		return nil
+	}
+	return l
+}
+
+// maxLabelShift bounds a data label's manual place, in chart sizes from
+// the chart's corner or the label's automatic place. Not spec-mandated
+// (21.2.2.95 leaves x and y unbounded): it keeps a hostile value finite
+// while a label may still stand outside the chart.
+const maxLabelShift = 2
 
 // data reads a data source element (c:cat, c:val, c:xVal, c:yVal,
 // c:bubbleSize; ECMA-376 Part 1, 21.2.2.24 and 21.2.2.224): its reference

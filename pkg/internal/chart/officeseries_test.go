@@ -255,6 +255,57 @@ func TestRender_OfficePieSeriesFill(t *testing.T) {
 	}
 }
 
+// TestRender_OfficeLabelLayout holds an Office pie's data label to its
+// manual layout: in the edge mode its text starts officeLabelInsetX right
+// of the chart's fraction and its leader line runs from the sector to a
+// level stub beside it; in the factor mode the label moves by the
+// fraction of the chart from its automatic place.
+func TestRender_OfficeLabelLayout(t *testing.T) {
+	r := typeset.Rect{Width: 300, Height: 200}
+	label := func(lay *LabelLayout) (*typeset.Text, []typeset.Fragment) {
+		s := &Series{Values: Data{Values: nums(1, 3), Cached: true}, Fill: &Paint{Color: red},
+			Labels: Labels{ShowValue: true, Leaders: true, Style: TextStyle{Size: 10, Color: typeset.Black}}}
+		s.Points = []Point{{Index: 0, Labels: Labels{ShowValue: true, Leaders: true, Layout: lay, Style: TextStyle{Size: 10, Color: typeset.Black}}, HasLabels: true}}
+		c := &Chart{Rules: OfficeRules, Groups: []*Group{{Kind: Pie, XAxis: -1, YAxis: -1, Series: []*Series{s}}}}
+		frags := Render(context.Background(), ahem(t), c, r)
+		var got *typeset.Text
+		walk(frags, 0, func(fr typeset.Fragment, _ int) {
+			if tx, ok := fr.(*typeset.Text); ok && got == nil && len(tx.Glyphs) > 0 && tx.Glyphs[0].Text == "1" {
+				got = tx
+			}
+		})
+		if got == nil {
+			t.Fatalf("layout %+v: no label", lay)
+		}
+		return got, frags
+	}
+	auto, _ := label(nil)
+	edge, frags := label(&LabelLayout{X: 0.05, Y: 0.1, EdgeX: true, EdgeY: true})
+	if x := 0.05*r.Width + officeLabelInsetX; math.Abs(edge.Origin.X-x) > 0.01 {
+		t.Errorf("edge label at x %.2f, want %.2f", edge.Origin.X, x)
+	}
+	// The line's half leading lies over the ascent.
+	if top := edge.Origin.Y - 8; math.Abs(top-(0.1*r.Height+officeLabelInsetY)) > 1 {
+		t.Errorf("edge label's top at %.2f, want %.2f", top, 0.1*r.Height+officeLabelInsetY)
+	}
+	leaders := 0
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && p.Fill == nil && len(p.Ops) == 3 {
+			b := bounds(p)
+			if math.Abs(b.X-(edge.Origin.X+10+officeLeaderGap)) < 0.01 && p.Stroke.Width == officeLeaderWidth {
+				leaders++
+			}
+		}
+	})
+	if leaders != 1 {
+		t.Errorf("%d leader lines from the label's right, want 1", leaders)
+	}
+	moved, _ := label(&LabelLayout{X: 0.1, Y: -0.05})
+	if dx, dy := moved.Origin.X-auto.Origin.X, moved.Origin.Y-auto.Origin.Y; math.Abs(dx-30) > 0.01 || math.Abs(dy+10) > 0.01 {
+		t.Errorf("factor label moved by (%.2f, %.2f), want (30, -10)", dx, dy)
+	}
+}
+
 // TestRender_OfficePieLabelWrap holds an Office pie's data label to a
 // fifth of the chart's width, its insets left out, where LibreOffice's
 // rule keeps it on one line.

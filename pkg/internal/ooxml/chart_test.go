@@ -246,6 +246,32 @@ func TestChartFromElement_DataLabelsInherit(t *testing.T) {
 	}
 }
 
+func TestChartFromElement_DataLabelLayout(t *testing.T) {
+	lay := func(idx, body string) string {
+		return `<c:dLbl><c:idx val="` + idx + `"/><c:layout><c:manualLayout>` + body + `</c:manualLayout></c:layout><c:showVal val="1"/></c:dLbl>`
+	}
+	plot := `<c:pieChart>` + ser(0, "A", `<c:dLbls>`+lay("0", `<c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.25"/><c:y val="0.5"/>`)+
+		lay("1", `<c:x val="-0.1"/><c:y val="1e300"/>`)+lay("2", `<c:xMode val="edge"/><c:x val="0.3"/><c:y val="0.05"/>`)+
+		`<c:showVal val="1"/><c:showLeaderLines val="1"/></c:dLbls>`, "1", "2", "3") + `</c:pieChart>`
+	s := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0]
+	if !s.Labels.Leaders || s.Labels.Layout != nil {
+		t.Errorf("series labels = %+v, want leader lines and no layout", s.Labels)
+	}
+	want := []chart.LabelLayout{
+		{X: 0.25, Y: 0.5, EdgeX: true, EdgeY: true},
+		{X: -0.1, Y: maxLabelShift},
+		{X: 0.3, Y: 0.05, EdgeX: true},
+	}
+	if len(s.Points) != len(want) {
+		t.Fatalf("points = %+v", s.Points)
+	}
+	for i, w := range want {
+		if l := s.Points[i].Labels; l.Layout == nil || *l.Layout != w || !l.Leaders {
+			t.Errorf("point %d labels = %+v, want layout %+v", i, l, w)
+		}
+	}
+}
+
 func TestChartFromElement_View3D(t *testing.T) {
 	plot := `<c:bar3DChart><c:barDir val="col"/><c:grouping val="standard"/>` + ser(0, "A", "", "1", "2") +
 		`<c:gapDepth val="80"/><c:shape val="cylinder"/><c:axId val="1"/><c:axId val="2"/><c:axId val="3"/></c:bar3DChart>` +

@@ -280,14 +280,58 @@ func (rd *renderer) placePieLabel(l pieLabel) {
 			inside = false
 		}
 	}
+	var lx, ly float64
 	if inside {
-		rd.labelFrame(l.b, l.lb, l.cx+float64(rm*c), l.cy-float64(rm*s))
+		lx, ly = l.cx+float64(rm*c), l.cy-float64(rm*s)
+	} else {
+		d := l.r1 + labelSpacing
+		ex, ey := l.cx+float64(d*c), l.cy-float64(d*s)
+		lx, ly = ex+float64(c*w/2), ey-float64(s*h/2)
+	}
+	if lay := l.lb.Layout; lay != nil && rd.office() {
+		lx, ly = rd.officeLabelPlace(lay, w, h, lx, ly)
+		if l.lb.Leaders {
+			rd.officeLeader(l.cx+float64(l.r1*c), l.cy-float64(l.r1*s), lx, ly, w)
+		}
+	}
+	rd.labelFrame(l.b, l.lb, lx, ly)
+}
+
+// officeLabelPlace returns the centre of a data label of w by h points
+// that the file moves by lay from its automatic centre (ax, ay): an edge
+// sets the label's box, its text inset by officeLabelInsetX and
+// officeLabelInsetY, at a fraction of the chart; a factor moves the
+// centre by a fraction of the chart's size (ECMA-376 Part 1, 21.2.2.95).
+func (rd *renderer) officeLabelPlace(lay *LabelLayout, w, h, ax, ay float64) (float64, float64) {
+	pg := rd.page
+	x := ax + float64(lay.X*pg.Width)
+	if lay.EdgeX {
+		x = pg.X + float64(lay.X*pg.Width) + officeLabelInsetX + float64(w/2)
+	}
+	y := ay + float64(lay.Y*pg.Height)
+	if lay.EdgeY {
+		y = pg.Y + float64(lay.Y*pg.Height) + officeLabelInsetY + float64(h/2)
+	}
+	return x, y
+}
+
+// officeLeader draws the leader line from (px, py) on a pie sector's
+// edge to the data label of width w centred at (lx, ly): straight to a
+// short level stub that ends officeLeaderGap from the label's text on the
+// side facing the point, at the text's middle height. A point under the
+// label draws none.
+func (rd *renderer) officeLeader(px, py, lx, ly, w float64) {
+	side := -1.0
+	if px > lx {
+		side = 1
+	}
+	end := lx + float64(side*(float64(w/2)+officeLeaderGap))
+	stub := end + float64(side*officeLeaderStub)
+	if (px-end)*side <= officeLeaderStub {
 		return
 	}
-	d := l.r1 + labelSpacing
-	ex, ey := l.cx+float64(d*c), l.cy-float64(d*s)
-	lx, ly := ex+float64(c*w/2), ey-float64(s*h/2)
-	rd.labelFrame(l.b, l.lb, lx, ly)
+	ops := polyline([]typeset.Point{{X: px, Y: py}, {X: stub, Y: ly}, {X: end, Y: ly}}, false)
+	rd.out = append(rd.out, &typeset.Path{Ops: ops, Stroke: (&Stroke{Color: typeset.Black, Width: officeLeaderWidth}).compose()})
 }
 
 // radar draws a radar group into avail: a spoke per category clockwise

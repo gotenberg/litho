@@ -885,10 +885,27 @@ type Labels struct {
 	// the end, no space between, as Office places the labels of its 2016
 	// chart kinds.
 	Flush bool
+	// Layout, when not nil, moves the label from its automatic place
+	// (ECMA-376 Part 1, 21.2.2.95 manualLayout of a c:dLbl).
+	Layout *LabelLayout
+	// Leaders draws a line from a pie sector to its label when the label
+	// stands away from it (21.2.2.177 showLeaderLines).
+	Leaders bool
 	// Custom, when not empty, is the label's own text, which replaces the
 	// parts the flags choose (ECMA-376 Part 1, 21.2.2.47 dLbl's tx; ODF
 	// 1.3 Part 3, loext:data-label's text:p).
 	Custom []LabelField
+}
+
+// LabelLayout is where a file moves a data label, along each axis in one
+// of two modes (ECMA-376 Part 1, 21.2.2.95 manualLayout, 21.2.3.27
+// ST_LayoutMode): the edge mode puts the label's left or top edge at that
+// fraction of the chart's width or height from its left or top; the
+// factor mode moves the label by that fraction of the chart's width or
+// height from its automatic place.
+type LabelLayout struct {
+	X, Y         float64
+	EdgeX, EdgeY bool
 }
 
 // LabelField is one piece of a data label's own text: text as written,
