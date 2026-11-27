@@ -1024,6 +1024,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	// breaks no line between an emoji and an emoji or a letter.
 	st.OfficeEmoji = b.doc != nil && b.doc.Fallback != text.FallbackLibreOffice
 	st.KeepEmoji = st.OfficeEmoji
+	st.KeepClosed = powerPointKeepsClosed(b.doc)
 	if tp := st.TextPaint; tp != nil && (tp.NoFill || len(tp.Gradient) >= 2) && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their paint: a text of
 		// no fill, or of a gradient whose first stop is transparent,
@@ -1282,6 +1283,23 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		b.bullet(node, p, first, lb, f, number, indent)
 	}
 	return node
+}
+
+// powerPointKeepsClosed reports whether the runs of doc keep a closing
+// bracket with the character after it ([css.Office.KeepClosed]): under
+// PowerPoint's rules, which break a line after a closing parenthesis only
+// at a space; Impress breaks where UAX #14 does.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation's
+//     AutoShapes_3D_Bevel_Circle_Shadow_Offset_Diagonal_ and
+//     AutoShapes_3D_Bevel_Riblet_Reflection_full_ print their titles
+//     "(Circle)+Shadow(Outer_Diagonal" and "(3D_Bevel(Riblet)+Reflection(full,8"
+//     whole on their lines, moved down a line where they do not fit,
+//     though UAX #14 breaks between ")" and "+".
+func powerPointKeepsClosed(doc *Document) bool {
+	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 
 // pctLine returns the length a percentage spacing before or after a

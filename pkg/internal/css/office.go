@@ -315,6 +315,13 @@ type Office struct {
 	// (see text.EmojiJoins). It applies to the characters of the inline
 	// box that sets it.
 	KeepEmoji bool
+	// KeepClosed keeps a closing parenthesis or square bracket on one line
+	// with the character after it unless that is a space, as PowerPoint
+	// breaks a run, where UAX #14 breaks after a closing punctuation (class
+	// CP) before a prefix, an opening punctuation or a symbol (LB31): a
+	// line breaks there only at another opportunity, a space. It applies to
+	// the characters of the inline box that sets it.
+	KeepClosed bool
 	// BaselineAtBottom gives the inline-level block container that sets
 	// it its bottom margin edge as its baseline, whatever lines it holds,
 	// as Word sits an inline drawing on the line by its bottom edge

@@ -193,6 +193,33 @@ func TestLineBreak_KeepEmoji(t *testing.T) {
 	}
 }
 
+// TestLineBreak_KeepClosed checks that css.Office.KeepClosed keeps a
+// closing parenthesis or bracket on one line with what follows it, the run
+// moving whole to the next line, while a space after it still breaks.
+func TestLineBreak_KeepClosed(t *testing.T) {
+	keep := func(s *css.Style) { s.KeepClosed = true }
+	tests := []struct {
+		name string
+		st   *css.Style
+		text string
+		want []string
+	}{
+		{"breaks after a parenthesis", sty(), "A (b)+cd", []string{"A ", "(b)", "+cd"}},
+		{"keeps a parenthesis with a sign", sty(keep), "A (b)+cd", []string{"A ", "(b)+cd"}},
+		{"keeps a bracket with a parenthesis", sty(keep), "A [b](cd", []string{"A ", "[b](cd"}},
+		{"breaks at a space after it", sty(keep), "A (b) cd", []string{"A ", "(b) ", "cd"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, tt.text))), page(40, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestLineBreak_HyphenBeforeDigit checks the opportunity Chromium opens
 // after a hyphen-minus between an ASCII letter or digit and a digit, where
 // UAX #14, LB25 keeps the hyphen with the number, under

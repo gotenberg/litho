@@ -282,13 +282,15 @@ func (p *ifcPara) allowed(i int) bool {
 // #14 and those line-break opens between the typographic letter units of
 // CJK alike; one between two Hangul characters that
 // [css.Office.KeepHangul] closes; one between two emoji that
-// [css.Office.KeepEmoji] closes; and, under [css.Style.WordRules], one
+// [css.Office.KeepEmoji] closes; one after a closing bracket that
+// [css.Office.KeepClosed] closes; and, under [css.Style.WordRules], one
 // after a solidus (see keptAfterSolidus).
 func (p *ifcPara) keptTogether(i int, a, b rune) bool {
 	st := p.styleAt(i)
 	return st.WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b) ||
 		st.KeepHangul && unicode.Is(unicode.Hangul, a) && unicode.Is(unicode.Hangul, b) ||
 		st.KeepEmoji && text.EmojiJoins(a, b) ||
+		st.KeepClosed && (a == ')' || a == ']') && !unicode.IsSpace(b) ||
 		keptAfterSolidus(st, a)
 }
 

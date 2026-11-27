@@ -248,6 +248,27 @@ func TestText_OfficeEmoji(t *testing.T) {
 	}
 }
 
+// TestText_KeepClosed checks that under PowerPoint's rules a line breaks
+// after a closing parenthesis only at a space: "(b)+cdef" starts the second
+// line, where under Impress's rules the line breaks after ")".
+func TestText_KeepClosed(t *testing.T) {
+	starts := func(fallback text.Fallback) []string {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 75, 200, para("Aa (b)+cdefg", arial(20)))}})
+		d.Fallback = fallback
+		var out []string
+		for _, r := range runs(convert(t, d, office.Options{}).Pages[0]) {
+			out = append(out, strings.TrimSpace(r.text))
+		}
+		return out
+	}
+	if got := starts(text.FallbackFontconfig); len(got) < 2 || !strings.HasPrefix(got[1], "(b)+") {
+		t.Errorf("lines %q under PowerPoint's rules, want the second to start with (b)+", got)
+	}
+	if got := starts(text.FallbackLibreOffice); len(got) < 2 || !strings.HasPrefix(got[1], "+") {
+		t.Errorf("lines %q under Impress's rules, want the second to start with +", got)
+	}
+}
+
 // TestText_Highlight checks that a highlighted run paints its text box
 // in the highlight's colour behind its glyphs.
 func TestText_Highlight(t *testing.T) {
