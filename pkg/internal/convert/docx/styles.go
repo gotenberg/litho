@@ -116,6 +116,7 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		s.defPara.lineRule = new("auto")
 	}
 	if root == nil {
+		d.setCharUnit(s.defRun.size)
 		return s
 	}
 	dd := root.Child(w, "docDefaults")
@@ -123,6 +124,9 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		if r := dd.Child(w, "rPrDefault").Child(w, "rPr"); r != nil {
 			s.defRun = *d.parseRunProps(r)
 		}
+	}
+	d.setCharUnit(s.defRun.size)
+	if dd != nil {
 		if p := dd.Child(w, "pPrDefault").Child(w, "pPr"); p != nil {
 			s.defPara = *d.parseParaProps(p)
 		}

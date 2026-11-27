@@ -171,6 +171,38 @@ func contains(s, sub string) bool {
 	return false
 }
 
+// TestParagraphProperties_CharacterIndents reads indents in character
+// units (17.3.1.12 leftChars, rightChars, firstLineChars, hangingChars,
+// in hundredths of a character) as hundredths of the document's default
+// run size, over the indents in twips, a value of 0 leaving those.
+func TestParagraphProperties_CharacterIndents(t *testing.T) {
+	t.Parallel()
+	// The default run of stylesPart is 10 points.
+	styles := stylesPart(`<w:style w:type="paragraph" w:styleId="Deep"><w:pPr><w:ind w:left="1800" w:leftChars="1844"/></w:pPr><w:rPr><w:sz w:val="32"/></w:rPr></w:style>`)
+	p := func(ppr, text string) string {
+		return `<w:p><w:pPr>` + ppr + `</w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	body := p(`<w:ind w:left="630" w:leftChars="250" w:right="315" w:rightChars="150"/>`, "chars") +
+		p(`<w:ind w:left="440" w:leftChars="0" w:firstLine="440" w:firstLineChars="200"/>`, "first") +
+		p(`<w:ind w:left="660" w:hanging="660" w:hangingChars="300"/>`, "hanging") +
+		p(`<w:pStyle w:val="Deep"/>`, "styled")
+	b := build(t, body, map[string]string{"word/styles.xml": styles})
+	for _, tc := range []struct {
+		text                string
+		left, right, indent float64
+	}{{"chars", 25, 15, 0}, {"first", 22, 0, 20}, {"hanging", 33, 0, -30}, {"styled", 184.4, 0, 0}} {
+		for _, n := range role(b.root, "P") {
+			if textOf(n) != tc.text {
+				continue
+			}
+			s := n.Style
+			if math.Abs(s.Margin[css.Left].Value-tc.left) > 1e-9 || math.Abs(s.Margin[css.Right].Value-tc.right) > 1e-9 || math.Abs(s.TextIndent.Value-tc.indent) > 1e-9 {
+				t.Errorf("%s: left %v right %v indent %v, want %v %v %v", tc.text, s.Margin[css.Left], s.Margin[css.Right], s.TextIndent, tc.left, tc.right, tc.indent)
+			}
+		}
+	}
+}
+
 func TestParagraphProperties(t *testing.T) {
 	t.Parallel()
 	settings := `<w:settings ` + nsDecl + `><w:defaultTabStop w:val="360"/></w:settings>`

@@ -757,9 +757,44 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 	return p
 }
 
+// defaultCharUnit is the width in points of the character an indent in
+// character units counts hundredths of before the styles are read: the
+// 10.5-point default of East Asian text.
+const defaultCharUnit = 10.5
+
+// maxIndentChars bounds an indent in character units, in hundredths of a
+// character. Anti-DoS guard, not spec-mandated: 10,000 characters of a
+// 1,000-point font is wider than any page, and the layout clamps an
+// indent to its column all the same.
+const maxIndentChars = 1_000_000
+
+// setCharUnit sets the character an indent in character units counts
+// from the document's default run size, size points, the default
+// [defaultCharUnit] when the defaults state none.
+func (d *document) setCharUnit(size *float64) {
+	d.charUnit = defaultCharUnit
+	if size != nil && *size > 0 {
+		d.charUnit = *size
+	}
+}
+
 // parseInd reads a w:ind element (ECMA-376 Part 1, 17.3.1.12): left or
 // start, right or end, and firstLine or hanging, a hanging indent stored
-// as a negative first line.
+// as a negative first line. An indent in character units, startChars or
+// leftChars, endChars or rightChars, firstLineChars, hangingChars, in
+// hundredths of a character, wins over the one in twips when it is not
+// 0; a character is as wide as the document's default run size
+// ([document.charUnit]).
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/ParaPr/paraind.docx,
+//     of a default run size of 10.5 points: Word sets a paragraph of
+//     leftChars 250 and left 630 at 26.25 points from the margin, and a
+//     16-point heading of leftChars 1844 and left 1800 at 193.6.
+//   - litho/docx para-indent, of a default run size of 11 points: Word
+//     sets leftChars 200, firstLineChars 200 and hangingChars 300 at 22,
+//     22 and 33 points, which its twips state too.
 func (d *document) parseInd(c *ooxml.Element, p *paraProps) {
 	for _, a := range []struct {
 		names []string
@@ -772,15 +807,35 @@ func (d *document) parseInd(c *ooxml.Element, p *paraProps) {
 			}
 		}
 	}
-	// startChars and the other character units count hundredths of a
-	// character, sized here at the 10.5-point default of East Asian text.
-	if v, ok := ooxml.Int(attrOr(c, "startChars")); ok && v != 0 {
-		p.indLeft = new(float64(v) * 0.105)
+	unit := d.charUnit
+	if unit <= 0 {
+		unit = defaultCharUnit
+	}
+	chars := func(names ...string) (float64, bool) {
+		for _, n := range names {
+			if v, ok := ooxml.Int(attrOr(c, n)); ok && v != 0 {
+				v = max(-maxIndentChars, min(maxIndentChars, v))
+				return float64(float64(v)*unit) / 100, true
+			}
+		}
+		return 0, false
+	}
+	if v, ok := chars("startChars", "leftChars"); ok {
+		p.indLeft = new(v)
+	}
+	if v, ok := chars("endChars", "rightChars"); ok {
+		p.indRight = new(v)
 	}
 	if v, ok := ooxml.Twips(attrOr(c, "firstLine")); ok {
 		p.firstLine = new(v)
 	}
+	if v, ok := chars("firstLineChars"); ok {
+		p.firstLine = new(v)
+	}
 	if v, ok := ooxml.Twips(attrOr(c, "hanging")); ok {
+		p.firstLine = new(-v)
+	}
+	if v, ok := chars("hangingChars"); ok {
 		p.firstLine = new(-v)
 	}
 }

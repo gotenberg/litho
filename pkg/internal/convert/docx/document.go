@@ -89,6 +89,11 @@ type document struct {
 	// section whose body is being built (17.6.5 docGrid of type lines or
 	// linesAndChars), 0 for none.
 	linePitch float64
+	// charUnit is the width in points of the character a paragraph's
+	// indents in character units count hundredths of (17.3.1.12 ind
+	// leftChars): the document's default run size ([defaultCharUnit]
+	// until the styles are read).
+	charUnit float64
 
 	warnings []typeset.Warning
 	// formulas lays the equations out, nil until the first one.
