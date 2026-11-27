@@ -129,6 +129,33 @@ func TestShapes_FillsAndLines(t *testing.T) {
 				t.Errorf("shape %+v", s)
 			}
 		}},
+		{"stops at one position keep the first, at 0 the last", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="0"><a:srgbClr val="0070C0"/></a:gs><a:gs pos="40000"><a:srgbClr val="00B050"/></a:gs><a:gs pos="40000"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
+			g := s.Fill.Gradient
+			want := []struct {
+				pos float64
+				c   css.Color
+			}{{0, rgb(0x0070C0)}, {0.4, rgb(0x00B050)}, {1, rgb(0x000000)}}
+			if len(g.Stops) != len(want) {
+				t.Fatalf("stops %+v", g.Stops)
+			}
+			for i, w := range want {
+				if g.Stops[i].Position != w.pos || !sameColor(g.Stops[i].Color, w.c) {
+					t.Errorf("stop %d %+v, want %v at %v", i, g.Stops[i], w.c, w.pos)
+				}
+			}
+		}},
+		{"three last stops at one position blend from the first to the last", `<a:gradFill><a:gsLst><a:gs pos="50000"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="50000"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="50000"><a:srgbClr val="0070C0"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
+			g := s.Fill.Gradient
+			if len(g.Stops) != 2 || g.Stops[0].Position != 0.5 || !sameColor(g.Stops[0].Color, rgb(0xFFFFFF)) || g.Stops[1].Position != 1 || !sameColor(g.Stops[1].Color, rgb(0x0070C0)) {
+				t.Errorf("stops %+v", g.Stops)
+			}
+		}},
+		{"two stops at 0 paint the later colour", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="0"><a:srgbClr val="0070C0"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
+			g := s.Fill.Gradient
+			if len(g.Stops) != 2 || !sameColor(g.Stops[0].Color, rgb(0x0070C0)) || !sameColor(g.Stops[1].Color, rgb(0x0070C0)) {
+				t.Errorf("stops %+v", g.Stops)
+			}
+		}},
 		{"the later of two last stops at one position moves to the end", `<a:gradFill><a:gsLst><a:gs pos="50000"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="50000"><a:srgbClr val="0070C0"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
 			g := s.Fill.Gradient
 			if len(g.Stops) != 2 || g.Stops[0].Position != 0.5 || g.Stops[1].Position != 1 || !sameColor(g.Stops[1].Color, rgb(0x0070C0)) {

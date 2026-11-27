@@ -157,7 +157,7 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	if len(g.Stops) == 1 {
 		g.Stops = []slides.Stop{{Position: 0, Color: g.Stops[0].Color}, {Position: 1, Color: g.Stops[0].Color}}
 	}
-	spreadLastStop(g.Stops)
+	g.Stops = sharedStops(g.Stops)
 	g.Blend = officeRamp(g.Stops)
 	if lin := k.Child(ooxml.NSA, "lin"); lin != nil {
 		a, _ := intAttr(lin, "ang")
@@ -179,21 +179,54 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	return g
 }
 
-// spreadLastStop moves the last of the sorted stops to the end of the
-// gradient when it shares its position with the stop before it, as
-// PowerPoint paints such a gradient: the earlier colour up to the shared
-// position, then a blend to the later one at the end, where the clause
-// draws a hard edge (ECMA-376 Part 1, 20.1.8.36 gs pos).
+// sharedStops returns the sorted stops with those that share a position
+// reduced as PowerPoint paints them, where the clause draws a hard edge
+// between them (ECMA-376 Part 1, 20.1.8.36 gs pos): of the stops at one
+// position the first stays and the others go, but at position 0, where
+// the last stays; and when the stops at the last position are several,
+// the last of them moves to the end of the gradient, which blends to it.
+// A gradient left with one stop is that colour at both ends.
 //
 // # Corpus evidence
 //
+//   - probe, pptx: top to bottom, red and blue both at 0 print blue; both
+//     at 100% red; red at 0 and 40%, blue at 40% and 100% red to 40% then
+//     a blend to blue; red and blue at 30%, green at 100% red to 30% then
+//     a blend to green; red at 0, blue and green at 50% a blend to blue at
+//     50% then to green; white, red and blue all at 50% white to 50% then
+//     a blend to blue.
 //   - libreoffice/pptx: sd/tdf112088.pptx's bg1 and accent1 both at 50%
 //     print white down the first half, then a straight blend to 0070C0 at
 //     the bottom edge.
-func spreadLastStop(stops []slides.Stop) {
-	if n := len(stops); n >= 2 && stops[n-1].Position == stops[n-2].Position {
-		stops[n-1].Position = 1
+//   - poi/pptx: slideshow/minimal-gradient-fill-issue.pptx's tx2 and
+//     517CFC both at 0 print 517CFC, both at 100% tx2.
+//   - litho/pptx: background-gradient's red at 0 and 50%, blue at 50% and
+//     100% print red to the middle, then a blend to blue.
+func sharedStops(stops []slides.Stop) []slides.Stop {
+	n := len(stops)
+	out := make([]slides.Stop, 0, n)
+	for i := 0; i < n; {
+		j := i
+		for j+1 < n && stops[j+1].Position == stops[i].Position {
+			j++
+		}
+		keep := i
+		if i == 0 && stops[i].Position == 0 {
+			keep = j
+		}
+		out = append(out, stops[keep])
+		if j == n-1 && keep != j {
+			last := stops[j]
+			last.Position = 1
+			out = append(out, last)
+		}
+		i = j + 1
 	}
+	if len(out) == 1 {
+		out = append(out, slides.Stop{Position: 1, Color: out[0].Color})
+		out[0].Position = 0
+	}
+	return out
 }
 
 // officeRamp returns stops that paint a gradient as PowerPoint blends
