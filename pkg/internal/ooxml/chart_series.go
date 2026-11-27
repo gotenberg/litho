@@ -533,6 +533,7 @@ func (p *chartReader) pointLabels(e *Element, s *chart.Series) {
 		} else {
 			p.labelFlags(d, &l)
 			l.Layout = labelLayout(d)
+			l.Width = labelWidth(d)
 			if tp := d.Child(NSChart, "txPr"); tp != nil {
 				l.Style = p.textStyle(p.textProps(tp), 10, false, 1)
 			}
@@ -576,6 +577,24 @@ func labelLayout(e *Element) *chart.LabelLayout {
 		return nil
 	}
 	return l
+}
+
+// labelWidth returns the width of a data label's box as a share of the
+// chart's width, from the c15:layout in the label's extension list
+// (MS-ODRAWXML, c15), 0 when it states none. The share is kept to
+// (0, 1]: a box wider than the chart wraps nothing more.
+func labelWidth(dLbl *Element) float64 {
+	for _, ext := range dLbl.Child(NSChart, "extLst").Kids() {
+		for _, k := range ext.Kids() {
+			if k.Local != "layout" {
+				continue
+			}
+			if v := floatVal(k.Child(NSChart, "manualLayout"), "w"); v > 0 && !math.IsNaN(v) {
+				return math.Min(v, 1)
+			}
+		}
+	}
+	return 0
 }
 
 // maxLabelShift bounds a data label's manual place, in chart sizes from

@@ -222,9 +222,14 @@ func (rd *renderer) pies(plot typeset.Rect) {
 			}
 			wrap := 0.0
 			if rd.office() {
-				// Office wraps a pie's label at a share of the chart's
-				// width (officeLabelShare).
-				wrap = math.Max(float64(rd.page.Width*officeLabelShare)-2*officeLabelInsetX, 1)
+				// Office wraps a pie's label in the box width the label
+				// states, else at a share of the chart's width
+				// (officeLabelShare).
+				share := officeLabelShare
+				if lb.Width > 0 {
+					share = lb.Width
+				}
+				wrap = math.Max(float64(rd.page.Width*share)-2*officeLabelInsetX, 1)
 			}
 			b := rd.measure(rd.labelText(g, s, j, v, lb, math.Abs(v)/total), lb.Style, wrap)
 			if b == nil {

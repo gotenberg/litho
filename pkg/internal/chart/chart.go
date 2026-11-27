@@ -888,6 +888,10 @@ type Labels struct {
 	// Layout, when not nil, moves the label from its automatic place
 	// (ECMA-376 Part 1, 21.2.2.95 manualLayout of a c:dLbl).
 	Layout *LabelLayout
+	// Width, when positive, is the width of the label's box as a share of
+	// the chart's width, which an Office pie's label wraps in instead of
+	// officeLabelShare (MS-ODRAWXML, c15:layout of a c:dLbl).
+	Width float64
 	// Leaders draws a line from a pie sector to its label when the label
 	// stands away from it (21.2.2.177 showLeaderLines).
 	Leaders bool

@@ -272,6 +272,29 @@ func TestChartFromElement_DataLabelLayout(t *testing.T) {
 	}
 }
 
+func TestChartFromElement_DataLabelWidth(t *testing.T) {
+	c15 := func(w string) string {
+		return `<c:extLst><c:ext uri="{CE6537A1-D6FC-4f65-9D91-7224C49458BB}" xmlns:c15="http://schemas.microsoft.com/office/drawing/2012/chart">` +
+			`<c15:layout><c:manualLayout><c:w val="` + w + `"/><c:h val="0.08"/></c:manualLayout></c15:layout></c:ext></c:extLst>`
+	}
+	lbl := func(idx, ext string) string {
+		return `<c:dLbl><c:idx val="` + idx + `"/><c:showVal val="1"/>` + ext + `</c:dLbl>`
+	}
+	plot := `<c:pieChart>` + ser(0, "A", `<c:dLbls>`+lbl("0", c15("0.38"))+lbl("1", c15("7"))+lbl("2", c15("-1"))+lbl("3", "")+
+		`<c:showVal val="1"/></c:dLbls>`, "1", "2", "3", "4") + `</c:pieChart>`
+	s := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0]
+	// A width past the chart's is held to it; a negative one or none is 0.
+	want := []float64{0.38, 1, 0, 0}
+	if len(s.Points) != len(want) {
+		t.Fatalf("points = %+v", s.Points)
+	}
+	for i, w := range want {
+		if l := s.Points[i].Labels; l.Width != w || l.Layout != nil {
+			t.Errorf("point %d labels = %+v, want width %v and no layout", i, l, w)
+		}
+	}
+}
+
 func TestChartFromElement_View3D(t *testing.T) {
 	plot := `<c:bar3DChart><c:barDir val="col"/><c:grouping val="standard"/>` + ser(0, "A", "", "1", "2") +
 		`<c:gapDepth val="80"/><c:shape val="cylinder"/><c:axId val="1"/><c:axId val="2"/><c:axId val="3"/></c:bar3DChart>` +

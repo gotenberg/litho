@@ -711,6 +711,10 @@ const (
 //     and "Finance - Sales and Trading" after "Sales", and keeps "Finance -
 //     Company", 99.6 pt, on a line: lines no wider than 101.0 pt, a fifth
 //     of the chart less the insets 100.4.
+//   - libreoffice/pptx: chart2/tdf146487.pptx's labels state a c15:layout
+//     box 0.38 of the chart wide, and PowerPoint prints "Green,
+//     $7,654,321" on one line, wider than a fifth of the chart: a label's
+//     stated width takes the share's place ([Labels.Width]).
 const officeLabelShare = 0.2
 
 // officeLeaderGap, officeLeaderStub and officeLeaderWidth draw the leader

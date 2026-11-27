@@ -324,4 +324,12 @@ func TestRender_OfficePieLabelWrap(t *testing.T) {
 			t.Errorf("rules %v: lines %q, want %q", rules, got, want)
 		}
 	}
+	// A label that states its box 0.4 of the chart wide wraps in it
+	// instead: 194 points hold the four words, 190.
+	s := &Series{Values: Data{Values: nums(1, 3), Cached: true}, Categories: Data{Values: strs("AAAA BBBB CCCC DDDD", "E"), Cached: true},
+		Labels: Labels{ShowCategory: true, Width: 0.4, Style: TextStyle{Size: 10, Color: typeset.Black}}}
+	c := &Chart{Rules: OfficeRules, Groups: []*Group{{Kind: Pie, XAxis: -1, YAxis: -1, Series: []*Series{s}}}}
+	if got := texts(Render(context.Background(), ahem(t), c, typeset.Rect{Width: 500, Height: 300})); !slices.Contains(got, "AAAA BBBB CCCC DDDD") {
+		t.Errorf("stated width: lines %q, want one line", got)
+	}
 }
