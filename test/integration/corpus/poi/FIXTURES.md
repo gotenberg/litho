@@ -33,3 +33,12 @@ litho reads none of the binary formats yet: the `doc`, `xls` and `ppt` cells sco
 The qualifying documents are sorted by ID and the first 200 of each format kept.
 
 POI is under the Apache License 2.0; its test documents come from its bug reports and are downloaded for testing, never committed.
+
+## Expected text
+
+Two references hold part of the text, or read it in broken tokens, where the slide shows text. Each keeps, under `<format>/options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+
+| Fixture                                       | What the reference does                                                                       |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `pptx` `slideshow/smartart-rotated-text.pptx` | Draws the text of turned SmartArt nodes and of a turned text box as outlines                  |
+| `pptx` `slideshow/smartart-simple.pptx`       | Spaces the slide's text box out of its words, so a word reads as several tokens (`cont ains`) |
