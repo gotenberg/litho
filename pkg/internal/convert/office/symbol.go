@@ -161,6 +161,23 @@ func SymbolNode(tn *layout.Node, fonts *text.Fonts, rule symbolfont.Rule, codes 
 	}
 }
 
+// SymbolStandIn gives tn, a text node that draws stand-ins for src, codes
+// of the symbol font family that no face draws, the codes as its glyphs'
+// text and the characters they stand for ([SymbolText]) as its
+// ActualText, recorded in codes: Word embeds the symbol font and writes
+// its codes as the printed text (ISO 32000-1, 9.10.2), and a reader
+// takes the ActualText (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
+// tn keeps its text when family is no font [symbolfont.Recodes] knows or
+// src and tn's text differ in length.
+func SymbolStandIn(tn *layout.Node, src, family string, codes *SymbolCodes) {
+	actual := SymbolText(src, family)
+	if actual == "" || utf8.RuneCountInString(src) != utf8.RuneCountInString(tn.Text) {
+		return
+	}
+	tn.ActualText = actual
+	codes.record(actual, src, tn.Text)
+}
+
 // SymbolDrawn reports whether s, symbol-font codes set in family, draws in
 // a face [SymbolNode] gives it after rule: family itself, a clone of it,
 // or OpenSymbol through LibreOffice's recoding ([symbolfont.Draw]). It is

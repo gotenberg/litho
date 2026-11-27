@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"slices"
@@ -1416,7 +1417,8 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 	}
 	el := &layout.Node{Kind: layout.Element, Style: st}
 	var buf strings.Builder
-	flush := func() {
+	// flushAs makes the text buffered so far a text node, set by mark.
+	flushAs := func(mark func(tn *layout.Node)) {
 		if buf.Len() > 0 {
 			t := buf.String()
 			if props.langEastAsia != nil && hasCJK(t) {
@@ -1426,10 +1428,13 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			}
 			t = strings.ToValidUTF8(t, "�")
 			tn := &layout.Node{Kind: layout.Text, Style: st, Text: t}
-			office.SymbolNode(tn, d.fonts, symbolfont.RuleWord, d.symbols)
+			mark(tn)
 			el.Children = append(el.Children, tn)
 			buf.Reset()
 		}
+	}
+	flush := func() {
+		flushAs(func(tn *layout.Node) { office.SymbolNode(tn, d.fonts, symbolfont.RuleWord, d.symbols) })
 	}
 	emit := func() {
 		flush()
@@ -1476,11 +1481,31 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 				break
 			}
 			recodes := symbolfont.Recodes(font)
-			if font == "" || recodes && !office.SymbolDrawn(code, font, d.fonts, symbolfont.RuleWord) {
+			if font == "" {
+				buf.WriteString(symbol(c))
+				break
+			}
+			if recodes && !office.SymbolDrawn(code, font, d.fonts, symbolfont.RuleWord) {
 				// A symbol font's code no face draws keeps its Latin-1
 				// character in the run's font: set in its own font it
-				// would fall to a face that holds no glyph for it.
-				buf.WriteString(symbol(c))
+				// would fall to a face that holds no glyph for it. It
+				// advances as the font's glyph, and its text is the code,
+				// as Word writes it.
+				flush()
+				runStyle := st
+				stand := symbol(c)
+				if adv, ok := symbolfont.OfficeAdvance(font, []rune(code)[0]); ok {
+					if w := d.textWidth(stand, st); w > 0 {
+						// The stand-in is scaled to the advance, which
+						// gives its glyph the width its text is read at.
+						own := *st
+						own.TextScale = float64(adv*st.FontSize) / w * cmp.Or(st.TextScale, 1)
+						st = d.share(&own)
+					}
+				}
+				buf.WriteString(stand)
+				flushAs(func(tn *layout.Node) { office.SymbolStandIn(tn, code, font, d.symbols) })
+				st = runStyle
 				break
 			}
 			// The symbol is set in the font w:sym names, not the run's

@@ -1,12 +1,17 @@
 package docx
 
 import (
+	"bytes"
+	"cmp"
+	"math"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestNotes(t *testing.T) {
@@ -183,5 +188,56 @@ func TestSymbol_SetInItsFont(t *testing.T) {
 	}
 	if fam := sym[0].Style.FontFamilies; len(fam) == 0 || fam[0] != "OpenSymbol" || strings.ContainsRune(textOf(root), 'ç') {
 		t.Errorf("symbol %q in %v, text %q; want it drawn in OpenSymbol", sym[0].Text, fam, textOf(root))
+	}
+}
+
+// TestSymbol_StandIn locks that a w:sym of a symbol font no face draws,
+// Webdings in the fixture fonts, prints its Latin-1 letter in the run's
+// font, scaled to the advance Word's font gives the code, with the code
+// the source wrote as its text and what it stands for as its ActualText.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/Normalize/sdsd.docx
+//     and sym_sym.docx print Webdings 0x45, 0x4A and 0x49 in the
+//     Webdings Word embeds, their text U+F045, U+F04A and U+F049, and
+//     break sdsd's lines of glued words where those advances put them.
+func TestSymbol_StandIn(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:t>a</w:t><w:sym w:font="Webdings" w:char="F045"/><w:t>b</w:t></w:r></w:p>`
+	doc, err := Convert(t.Context(), bytes.NewReader(docx(t, body, nil)), pinnedFonts(t), office.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stand *typeset.Text
+	var got strings.Builder
+	x := map[string]float64{}
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
+		for _, f := range frags {
+			switch tx := f.(type) {
+			case *typeset.Group:
+				walk(tx.Content)
+			case *typeset.Text:
+				for _, g := range tx.Glyphs {
+					got.WriteString(g.Text)
+					x[g.Text] = tx.Origin.X + float64(g.X*cmp.Or(tx.HScale, 1))
+					if g.Text == "\uf045" {
+						stand = tx
+					}
+				}
+			}
+		}
+	}
+	walk(doc.Pages[0].Content)
+	if got.String() != "a\uf045b" || stand == nil {
+		t.Fatalf("text %q, want a, the code U+F045, b", got.String())
+	}
+	if stand.Parent == nil || stand.Parent.ActualText == "" {
+		t.Errorf("stand-in without an ActualText")
+	}
+	adv, _ := symbolfont.OfficeAdvance("Webdings", 0x45)
+	if w := x["b"] - x["\uf045"]; stand.HScale == 0 || math.Abs(w-float64(adv*stand.Size)) > 0.01 {
+		t.Errorf("stand-in advances %.3f, want Webdings's %.3f", w, adv*stand.Size)
 	}
 }
