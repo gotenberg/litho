@@ -21,15 +21,17 @@ import (
 //     With a first node in the centre (ctrShpMap fNode), a ring node
 //     stands the centre node's half width, sp and its own half width from
 //     the centre when that is farther.
+//   - Nodes that turn along the path (rotPath alongPath) stand where
+//     their boxes, upright, just stop overlapping, whatever sibSp, then
+//     turn by their angle on the circle.
 //   - The block, its connectors with it, then scales to the largest size
 //     the box holds and sits in its middle.
 //
 // The standard gives neither the radius nor the scaling: those are read
-// from Office's pages. A cycle whose constraints size no node, or whose
-// nodes turn along the path (rotPath alongPath), keeps the quarter-box
-// layout of [cycle]: Office puts three turned nodes where three upright
-// ones stand whatever their sibSp, and sixteen at a radius neither rule
-// gives; no page shows a cycle of unsized nodes.
+// from Office's pages. A cycle whose constraints size no node keeps the
+// quarter-box layout of [cycle]: no page shows one. Twelve and sixteen
+// turned nodes stand farther out than their boxes need, by a rule the
+// pages do not settle.
 //
 // # Corpus evidence
 //
@@ -51,13 +53,19 @@ import (
 //     them 159.84 points wide, 0.667 widths from the centre, where the
 //     boxes of two neighbours just touch (the chord rule gives 0.375 and
 //     0.577), the block 319.7 points tall. Turned along the path, at
-//     sibSp -0.35, 0 and 0.5, the same 0.667; libreoffice/pptx
-//     sd/smartart-autoTxRot's sixteen turned arrows at sibSp -0.1 stand
-//     2.83 widths out, where the chord rule gives 2.31 and the boxes 3.08.
+//     sibSp -0.35, 0 and 0.5, the same 0.667.
+//   - probe, pptx: arrow5's four, six and eight square arrows turned along
+//     the path at sibSp 0 stand 1.0, 1.157 and 1.414 widths from the
+//     centre, where their upright boxes just touch (1, 1.155, 1.414), the
+//     block 319.7 points tall; twelve stand 2.757 widths out (the boxes
+//     need 2), and libreoffice/pptx sd/smartart-autoTxRot's sixteen at
+//     sibSp -0.1 stand 2.83 (the boxes need 2.61).
 func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
-	if param(a, "rotPath", "none") == "alongPath" || s.W <= 0 || s.H <= 0 {
+	if s.W <= 0 || s.H <= 0 {
 		return false
 	}
+	turned := param(a, "rotPath", "none") == "alongPath"
+
 	own, _ := e.own(a.Node, s.pt)
 	kinds := map[string]string{}
 	var nodes []*DiagramShape
@@ -112,7 +120,7 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 		step = spanAng / float64(n)
 	}
 	var radius float64
-	if n > 1 {
+	if n > 1 && !turned {
 		half := math.Abs(step) / 2 * math.Pi / 180
 		if sin := detmath.Sin(half); sin > 0 {
 			radius = (nodeW + props[""]["sibSp"]) / float64(2*sin)
@@ -130,6 +138,11 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 		rad := float64(stAng+float64(float64(i)*step)) * math.Pi / 180
 		cx, cy := float64(radius*detmath.Sin(rad)), -float64(radius*detmath.Cos(rad))
 		at[k] = box{cx - float64(w/2), cy - float64(h/2), w, h}
+	}
+	if turned {
+		for i, k := range ring {
+			k.Rot = trunc(float64(stAng+float64(float64(i)*step)) * perDegree)
+		}
 	}
 	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, b := range at {

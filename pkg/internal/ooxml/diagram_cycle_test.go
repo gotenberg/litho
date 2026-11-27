@@ -1,6 +1,7 @@
 package ooxml
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -72,6 +73,30 @@ func TestDiagramCycle(t *testing.T) {
 				t.Errorf("boxes\n got %q\nwant %q", got, c.want)
 			}
 		})
+	}
+}
+
+// TestDiagramCycleTurned states that nodes turned along the path stand
+// where their boxes, upright, just touch, whatever sibSp, and turn by their
+// angle on the circle: four square nodes one width from the centre, the
+// block three widths across.
+func TestDiagramCycleTurned(t *testing.T) {
+	layout := `<dgm:alg type="cycle"><dgm:param type="rotPath" val="alongPath"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" ptType="node" refType="w"/>` +
+		`<dgm:constr type="sibSp" refType="w" refFor="ch" refPtType="node" fact="0.5"/></dgm:constrLst>` +
+		nodeList("rect", `<dgm:constrLst><dgm:constr type="h" refType="w"/></dgm:constrLst>`)
+	d := ParseDiagram(mustParse(t, diagramData("a", "b", "c", "d")), mustParse(t, diagramLayout(layout)), nil, nil)
+	root := d.LayOut(3000, 3000, nil)
+	want := []string{"background rect 0,0 3000x3000", "node rect 1000,0 1000x1000", "node rect 2000,1000 1000x1000", "node rect 1000,2000 1000x1000", "node rect 0,1000 1000x1000"}
+	if got := boxes(root); strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+	var rots []int64
+	for _, k := range root.Kids[1:] {
+		rots = append(rots, k.Rot)
+	}
+	if want := []int64{0, 90 * 60000, 180 * 60000, 270 * 60000}; fmt.Sprint(rots) != fmt.Sprint(want) {
+		t.Errorf("turns %v, want %v", rots, want)
 	}
 }
 
