@@ -415,7 +415,7 @@ func (p *structPrune) kid(ctx context.Context, kid ast.PdfObject, ownerGone bool
 // objectOnGonePage reports whether the object an /OBJR references is an
 // annotation no page that stays lists in /Annots (ISO 32000-1, 12.5.2). It
 // left with its page, or the operation took it off a page that stays, as a
-// link to a page that goes is (see [splitDestOverrides]). Copying the
+// link to a page that goes is (see [pageDestOverrides]). Copying the
 // reference would copy the annotation, and through its /P or its action the
 // page it names.
 func (p *structPrune) objectOnGonePage(ctx context.Context, obj ast.PdfObject) bool {

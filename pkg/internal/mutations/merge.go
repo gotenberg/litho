@@ -53,6 +53,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	var readVersion string
 	cumulativeOffsets := make([]int, len(sources))
 	formSources := make([]acroFormSource, 0, len(sources))
+	destSources := make([]destSource, len(sources))
 
 	// The copier that carried each source's pages, reused for everything else
 	// taken from that source. A copier memoises what it has already copied, so
@@ -81,11 +82,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		copier := writer.NewCopier(src.Doc, alloc)
 		// The output carries the structure of every tagged source, so a drawn
 		// signature is tagged under the element that enclosed its widget.
-		overrides, err := bakeSignedSignatures(ctx, src.Doc, src.Pages, pageCopyOverrides(src.Pages), bakeTagged)
-		if err != nil {
-			return fmt.Errorf("merging source %d: %w", srcIdx, err)
-		}
-		structs, overrides, err := newStructSource(ctx, src.Doc, overrides, src.Pages)
+		overrides, structs, err := pageCopyPlan(ctx, src.Doc, src.Pages, src.Pages, nil, bakeTagged)
 		if err != nil {
 			return fmt.Errorf("merging source %d: %w", srcIdx, err)
 		}
@@ -100,6 +97,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 			structSources[srcIdx] = structs
 		}
 		copiers[srcIdx] = copier
+		destSources[srcIdx] = destSource{doc: src.Doc, copier: copier, pages: pageObjectNums(src.Pages)}
 		srcCatalogRef, srcHasCatalog := CatalogRef(ctx, src.Doc)
 		if srcCatalog, err := document.ResolveDict(ctx, src.Doc, srcCatalogRef); srcHasCatalog && err == nil && srcCatalog != nil {
 			formSources = append(formSources, acroFormSource{Doc: src.Doc, Catalog: srcCatalog, Copier: copier})
@@ -167,6 +165,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	if err := rebuildEmbeddedFiles(ctx, alloc, formSources, catalogDict); err != nil {
 		return err
 	}
+	rebuildDestinations(ctx, alloc, destSources, catalogDict)
 
 	// After every copy from the sources, whose content may name structure keys
 	// the tree has to carry or, from an untagged source, drop.

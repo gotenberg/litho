@@ -78,9 +78,7 @@ func rebuildEmbeddedFiles(
 	}
 
 	if len(entries) > 0 {
-		dst["Names"] = alloc.Alloc(ast.PdfDict{
-			"EmbeddedFiles": alloc.Alloc(ast.PdfDict{"Names": embeddedFilesArray(entries)}),
-		})
+		addNameTree(alloc, dst, "EmbeddedFiles", alloc.Alloc(ast.PdfDict{"Names": embeddedFilesArray(entries)}))
 	}
 	if len(associated) > 0 {
 		dst["AF"] = alloc.Alloc(associated)

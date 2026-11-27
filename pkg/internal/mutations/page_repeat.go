@@ -53,16 +53,15 @@ func pagesAt(pages []*document.Page, indices []int) []*document.Page {
 // [newStructSource]).
 //
 // outside holds the object numbers of the pages of doc the output leaves out,
-// whose destinations are cut (see [splitDestOverrides]). A form field keeps
-// only the widgets of pages (see [fieldKidOverrides]), so the copy of a field
-// that a round of pages named again carries lists the widgets of that round,
-// and no widget another copy of its page holds. The signed signatures of
+// nil when it takes them all. Destinations into them are cut, and every
+// destination given by name is made explicit (see [pageDestOverrides]). A
+// form field keeps only the widgets of pages (see [fieldKidOverrides]), so the
+// copy of a field that a round of pages named again carries lists the widgets
+// of that round, and no widget another copy of its page holds. The signed signatures of
 // pages are drawn into them (see [bakeSignedSignatures]).
 func pageCopyPlan(ctx context.Context, doc *document.Document, allPages, pages []*document.Page, outside map[int]bool, marking bakeMarking) (map[int]ast.PdfObject, *structSource, error) {
 	overrides := pageCopyOverrides(pages)
-	if len(outside) > 0 {
-		splitDestOverrides(ctx, doc, pages, outside, overrides)
-	}
+	pageDestOverrides(ctx, doc, pages, outside, overrides)
 	if elsewhere := unselectedPages(allPages, pages); len(elsewhere) > 0 {
 		if srcCatalog, err := document.ResolveCatalog(ctx, doc); err == nil && srcCatalog != nil {
 			dropped := droppedPageAnnots(ctx, nil, doc, allPages, elsewhere)

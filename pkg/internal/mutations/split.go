@@ -146,6 +146,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			return err
 		}
 	}
+	rebuildDestinations(ctx, alloc, []destSource{{doc: doc, copier: copier, pages: pageObjectNums(selected)}}, catalogDict)
 
 	// After every copy from the source, whose content may name structure keys
 	// the tree has to carry or, from a round copied without its structure,

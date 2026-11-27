@@ -166,7 +166,7 @@ func TestSplit_CarriesTheStructureOfTheKeptPages(t *testing.T) {
 // reference out of the Link element (ISO 32000-1, 14.7.4.3).
 //
 // The split drops the link from /Annots, since its destination is gone (see
-// mutations.splitDestOverrides). Its object reference still named it, and
+// mutations.pageDestOverrides). Its object reference still named it, and
 // copying the reference copied the link, and through its destination the page
 // the split left out.
 func TestSplit_DropsTheReferenceToALinkItLeftOut(t *testing.T) {

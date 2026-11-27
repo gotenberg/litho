@@ -388,21 +388,33 @@ func pruneFieldKidsAt(
 	overrides[ref.ObjectNum] = newField
 }
 
-// splitDestOverrides returns pre-patched source objects for [writer.Copier], so
-// a split never follows a destination into a page it leaves out.
+// pageDestOverrides returns pre-patched source objects for [writer.Copier], so
+// a copy never follows a destination into a page it leaves out, and every link
+// it keeps opens the page it opened in its source.
 //
 // Pruning after the copy would be too late. The copier walks references, so a
 // link naming an unextracted page pulls that page, and its content stream, into
 // the output.
-// It adds to overrides rather than replacing it, so a page already patched
-// there (by [pageCopyOverrides]) keeps that edit.
+//
+// A destination given by name is replaced by the explicit destination the
+// source's name tables map it to (ISO 32000-1, 12.3.2.3), before the check. An
+// explicit destination names its page object, which the copy follows to the
+// page's copy. A name only reads through the output's name tables, which a
+// merge shares between sources and keeps the first source's entry for a name
+// two of them use (see [rebuildDestinations]), so a link naming it could open
+// the other source's page. A name that cannot be resolved is left as it is.
+//
+// removed holds the object numbers of the pages of doc the output leaves out,
+// nil when it keeps them all. It adds to overrides rather than replacing it,
+// so a page already patched there (by [pageCopyOverrides]) keeps that edit.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_100_100852.pdf: extracting nine pages carried seventeen
 //     unextracted ones along, and the text of page 26 was recoverable from a
 //     file that was supposed to hold pages 2 to 10.
-func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages []*document.Page, removed map[int]bool, overrides map[int]ast.PdfObject) {
+func pageDestOverrides(ctx context.Context, doc *document.Document, keptPages []*document.Page, removed map[int]bool, overrides map[int]ast.PdfObject) {
+	named := make(map[string]ast.PdfArray)
 	for _, page := range keptPages {
 		pageDict := page.Dict
 		if patched, alreadyPatched := overrides[page.Ref.ObjectNum].(ast.PdfDict); alreadyPatched {
@@ -414,7 +426,7 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 		}
 		arr, err := document.ResolveArray(ctx, doc, annotsObj)
 		if err != nil {
-			doc.Logger.Debug("mutations: resolving /Annots for split overrides", slog.Any("err", err))
+			doc.Logger.Debug("mutations: resolving /Annots for copy overrides", slog.Any("err", err))
 			continue
 		}
 
@@ -422,24 +434,30 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 		changed := false
 		for _, entry := range arr {
 			annot, resolveErr := document.ResolveDict(ctx, doc, entry)
-			if resolveErr != nil || annot == nil || !annotTargetsRemoved(ctx, doc, annot, removed) {
+			if resolveErr != nil || annot == nil {
 				kept = append(kept, entry)
+				continue
+			}
+			explicit, rewritten := explicitAnnotDest(ctx, doc, annot, named)
+			if !annotTargetsRemoved(ctx, doc, explicit, removed) {
+				if !rewritten {
+					kept = append(kept, entry)
+					continue
+				}
+				kept = append(kept, overrideAnnot(overrides, entry, explicit))
+				if _, isRef := entry.(ast.PdfIndirectRef); !isRef {
+					changed = true
+				}
 				continue
 			}
 			changed = true
 			if subtype, _ := annot["Subtype"].(ast.PdfName); subtype == "Link" {
 				continue
 			}
-			stripped := make(ast.PdfDict, len(annot))
-			maps.Copy(stripped, annot)
+			stripped := maps.Clone(explicit)
 			delete(stripped, "Dest")
 			delete(stripped, "A")
-			if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
-				overrides[ref.ObjectNum] = stripped
-				kept = append(kept, entry)
-				continue
-			}
-			kept = append(kept, stripped)
+			kept = append(kept, overrideAnnot(overrides, entry, stripped))
 		}
 		if !changed {
 			continue
@@ -454,6 +472,82 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 		newPage["Annots"] = kept
 		overrides[page.Ref.ObjectNum] = newPage
 	}
+}
+
+// overrideAnnot returns the /Annots entry that stands for annot, the patched
+// copy of the annotation entry names: entry itself, with annot registered in
+// overrides under its object number, when the annotation is indirect, and
+// annot when the array spells it out.
+func overrideAnnot(overrides map[int]ast.PdfObject, entry ast.PdfObject, annot ast.PdfDict) ast.PdfObject {
+	if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+		overrides[ref.ObjectNum] = annot
+		return entry
+	}
+	return annot
+}
+
+// explicitAnnotDest returns annot with its destination, given by name as /Dest
+// or as the /D of a /GoTo action, replaced by the explicit destination the name
+// maps to, and reports whether it replaced one. An annotation that names no
+// destination, or one no table of doc maps, is returned as it is.
+//
+// The action is written into the copy directly: an indirect action can be
+// shared with an annotation of a page the copy leaves alone.
+func explicitAnnotDest(ctx context.Context, doc *document.Document, annot ast.PdfDict, named map[string]ast.PdfArray) (ast.PdfDict, bool) {
+	if dest, ok := explicitDest(ctx, doc, annot["Dest"], named); ok {
+		out := maps.Clone(annot)
+		out["Dest"] = dest
+		return out, true
+	}
+	action, err := document.ResolveDict(ctx, doc, annot["A"])
+	if err != nil || action == nil {
+		return annot, false
+	}
+	if subtype, _ := action["S"].(ast.PdfName); subtype != "GoTo" {
+		return annot, false
+	}
+	dest, ok := explicitDest(ctx, doc, action["D"], named)
+	if !ok {
+		return annot, false
+	}
+	newAction := maps.Clone(action)
+	newAction["D"] = dest
+	out := maps.Clone(annot)
+	out["A"] = newAction
+	return out, true
+}
+
+// explicitDest returns the explicit destination a named destination maps to,
+// looked up as [document.ResolveNamedDest] does, and false when dest is no name
+// or byte string or names nothing. named memoises the lookups of one copy, a
+// miss included: a table of contents names each heading from several links.
+func explicitDest(ctx context.Context, doc *document.Document, dest ast.PdfObject, named map[string]ast.PdfArray) (ast.PdfArray, bool) {
+	if dest == nil {
+		return nil, false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, dest)
+	if err != nil {
+		return nil, false
+	}
+	var name string
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		name = string(v)
+	case ast.PdfString:
+		name = string(v)
+	default:
+		return nil, false
+	}
+	arr, seen := named[name]
+	if !seen {
+		arr, err = document.ResolveNamedDest(ctx, doc, name)
+		if err != nil {
+			doc.Logger.Debug("mutations: resolving a named destination", slog.String("name", name), slog.Any("err", err))
+			arr = nil
+		}
+		named[name] = arr
+	}
+	return arr, len(arr) > 0
 }
 
 // pruneOutlineDestinations strips the destinations of outline items that name a

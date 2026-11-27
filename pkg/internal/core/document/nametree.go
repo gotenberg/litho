@@ -45,7 +45,7 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 		}
 		if destsDict != nil {
 			if destObj, ok := destsDict[ast.PdfName(name)]; ok {
-				return resolveDestValue(ctx, doc, destObj)
+				return ResolveDestValue(ctx, doc, destObj)
 			}
 		}
 	}
@@ -78,7 +78,7 @@ const maxNameTreeDepth = 64
 //     that every other reader resolves came back with no destination at all.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
 	obj, err := lookupNameTree(ctx, doc, nodeObj, key, func(v ast.PdfObject) (ast.PdfObject, error) {
-		arr, err := resolveDestValue(ctx, doc, v)
+		arr, err := ResolveDestValue(ctx, doc, v)
 		if arr == nil {
 			return nil, err
 		}
@@ -205,9 +205,11 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 	return nil, nil
 }
 
-// resolveDestValue resolves a destination value to a PdfArray.
-// The value may be a direct array or a dictionary containing a /D array.
-func resolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
+// ResolveDestValue resolves the value a named destination maps to, in the
+// /Dests dictionary or the /Names /Dests tree, to its explicit destination
+// array (ISO 32000-1, 12.3.2.3). The value may be an array or a dictionary
+// holding the array under /D. It returns nil when the value is neither.
+func ResolveDestValue(ctx context.Context, doc *Document, obj ast.PdfObject) (ast.PdfArray, error) {
 	res, err := ResolveObject(ctx, doc, obj)
 	if err != nil {
 		return nil, err
