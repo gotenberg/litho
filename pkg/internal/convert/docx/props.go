@@ -876,14 +876,29 @@ func compoundWidth(val string, w float64) float64 {
 	}
 }
 
+// maxBorderEighths is the widest border read, in eighths of a point: a
+// larger sz is read as this. Anti-DoS guard, not spec-mandated (17.18.24
+// ST_EighthPointMeasure sets no maximum): Word keeps a border's width in
+// a byte (MS-DOC, 2.9.16 Brc, dptLineWidth), and prints a sz of 255 at
+// 31.875 points.
+const maxBorderEighths = 255
+
 // parseBorder reads one border element (ECMA-376 Part 1, 17.3.4: its val,
-// its sz in eighths of a point, its space in points and its colour).
+// its sz in eighths of a point, its space in points and its colour). A
+// sz past the 96 eighths Word's interface offers is printed at its value
+// ([maxBorderEighths]).
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx:
+//     Word prints table borders of dashSmallGap and sz 255 as dashes 32
+//     points thick.
 func (d *document) parseBorder(b *ooxml.Element) *borderSpec {
 	val := attrOr(b, "val")
 	bs := &borderSpec{val: val}
 	sz := 4.0
 	if v, ok := ooxml.Int(attrOr(b, "sz")); ok {
-		sz = float64(max(2, min(96, v)))
+		sz = float64(max(2, min(maxBorderEighths, v)))
 	}
 	bs.Width = float64(sz / 8)
 	switch val {

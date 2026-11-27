@@ -177,6 +177,8 @@ func TestTables_Nested(t *testing.T) {
 //     78.5 pt.
 //   - libreoffice/docx ooxmlexport/all_gaps_word.docx: the widths of the
 //     gap and 3D borders, read from the lines Word draws.
+//   - openxmlsdk/docx O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx:
+//     borders of sz 255 drawn 32 points thick.
 func TestTables_BorderWidths(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -195,6 +197,8 @@ func TestTables_BorderWidths(t *testing.T) {
 		{`w:val="thickThinLargeGap" w:sz="4"`, 2.75, 4.025, ``},
 		{`w:val="threeDEngrave" w:sz="36"`, 7.5, 1.65, ``},
 		{`w:val="single" w:sz="48"`, 6, 2.4, ``},
+		{`w:val="dashSmallGap" w:sz="255"`, 31.875, 0, ``},
+		{`w:val="single" w:sz="4000"`, 31.875, 0, ``},
 		{`w:val="single" w:sz="12"`, 1.5, 5.4, `<w:tblCellSpacing w:w="72" w:type="dxa"/>`},
 	} {
 		var sides strings.Builder
