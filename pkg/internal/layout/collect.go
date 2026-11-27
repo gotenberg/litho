@@ -505,6 +505,9 @@ const smallCapsScale = 0.7
 //     capitals of a 20-point Arial run at 16 points.
 //   - litho/docx run-effects: Word draws those of an 11-point Calibri run
 //     at 9 points, 0.8 of 11 rounded to the half point.
+//   - probe, docx: Word draws those of Arial runs of 9, 13, 15, 17 and 23
+//     points at 7, 10.5, 12, 13.5 and 18.5 points: to the half point, not
+//     the whole point.
 const wordSmallCapsScale = 0.8
 
 // smallCapsSize returns the size the synthesised small capitals of a
