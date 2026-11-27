@@ -1025,6 +1025,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.OfficeEmoji = b.doc != nil && b.doc.Fallback != text.FallbackLibreOffice
 	st.KeepEmoji = st.OfficeEmoji
 	st.KeepClosed = powerPointKeepsClosed(b.doc)
+	st.ClusterAlone = powerPointClusterAlone(b.doc)
 	if tp := st.TextPaint; tp != nil && (tp.NoFill || len(tp.Gradient) >= 2) && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their paint: a text of
 		// no fill, or of a gradient whose first stop is transparent,
@@ -1299,6 +1300,21 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 //     whole on their lines, moved down a line where they do not fit,
 //     though UAX #14 breaks between ")" and "+".
 func powerPointKeepsClosed(doc *Document) bool {
+	return doc != nil && doc.Fallback != text.FallbackLibreOffice
+}
+
+// powerPointClusterAlone reports whether the runs of doc set a character
+// too wide for its line alone on the line ([css.Office.ClusterAlone]):
+// under PowerPoint's rules, which break a line between any two characters
+// when not even one fits; Impress lets the word overflow.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: O14ISOStrict/PowerPoint's
+//     marR51206400_mainLvl2ppr_MarginRightLevel2Maximum, whose second
+//     paragraph's right margin leaves its lines no room, prints that
+//     paragraph one character a line, each space after its character.
+func powerPointClusterAlone(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 

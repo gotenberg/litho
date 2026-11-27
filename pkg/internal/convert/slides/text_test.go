@@ -269,6 +269,25 @@ func TestText_KeepClosed(t *testing.T) {
 	}
 }
 
+// TestText_ClusterAlone checks that under PowerPoint's rules a paragraph
+// whose margins leave its lines no room prints one character a line, where
+// under Impress's rules each word overflows its line.
+func TestText_ClusterAlone(t *testing.T) {
+	lines := func(fallback text.Fallback) int {
+		p := para("ab cd", arial(20))
+		p.MarginRight = 500
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 200, 400, p)}})
+		d.Fallback = fallback
+		return len(runs(convert(t, d, office.Options{}).Pages[0]))
+	}
+	if got := lines(text.FallbackFontconfig); got != 4 {
+		t.Errorf("%d lines under PowerPoint's rules, want 4", got)
+	}
+	if got := lines(text.FallbackLibreOffice); got != 2 {
+		t.Errorf("%d lines under Impress's rules, want 2", got)
+	}
+}
+
 // TestText_Highlight checks that a highlighted run paints its text box
 // in the highlight's colour behind its glyphs.
 func TestText_Highlight(t *testing.T) {

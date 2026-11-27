@@ -220,6 +220,32 @@ func TestLineBreak_KeepClosed(t *testing.T) {
 	}
 }
 
+// TestLineBreak_ClusterAlone checks that css.Office.ClusterAlone sets a
+// character too wide for its line alone on the line under overflow-wrap
+// break-word, its space hanging after it, where an Office paragraph lets
+// the word overflow.
+func TestLineBreak_ClusterAlone(t *testing.T) {
+	wrap := func(s *css.Style) { s.OverflowWrap = css.BreakWord }
+	alone := func(s *css.Style) { s.OverflowWrap, s.ClusterAlone = css.BreakWord, true }
+	tests := []struct {
+		name string
+		st   *css.Style
+		want []string
+	}{
+		{"overflows by the word", sty(wrap), []string{"ab ", "cd"}},
+		{"one character a line", sty(alone), []string{"a", "b ", "c", "d"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, "ab cd"))), page(1, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestLineBreak_HyphenBeforeDigit checks the opportunity Chromium opens
 // after a hyphen-minus between an ASCII letter or digit and a digit, where
 // UAX #14, LB25 keeps the hyphen with the number, under

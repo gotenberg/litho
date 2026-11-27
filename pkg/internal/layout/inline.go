@@ -470,11 +470,12 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 					return j, true
 				}
 			}
-			if ow := p.styleAt(i).OverflowWrap; e.opts.BrowserRules && i == start && wraps(p.wsAt(i)) && (ow == css.Anywhere || ow == css.BreakWord) {
+			if st := p.styleAt(i); (e.opts.BrowserRules || st.ClusterAlone) && i == start && wraps(p.wsAt(i)) && (st.OverflowWrap == css.Anywhere || st.OverflowWrap == css.BreakWord) {
 				// Not even the first grapheme cluster fits: it takes the
 				// line alone, with the spaces that hang after it (CSS
 				// Text 3, 5.5 and 4.1.3). An Office paragraph keeps the
-				// line overflowing, as Word and Writer print it.
+				// line overflowing, as Word and Writer print it, unless
+				// it sets css.Office.ClusterAlone, as PowerPoint does.
 				j := i + 1
 				for j < n && !p.p.GraphemeStart(j) {
 					j++

@@ -322,6 +322,12 @@ type Office struct {
 	// line breaks there only at another opportunity, a space. It applies to
 	// the characters of the inline box that sets it.
 	KeepClosed bool
+	// ClusterAlone sets a grapheme cluster too wide for its line, with
+	// nothing before it there, alone on the line under overflow-wrap
+	// break-word or anywhere, as CSS Text 3, 5.5 and PowerPoint set it,
+	// where Word and Writer let the line overflow to the next opportunity.
+	// It applies to the characters of the inline box that sets it.
+	ClusterAlone bool
 	// BaselineAtBottom gives the inline-level block container that sets
 	// it its bottom margin edge as its baseline, whatever lines it holds,
 	// as Word sits an inline drawing on the line by its bottom edge
