@@ -71,6 +71,9 @@ type pendingAnchor struct {
 	kids []*layout.Node
 	// word sets the offsets of a float of css.Office.WordAnchor.
 	word bool
+	// area makes the box, a floating table of a header or footer, an
+	// area the body keeps clear of ([document.placeBandTable]).
+	area bool
 }
 
 // anchor places the anchored drawing n by its wp:anchor k (20.4.2.3).

@@ -633,16 +633,20 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	// one the paragraph after it anchors.
 	floating := tp.floating != nil
 	anchored := floating && d.pageAnchors() && !d.columned
-	if floating && !anchored {
+	banded := floating && !anchored && d.inMargin && d.nested == 0 && bandTable(tp.floating)
+	if floating && !anchored && !banded {
 		d.floatTable(tableSt, tp.floating)
 	}
 	tbl := &layout.Node{Kind: layout.Element, Style: tableSt, Role: "Table"}
-	if anchored {
-		shift := 0.0
-		if d.settings.compat < 15 {
-			shift = outdent
-		}
+	shift := 0.0
+	if d.settings.compat < 15 {
+		shift = outdent
+	}
+	switch {
+	case anchored:
 		d.anchorTable(tbl, tp.floating, shift)
+	case banded:
+		d.placeBandTable(tbl, tp.floating, shift, width)
 	}
 	for _, g := range grid {
 		cs := d.blockOf()
@@ -1124,6 +1128,72 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 //     cell's text at the margin, its edge 5.4 points (108 twips) left of
 //     it.
 func (d *document) anchorTable(tbl *layout.Node, f *ooxml.Element, outdent float64) {
+	p := tablePlacement(f, outdent)
+	st := tbl.Style
+	if st.Width.Kind == css.Points {
+		p.w = st.Width.Value
+	}
+	d.placeWord(p, tbl)
+	// A table taller than its page runs on across the pages it reaches,
+	// where a drawing stays on its anchor's page.
+	st.PageClamp = false
+	switch {
+	case p.alignH == "center" && st.Width.Kind != css.Points:
+		st.WordAnchor.AlignX = 0.5
+	case (p.alignH == "right" || p.alignH == "outside") && st.Width.Kind != css.Points:
+		st.WordAnchor.AlignX = 1
+	}
+	switch p.alignV {
+	case "center":
+		st.WordAnchor.AlignY = 0.5
+	case "bottom", "outside":
+		st.WordAnchor.AlignY = 1
+	}
+}
+
+// bandTable reports a floating table of a header or footer that Word
+// places at its offsets from the page (17.4.58): one positioned, not
+// aligned, from the page or the margins.
+func bandTable(f *ooxml.Element) bool {
+	switch attrOr(f, "vertAnchor") {
+	case "page", "margin":
+		return !hasAttr(f, "tblpYSpec")
+	}
+	return false
+}
+
+// placeBandTable places the floating table tbl of a header or footer,
+// grid points wide, by its w:tblpPr f at its offsets from the page
+// ([bandTable]), as [document.anchorTable] places one of the body: out
+// of its header's or footer's flow, which it does not grow, the body's
+// text keeping clear of it on the page as of a table of the body (an
+// area of [layout.PageBox.Exclusions], set once the table's size is
+// measured).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf122878.docx: Word prints a footer's
+//     table of vertAnchor page and tblpY 14743 with its top at 737
+//     points and the body's last line on the page ending above it, at
+//     722.5, the footer's empty paragraph at its distance.
+func (d *document) placeBandTable(tbl *layout.Node, f *ooxml.Element, outdent, grid float64) {
+	p := tablePlacement(f, outdent)
+	st := tbl.Style
+	p.w = grid
+	if st.Width.Kind == css.Points {
+		p.w = st.Width.Value
+	}
+	st.Position = css.Absolute
+	st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
+	st.FrameWrap = css.FrameWrapBoth
+	setWrapGap(st, p.dist)
+	d.marginAnchors = append(d.marginAnchors, pendingAnchor{n: tbl, st: st, p: p, page: true, area: true})
+}
+
+// tablePlacement returns the placement of a floating table by its
+// w:tblpPr f (17.4.58), outdent the distance its edge lies left of its
+// offset ([document.anchorTable]).
+func tablePlacement(f *ooxml.Element, outdent float64) placement {
 	twips := func(name string) float64 {
 		v, _ := ooxml.Twips(attrOr(f, name))
 		return v
@@ -1157,26 +1227,7 @@ func (d *document) anchorTable(tbl *layout.Node, f *ooxml.Element, outdent float
 			p.relV = "margin"
 		}
 	}
-	st := tbl.Style
-	if st.Width.Kind == css.Points {
-		p.w = st.Width.Value
-	}
-	d.placeWord(p, tbl)
-	// A table taller than its page runs on across the pages it reaches,
-	// where a drawing stays on its anchor's page.
-	st.PageClamp = false
-	switch {
-	case p.alignH == "center" && st.Width.Kind != css.Points:
-		st.WordAnchor.AlignX = 0.5
-	case (p.alignH == "right" || p.alignH == "outside") && st.Width.Kind != css.Points:
-		st.WordAnchor.AlignX = 1
-	}
-	switch p.alignV {
-	case "center":
-		st.WordAnchor.AlignY = 0.5
-	case "bottom", "outside":
-		st.WordAnchor.AlignY = 1
-	}
+	return p
 }
 
 // centreTable centres the floating table st, of a width in points, on

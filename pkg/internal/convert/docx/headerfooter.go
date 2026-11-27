@@ -2,6 +2,7 @@ package docx
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -49,10 +50,12 @@ func (d *document) newPages(secs []*section) *pages {
 		for _, kind := range []string{"default", "first", "even"} {
 			probe := &fieldValues{page: 1, pages: 1, format: "decimal"}
 			if part := s.headers[kind]; part != "" {
-				s.headerH[kind] = p.measure(s, part, probe)
+				s.headerH[kind], s.areas[kind] = p.measure(s, part, probe)
 			}
 			if part := s.footers[kind]; part != "" {
-				s.footerH[kind] = p.measure(s, part, probe)
+				var areas []layout.PageExclusion
+				s.footerH[kind], areas = p.measure(s, part, probe)
+				s.areas[kind] = append(s.areas[kind], areas...)
 			}
 		}
 	}
@@ -108,10 +111,17 @@ func (p *pages) content(sec *section, part string, v *fieldValues) (*layout.Node
 }
 
 // measure returns the height of a header or footer part laid out at the
-// width of section s's text.
-func (p *pages) measure(s *section, part string, v *fieldValues) float64 {
-	n, _ := p.content(s, part, v)
+// width of section s's text, and the areas its floating tables take on a
+// page of s, grown by the room the text keeps from them
+// ([document.placeBandTable]).
+func (p *pages) measure(s *section, part string, v *fieldValues) (float64, []layout.PageExclusion) {
+	n, anchors := p.content(s, part, v)
 	n.ID = "\x00measure"
+	for i, a := range anchors {
+		if a.area {
+			a.n.ID = "\x00area" + strconv.Itoa(i)
+		}
+	}
 	areaW := max(s.width-s.margin[css.Left]-s.margin[css.Right]-s.gutter, minPageArea)
 	n.Style.Width = css.Pts(areaW)
 	res, err := layout.Layout(p.d.ctx, wrap(p.d.blockStyle(), n), p.d.fonts, layout.Options{
@@ -122,12 +132,27 @@ func (p *pages) measure(s *section, part string, v *fieldValues) float64 {
 	if err != nil {
 		// A header or footer that does not lay out takes no room.
 		p.d.stop(err)
-		return 0
+		return 0, nil
+	}
+	var areas []layout.PageExclusion
+	for _, a := range anchors {
+		r, ok := res.Extents[a.n.ID]
+		if !a.area || !ok {
+			continue
+		}
+		a.resolve(s)
+		g := a.st.WrapGap
+		areas = append(areas, layout.PageExclusion{
+			X: a.st.Left.Value - g[css.Left], Y: a.st.Top.Value - g[css.Top],
+			Width:  r.Width + g[css.Left] + g[css.Right],
+			Height: r.Height + g[css.Top] + g[css.Bottom],
+			Wrap:   a.st.FrameWrap,
+		})
 	}
 	if r, ok := res.Extents[n.ID]; ok {
-		return r.Height
+		return r.Height, areas
 	}
-	return 0
+	return 0, areas
 }
 
 // wrap returns a root block holding n.
@@ -195,6 +220,17 @@ func (p *pages) sectionBox(s *section, index int, titlePage bool) layout.PageBox
 		}
 		hh, fh = max(hh, s.headerH[kind]), max(fh, s.footerH[kind])
 	}
+	kind := "default"
+	switch {
+	case titlePage:
+		kind = "first"
+	case p.d.settings.evenAndOdd && index%2 == 1:
+		kind = "even"
+	}
+	var areas *[]layout.PageExclusion
+	if a, ok := s.areas[kind]; ok && len(a) > 0 {
+		areas = &a
+	}
 	if m[css.Top] >= 0 && hh > 0 {
 		top = max(top, s.header+hh)
 	}
@@ -217,6 +253,7 @@ func (p *pages) sectionBox(s *section, index int, titlePage bool) layout.PageBox
 		SpreadContent: s.spread,
 		Background:    p.d.background,
 		FootnoteRule:  footnoteRule(s.contentWidth()),
+		Exclusions:    areas,
 	}
 }
 

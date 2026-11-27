@@ -107,3 +107,26 @@ func TestPageTop(t *testing.T) {
 		})
 	}
 }
+
+// TestFrameWrap_PageExclusions keeps the lines of the page area clear of
+// the areas of PageBox.Exclusions on every page: beside one on the side
+// its wrap takes, below one as wide as the area, the next page's lines
+// clear of its own.
+func TestFrameWrap_PageExclusions(t *testing.T) {
+	pb := page(100, 60)
+	pb.Margin = [4]float64{px(10), 0, 0, px(10)}
+	pb.Exclusions = &[]PageExclusion{
+		{X: px(10), Y: px(20), Width: px(40), Height: px(10), Wrap: css.FrameWrapBoth},
+		{X: 0, Y: px(40), Width: px(100), Height: px(10), Wrap: css.FrameWrapBoth},
+	}
+	paras := make([]*Node, 0, 6)
+	for _, s := range []string{"a", "b", "c", "d", "e", "f"} {
+		paras = append(paras, wpara(s))
+	}
+	res := run(t, doc(paras...), pb)
+	for n, want := range map[int]string{1: "a@10,18 b@50,28 c@10,38 d@10,58 ", 2: "e@10,18 f@50,28 "} {
+		if got := linePlaces(res, n); got != want {
+			t.Errorf("page %d lines %s, want %s", n, got, want)
+		}
+	}
+}

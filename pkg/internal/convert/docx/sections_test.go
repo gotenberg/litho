@@ -189,6 +189,42 @@ func TestHeaders_GrowTheMargin(t *testing.T) {
 	}
 }
 
+// TestHeaders_FloatingTableArea places a footer's floating table of
+// vertAnchor page at its offsets from the page, out of the footer's flow:
+// the footer does not grow the bottom margin, and the table's area, grown
+// by its distances from the text, is an area the body keeps clear of on
+// every page; one of vertAnchor text stays in the footer's flow.
+func TestHeaders_FloatingTableArea(t *testing.T) {
+	t.Parallel()
+	footer := func(anchor string) map[string]string {
+		return map[string]string{"word/footer1.xml": `<w:ftr ` + nsDecl + `><w:tbl><w:tblPr><w:tblpPr w:leftFromText="180" w:rightFromText="180" w:bottomFromText="100" ` + anchor + ` w:horzAnchor="margin" w:tblpY="14000"/></w:tblPr>` +
+			`<w:tblGrid><w:gridCol w:w="2880"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:hRule="exact" w:val="720"/></w:trPr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:ftr>`}
+	}
+	body := `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:sectPr><w:footerReference w:type="default" r:id="rIdfooter1"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440" w:header="720" w:footer="720"/></w:sectPr>`
+	b := build(t, body, footer(`w:vertAnchor="page"`))
+	pg := b.d.newPages(b.secs)
+	for i := range 2 {
+		box := pg.box(layout.PageInfo{Name: b.secs[0].name, Index: i})
+		if box.Margin[css.Bottom] != 72 {
+			t.Errorf("page %d: bottom margin %v, want 72: the table does not grow the footer", i, box.Margin[css.Bottom])
+		}
+		// The table's edge sits the 5.4-point cell margin left of the
+		// margin, and the text keeps 9 points from its sides, 5 below it.
+		want := layout.PageExclusion{X: 57.6, Y: 700, Width: 162, Height: 41, Wrap: css.FrameWrapBoth}
+		if box.Exclusions == nil || len(*box.Exclusions) != 1 {
+			t.Fatalf("page %d: exclusions %v, want one", i, box.Exclusions)
+		}
+		if got := (*box.Exclusions)[0]; math.Abs(got.X-want.X) > 0.01 || got.Y != want.Y || math.Abs(got.Width-want.Width) > 0.01 || got.Height != want.Height || got.Wrap != want.Wrap {
+			t.Errorf("page %d: exclusion %+v, want %+v", i, got, want)
+		}
+	}
+	b = build(t, body, footer(""))
+	pg = b.d.newPages(b.secs)
+	if box := pg.box(layout.PageInfo{Name: b.secs[0].name}); box.Exclusions != nil {
+		t.Errorf("exclusions %+v for a table of vertAnchor text, want none", box.Exclusions)
+	}
+}
+
 func TestSections_ColumnBreaks(t *testing.T) {
 	t.Parallel()
 	body := func(cols string) string {

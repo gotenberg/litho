@@ -643,6 +643,20 @@ type PageBox struct {
 	// or that sets blocks side by side, keeps its content at the top. It
 	// takes precedence over AlignContent.
 	SpreadContent bool
+	// Exclusions are areas of the page the lines of the page area keep
+	// clear of, as they keep clear of a float of css.Office.WordAnchor,
+	// taking the sides each one's Wrap names: the floating tables of a
+	// word processor's header or footer, which its body text wraps. nil
+	// for none; a pointer keeps PageBox comparable.
+	Exclusions *[]PageExclusion
+}
+
+// PageExclusion is an area of a page that the page area's lines keep
+// clear of ([PageBox.Exclusions]): X and Y in points from the page box's
+// top-left corner, Width and Height at least 0.
+type PageExclusion struct {
+	X, Y, Width, Height float64
+	Wrap                css.FrameWrap
 }
 
 // PageFrame is a border box drawn on every page it applies to.

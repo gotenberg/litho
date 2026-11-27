@@ -63,7 +63,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		if err != nil {
 			return nil, err
 		}
-		found := e.collectWordWraps(rb, e.collectWraps(rb, nil))
+		found := e.bandWraps(rb, e.collectWordWraps(rb, e.collectWraps(rb, nil)))
 		limit := maxWrapPasses
 		if hasWordSeed(found) {
 			limit += maxWordPasses

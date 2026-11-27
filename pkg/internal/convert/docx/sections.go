@@ -68,7 +68,11 @@ type section struct {
 	blocks           []blockNode
 	pending          []pendingAnchor
 	headerH, footerH map[string]float64
-	start            int
+	// areas are, by header and footer kind, the areas the floating tables
+	// of the section's header and footer of that kind take on its pages
+	// ([pages.measure]).
+	areas map[string][]layout.PageExclusion
+	start int
 	// rtl lays the columns from right to left (17.6.1 bidi).
 	rtl bool
 	// balance balances the section's columns: the next section starts
@@ -208,7 +212,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		header: defaultHFDistance, footer: defaultHFDistance,
 		cols: 1, colSpace: 36, breakType: "nextPage",
 		headers: map[string]string{}, footers: map[string]string{},
-		headerH: map[string]float64{}, footerH: map[string]float64{},
+		headerH: map[string]float64{}, footerH: map[string]float64{}, areas: map[string][]layout.PageExclusion{},
 	}
 	if prev != nil {
 		maps.Copy(s.headers, prev.headers)

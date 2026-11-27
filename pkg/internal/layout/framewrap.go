@@ -41,6 +41,9 @@ type wrapSeed struct {
 	shape          []css.WrapPoint
 	gap            [4]float64
 	bx, by, bw, bh float64
+	// band marks an area of [PageBox.Exclusions], which the lines keep
+	// clear of as of a float of css.Office.WordAnchor.
+	band bool
 }
 
 // collectWraps returns the rectangles the wrapped boxes of the tree rooted
@@ -70,6 +73,36 @@ func (e *engine) collectWraps(b *box, out []wrapSeed) []wrapSeed {
 	return out
 }
 
+// bandWraps returns the areas of [PageBox.Exclusions] of the pages the
+// flow of the root box rb reached, relative to each page area's top-left
+// corner and cut to its height, in page order.
+func (e *engine) bandWraps(rb *box, out []wrapSeed) []wrapSeed {
+	if !e.paginating() || e.cols != nil {
+		return out
+	}
+	last := min(e.pageOf(rb.y+rb.borderH()-eps), e.maxPages-1)
+	for p := 0; p <= last; p++ {
+		pb := e.box(p)
+		if pb.Exclusions == nil {
+			continue
+		}
+		for _, x := range *pb.Exclusions {
+			if len(out) >= maxFloats {
+				return out
+			}
+			s := wrapSeed{
+				page: p, mode: x.Wrap, band: true,
+				x0: x.X - pb.Margin[css.Left], y0: max(x.Y-pb.Margin[css.Top], 0),
+				x1: x.X + max(x.Width, 0) - pb.Margin[css.Left], y1: min(x.Y+max(x.Height, 0)-pb.Margin[css.Top], e.areaH(p)),
+			}
+			if s.y1 > s.y0 && s.x1 > s.x0 {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
 // seedWraps returns the exclusions of the seeds in flow coordinates, the
 // floats the root's formatting context starts with.
 func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
@@ -77,6 +110,9 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 	for _, s := range seeds {
 		top := e.pageTop(s.page)
 		r := floatRect{wrap: s.mode, x0: s.x0, y0: top + s.y0, x1: s.x1, y1: top + s.y1}
+		if s.band {
+			r.word, r.border = true, [4]float64{s.x0, r.y0, s.x1, r.y1}
+		}
 		if s.node != nil {
 			r.word, r.writer = true, s.node.Style != nil && s.node.Style.WordAnchor.Writer
 			r.border = [4]float64{s.bx, top + s.by, s.bx + s.bw, top + s.by + s.bh}
