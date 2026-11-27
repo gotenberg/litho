@@ -249,8 +249,16 @@ func (b *builder) tocEntry(tm *odf.Element, h heading, page string) []*odf.Eleme
 
 // rightTabs gives each entry paragraph of kids a right tab stop at its
 // end edge, dotted, for the tab Writer sets there: the page area's width
-// less the paragraph's end margin, from the start of its containing
-// block.
+// less the paragraph's end margin. A stop is measured from the
+// paragraph's content box (see [builder.tabStops]), so the paragraph's
+// start margin comes off too: an entry of an indented level ends its
+// page number at the same edge as the entries of level 1.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/abi11870-2.odt: the entries of levels 2
+//     and 3, indented 0.499 and 0.998 cm, end their page numbers at the
+//     page area's right edge, as level 1's do.
 func (b *builder) rightTabs(kids []*layout.Node) {
 	area := b.areaWidth()
 	for _, n := range kids {
@@ -258,7 +266,7 @@ func (b *builder) rightTabs(kids []*layout.Node) {
 			continue
 		}
 		st := *n.Style
-		pos := area - st.Margin[css.Right].Value
+		pos := area - st.Margin[css.Right].Value - st.Margin[css.Left].Value
 		stops := []css.TabStop{}
 		for _, s := range st.TabStops {
 			if s.Pos < pos {

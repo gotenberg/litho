@@ -382,6 +382,42 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	}
 }
 
+// TestConvert_IndentedEntryEndsAtTheMargin sets the page number of an
+// entry of an indented level at the page area's right edge, on the
+// entry's line, as for an entry of level 1.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/abi11870-2.odt: the entries of levels 2
+//     and 3 end their page numbers where level 1's end.
+func TestConvert_IndentedEntryEndsAtTheMargin(t *testing.T) {
+	tmpl := func(level, style string) string {
+		return `<text:table-of-content-entry-template text:outline-level="` + level + `" text:style-name="` + style + `"><text:index-entry-text/><text:index-entry-tab-stop style:type="right" style:leader-char="."/><text:index-entry-page-number/></text:table-of-content-entry-template>`
+	}
+	body := `<text:table-of-content text:name="T"><text:table-of-content-source text:outline-level="2"><text:index-title-template>Contents</text:index-title-template>` + tmpl("1", "C1") + tmpl("2", "C2") + `</text:table-of-content-source>` +
+		`<text:index-body/></text:table-of-content>` +
+		`<text:h text:outline-level="1">One</text:h><text:h text:outline-level="2">Deep</text:h>`
+	auto := `<style:style style:name="C2" style:family="paragraph"><style:paragraph-properties fo:margin-left="3cm"/></style:style>`
+	pg := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+	leader := regexp.MustCompile(`\.{2,}`)
+	var got []string
+	for _, l := range lines(pg)[:3] {
+		got = append(got, leader.ReplaceAllString(strings.Join(strings.Fields(l.text), ""), "."))
+	}
+	if strings.Join(got, "|") != "Contents|One.1|Deep.1" {
+		t.Fatalf("table = %q", got)
+	}
+	var ends []float64
+	for _, r := range runs(pg) {
+		if r.text == "1" {
+			ends = append(ends, r.x)
+		}
+	}
+	if len(ends) != 2 || !near(ends[0], ends[1], 0.01) {
+		t.Errorf("page numbers at x %v, want one x", ends)
+	}
+}
+
 // TestConvert_TextAlignStartEnd prints start and end by the writing
 // mode in a document no LibreOffice wrote, start on the right of a
 // right-to-left paragraph, and at the left and right margins in either
