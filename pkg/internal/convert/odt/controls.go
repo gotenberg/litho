@@ -83,38 +83,9 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 		return nil
 	}
 	if b.formIDs == nil {
-		b.formIDs = formIndex(odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms"))
+		b.formIDs = odf.FormIndex(odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms"))
 	}
 	return b.formIDs[id]
-}
-
-// formIndex maps each form:id and xml:id of the form elements under
-// forms to the first element that carries it, in the order a depth-first
-// walk from the last child meets them. One walk serves every control: a
-// walk per control would cost the controls times the forms.
-func formIndex(forms *odf.Element) map[string]*odf.Element {
-	out := map[string]*odf.Element{}
-	stack := []*odf.Element{forms}
-	for len(stack) > 0 {
-		cur := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if cur == nil {
-			continue
-		}
-		if cur.Name.Space == odf.NSForm {
-			for _, id := range []string{cur.A(odf.NSForm, "id"), cur.A(odf.NSXML, "id")} {
-				if _, seen := out[id]; id != "" && !seen {
-					out[id] = cur
-				}
-			}
-		}
-		for _, k := range cur.Children {
-			if !k.IsText() {
-				stack = append(stack, k)
-			}
-		}
-	}
-	return out
 }
 
 // formControl builds the box of the draw:control c of geometry g (ODF 1.3,
@@ -289,7 +260,7 @@ func controlField(el *odf.Element, n int) (typeset.Field, bool) {
 			f.Selected = nil
 		}
 	case "checkbox":
-		f.Kind, f.Checked = typeset.FieldCheckBox, checkedBox(el)
+		f.Kind, f.Checked = typeset.FieldCheckBox, odf.CheckedBox(el)
 	case "radio":
 		f.Kind, f.Checked = typeset.FieldRadio, selectedOption(el)
 		f.OnState = radioState(el, n)
@@ -333,15 +304,6 @@ func selectedOption(el *odf.Element) bool {
 		return v == "true"
 	}
 	return el.A(odf.NSForm, "selected") == "true"
-}
-
-// checkedBox reports a form:checkbox that is checked: form:current-state,
-// else form:state (19.255 and 19.268).
-func checkedBox(el *odf.Element) bool {
-	if v, ok := el.Lookup(odf.NSForm, "current-state"); ok {
-		return v == "checked"
-	}
-	return el.A(odf.NSForm, "state") == "checked"
 }
 
 // radioState returns the on state of a radio button, which names it in

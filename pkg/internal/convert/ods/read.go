@@ -387,6 +387,10 @@ type tableState struct {
 	// matrices are the ranges of the array formulas read, whose cells
 	// hold the array's result.
 	matrices []sheet.Range
+	// forms is the table's office:forms (ODF 1.3, Part 3, 13.2), nil for
+	// none, and formIDs its index by id, made at the first control.
+	forms   *odf.Element
+	formIDs map[string]*odf.Element
 }
 
 // pendingRows is n copies of row, without cells, from row.Index.
@@ -415,7 +419,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	}
 	pr := r.pageSetup(master)
 	sh.Page, sh.HeaderFooter, sh.HideZeros = pr.page, pr.hf, pr.hideZeros
-	ts := &tableState{sh: sh, colX: []float64{0}}
+	ts := &tableState{sh: sh, colX: []float64{0}, forms: el.Child(odf.NSOffice, "forms")}
 	// The sheet's own shapes come first in drawing order, as they come
 	// first in the table (ODF 1.3, Part 3, 9.1.2).
 	for _, c := range el.All(odf.NSTable, "shapes") {

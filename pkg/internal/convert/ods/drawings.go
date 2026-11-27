@@ -60,7 +60,7 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 				}
 			}
 		case el.Is(odf.NSDraw, "control"):
-			r.warn("form-controls", warn.FormWidgetOmitted, warn.Omitted, "form controls are not drawn")
+			r.control(ts, el, at)
 		case shapeElement(el):
 			r.shape(ts, el, at)
 		default:
