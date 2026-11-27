@@ -361,6 +361,10 @@ func TestChartFromElement_AutomaticFrames(t *testing.T) {
 			if (c.Area.Fill != nil) != tt.areaFill || (c.Area.Border != nil) != tt.areaLine {
 				t.Errorf("chart area = %+v", c.Area)
 			}
+			// Office's automatic chart area line: 0.75 points of grey 0.525.
+			if b := c.Area.Border; tt.areaLine && b != nil && (math.Abs(b.Color.R-0.525) > 0.002 || b.Width != 0.75) {
+				t.Errorf("chart area line = grey %.3f, %.2f points; want 0.525, 0.75", b.Color.R, b.Width)
+			}
 			if (c.PlotArea.Fill != nil) != tt.plotFill {
 				t.Fatalf("plot area = %+v", c.PlotArea)
 			}

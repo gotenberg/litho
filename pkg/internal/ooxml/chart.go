@@ -526,7 +526,7 @@ func (p *chartReader) palette(accents []string) []typeset.Color {
 // area for the chart's style (oox's spChartSpaceFill and
 // spPlotArea2dFills): the chart area takes the background colour (styles
 // 1 to 32), the light colour (33 to 40) or the dark colour (41 to 48) with
-// a light grey border, oox's default chart area line; the plot area the
+// Office's grey border ([autoAreaBorder]); the plot area the
 // background colour (1 to 32), the dark colour tinted to 20% (33 and 34),
 // the style's accent tinted to 20% (35 to 40) or the dark colour tinted to
 // 95% (41 to 48), with no border. A presentation's chart area has no
@@ -559,10 +559,31 @@ func (p *chartReader) autoFrame(area bool) chart.Frame {
 		f.Fill = col("dk1", 0.95)
 	}
 	if area && !p.impress {
-		f.Border = &chart.Stroke{Color: toTypeset(hexColor(0xd9d9d9)), Width: 0.75}
+		f.Border = &chart.Stroke{Color: toTypeset(hexColor(autoAreaBorder)), Width: themeLineWidth}
 	}
 	return f
 }
+
+// autoAreaBorder is the colour of the border Office gives a chart area
+// whose part states no line of its own (no chartSpace spPr): a mid grey,
+// 0.75 points wide, darker than the light grey (D9D9D9) of the line oox
+// writes into the charts it saves.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf107586.xlsx and openxmlsdk/xlsx
+//     ChartSheet.xlsx, chartsheets of empty charts stating no chart area
+//     line, print a 0.75-point frame in grey 0.525; poi/xlsx
+//     spreadsheet/56557.xlsx, whose part states tx1 at 15% (D9D9D9),
+//     prints it in 0.851.
+//   - libreoffice/xlsx: chart2/hidden_cells.xlsx, chart-area-style-border,
+//     chart_pie2007 (style 10), fdo54361 (style 36), autotitledel_2007 (no
+//     style), openxmlsdk/xlsx 3D_Bar-O12-XL-Charts and
+//     Axis_Title-O12-XL-ChartProperties, poi/xlsx 60509: their chart
+//     areas without a line print a 0.75-point frame in grey 0.525.
+//   - probe, xlsx: a chartsheet's chart without a chart area line prints
+//     its frame in grey 0.537.
+const autoAreaBorder = 0x868686
 
 // themeLineWidth is the width of the theme's thinnest line, 9525 EMUs in
 // Office's themes (ECMA-376 Part 1, 20.1.4.1.21 lnStyleLst).
