@@ -1244,6 +1244,7 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			if pic == nil {
 				continue
 			}
+			pic = odf.AdjustPicture(b.ctx, pic, g.props)
 			if alt == "" {
 				alt = b.captions[c]
 			}

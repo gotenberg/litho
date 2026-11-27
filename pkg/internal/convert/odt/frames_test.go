@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -241,6 +242,29 @@ func TestBareFrame(t *testing.T) {
 			if got[c] {
 				t.Errorf("%s: a path of %v", tc.name, c)
 			}
+		}
+	}
+}
+
+// TestPictureColourAdjustments locks that a frame's picture takes the
+// colour adjustments of its graphic style (see [odf.AdjustPicture]): the
+// black stroke of an SVG picture of luminance 0%, contrast 0% and red
+// 100% is stroked red, and black without them.
+func TestPictureColourAdjustments(t *testing.T) {
+	svgData := base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="30" height="10" style="fill:none;stroke-width:3;stroke:rgb(0,0,0)"/></svg>`))
+	black, red := typeset.Color{A: 1}, typeset.Color{R: 1, A: 1}
+	for _, tc := range []struct {
+		props     string
+		want, not typeset.Color
+	}{
+		{`draw:luminance="0%" draw:contrast="0%" draw:red="100%"`, red, black},
+		{``, black, red},
+	} {
+		auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties ` + tc.props + `/></style:style>`
+		body := `<text:p><draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="as-char" svg:width="4cm" svg:height="2cm"><draw:image><office:binary-data>` + svgData + `</office:binary-data></draw:image></draw:frame></text:p>`
+		got := pathColours(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0].Content)
+		if !got[tc.want] || got[tc.not] {
+			t.Errorf("props %q: colours %v, want %v and not %v", tc.props, got, tc.want, tc.not)
 		}
 	}
 }
