@@ -574,8 +574,15 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	}
 	t := b.paraText(name)
 	p := b.paraProps(name)
+	var outline *odf.ListLevel
 	if ctx.indent != nil {
 		p = ctx.indent.indent(p, b.styles.Chain(b.scope, odf.FamilyParagraph, name))
+	} else if isHeading {
+		outline = b.outlineIndents(el, name)
+		if outline != nil {
+			item := &itemCtx{lvl: outline, style: b.styles.Outline.Name}
+			p = item.indent(p, b.styles.Chain(b.scope, odf.FamilyParagraph, name))
+		}
 	}
 	// The paragraph's style is built here and shared once its children
 	// are made: n and its line breaks hold it from then on.
@@ -583,6 +590,9 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	st := &sv
 	applyText(st, t, false)
 	b.applyPara(st, p, t)
+	if outline != nil {
+		st.TabStops = listTab(st.TabStops, outline, p.margin[css.Left])
+	}
 	if p.dropCap != nil {
 		b.warn("drop-cap", warn.ContentUnsupported, warn.Approximated, "drop caps are drawn as the paragraph's first letters in line")
 	}
@@ -668,6 +678,57 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 		ctx.item = nil
 	}
 	return n
+}
+
+// outlineIndents returns the outline level of the heading el, of
+// paragraph style name, whose indents Writer lays over the heading's: a
+// level of the outline style (ODF 1.3, Part 3, 16.34) in the
+// label-alignment mode, numbered or not, nil for none. Its fo:margin-left
+// and fo:text-indent place the heading's lines, and its list tab stop the
+// text after the label, as a list level places an item's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/IsLegal.fodt: the level 2 headings,
+//     of a 1.27 cm text indent and a list tab stop at 3.81 cm, print
+//     their labels 1.27 cm and their text 3.81 cm from the margin.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, headings of an
+//     outline whose levels set a 3 cm margin, a -1 cm text indent and a
+//     list tab stop at 4 cm print an unnumbered level's text 2 cm from
+//     the margin, a numbered level's label at 2 cm and text at 4 cm.
+func (b *builder) outlineIndents(el *odf.Element, name string) *odf.ListLevel {
+	os := b.styles.Outline
+	level := b.outlineLevel(el, name)
+	if os == nil || level < 1 || level > odf.MaxListLevels || el.A(odf.NSText, "is-list-header") == "true" {
+		return nil
+	}
+	lvl := os.Levels[level-1]
+	if lvl == nil || lvl.Props.Get("text:list-level-position-and-space-mode") != "label-alignment" {
+		return nil
+	}
+	return lvl
+}
+
+// listTab returns the tab stops of a paragraph whose start margin
+// is margin with the list tab stop of the label-alignment level lvl in
+// place of the stops before it, the text after a label followed by a tab
+// going there (text:list-tab-stop-position of
+// style:list-level-label-alignment, ODF 1.3 Part 3, 17.20, measured from
+// the start of the paragraph's area), past the stop at the indent of a
+// hanging first line.
+func listTab(stops []css.TabStop, lvl *odf.ListLevel, margin float64) []css.TabStop {
+	lp := lvl.Props
+	v, ok := odf.Length(lp.Get("text:list-tab-stop-position"))
+	if f := lp.Get("text:label-followed-by"); !ok || f != "" && f != "listtab" || v-margin <= 0 {
+		return stops
+	}
+	out := []css.TabStop{{Pos: v - margin}}
+	for _, s := range stops {
+		if s.Pos > v-margin {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // listedHeading reports a heading that is the first paragraph of the

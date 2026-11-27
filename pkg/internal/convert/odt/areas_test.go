@@ -599,6 +599,41 @@ func TestConvert_SkippedOutlineLevelStandsAtItsStart(t *testing.T) {
 	}
 }
 
+// TestConvert_OutlineLevelIndentsItsHeadings places a heading's label
+// and text by the indents and list tab stop of its outline level, numbered
+// or not.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, outline levels of a
+//     3 cm margin, a -1 cm text indent and a list tab stop at 4 cm print
+//     an unnumbered heading 2 cm from the margin and a numbered one's
+//     label at 2 cm, its text at 4 cm.
+func TestConvert_OutlineLevelIndentsItsHeadings(t *testing.T) {
+	level := func(n, format string) string {
+		return `<text:outline-level-style text:level="` + n + `" style:num-format="` + format + `"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment">` +
+			`<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="4cm" fo:text-indent="-1cm" fo:margin-left="3cm"/></style:list-level-properties></text:outline-level-style>`
+	}
+	styles := `<text:outline-style style:name="Outline">` + level("1", "") + level("2", "1") + `</text:outline-style>`
+	body := `<text:h text:outline-level="1">One</text:h><text:h text:outline-level="2">Two</text:h>`
+	rs := runs(convertDoc(t, doc{styles: styles, body: body}.pack(t), office.Options{}).Pages[0])
+	cm := 72 / 2.54
+	margin := 2 * cm
+	want := map[string]float64{"One": margin + 2*cm, "1": margin + 2*cm, "Two": margin + 4*cm}
+	seen := 0
+	for _, r := range rs {
+		if x, ok := want[strings.TrimSpace(r.text)]; ok {
+			seen++
+			if !near(r.x, x, 0.5) {
+				t.Errorf("%q at x %.2f, want %.2f", r.text, r.x, x)
+			}
+		}
+	}
+	if seen != 3 {
+		t.Errorf("runs %+v", rs)
+	}
+}
+
 // TestConvert_ListHeadingOutlineTitle bookmarks a heading in a numbered
 // list with its label first.
 //
