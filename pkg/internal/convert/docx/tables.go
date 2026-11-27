@@ -238,6 +238,10 @@ func (d *document) parseTableProps(e *ooxml.Element) *tableProps {
 		switch c.Local {
 		case "tblStyle":
 			t.style = val
+			// The schema puts tblStyle first (17.4.60 tblPr): Word drops
+			// a tblpPr written before it and lays the table out in the
+			// flow, its style kept.
+			t.floating = nil
 		case "tblW":
 			t.width = parseWidth(c)
 		case "jc":

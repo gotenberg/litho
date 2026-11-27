@@ -296,6 +296,39 @@ func TestTables_Floating(t *testing.T) {
 	}
 }
 
+// TestTables_PositionBeforeStyle locks that a w:tblpPr written before
+// the w:tblStyle, against the order of 17.4.60 tblPr, places nothing: the
+// table is laid out in the flow, and one in schema order floats.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a table of tblpPr vertAnchor page, tblpY
+//     10261 before its tblStyle at the top margin, its style's borders
+//     drawn and the paragraph after it below it, and the same table of
+//     tblStyle first 513 points down the page, the paragraph at the top.
+//   - libreoffice/docx: ooxmlimport/table_width.docx writes its tblpPr
+//     before its tblStyle, and Word prints its table at the top margin.
+func TestTables_PositionBeforeStyle(t *testing.T) {
+	t.Parallel()
+	tblpPr := `<w:tblpPr w:vertAnchor="page" w:horzAnchor="margin" w:tblpY="10261"/>`
+	table := func(tblPr string) string {
+		return `<w:tbl><w:tblPr>` + tblPr + `<w:tblW w:w="2000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+			`<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>`
+	}
+	b := build(t, table(tblpPr+`<w:tblStyle w:val="TableGrid"/>`), nil)
+	if st := role(b.root, "Table")[0].Style; st.WordAnchor.Set || st.Float != css.FloatNone || len(b.secs[0].pending) != 0 {
+		t.Errorf("tblpPr before tblStyle: float %v, anchor %+v; want the table in the flow", st.Float, st.WordAnchor)
+	}
+	b = build(t, table(`<w:tblStyle w:val="TableGrid"/>`+tblpPr), nil)
+	if len(b.secs[0].pending) != 1 {
+		t.Fatalf("tblStyle before tblpPr: %d tables placed, want 1", len(b.secs[0].pending))
+	}
+	b.secs[0].pending[0].resolve(b.secs[0])
+	if st := role(b.root, "Table")[0].Style; !st.WordAnchor.Set || !st.WordAnchor.FromPage {
+		t.Errorf("tblStyle before tblpPr: anchor %+v; want it placed from the page", st.WordAnchor)
+	}
+}
+
 func TestTables_FramesInCells(t *testing.T) {
 	t.Parallel()
 	frame := `<w:framePr w:w="2000" w:hSpace="141" w:wrap="around" w:vAnchor="page" w:hAnchor="margin" w:xAlign="right" w:y="2266"/>`
