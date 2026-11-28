@@ -147,6 +147,41 @@ func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle,
 	return e
 }
 
+// entryShown reports whether a legend entry whose text starts at left
+// writes its text on the part of the chart that shows ([RenderPart]),
+// clearing its own test when it does: Excel tests the text's box widened
+// on its right by pad, the padding the legend keeps after its text, so an
+// entry whose text ends just before that part is written there; neither
+// its key nor the entries after it widen it. An entry of several lines is
+// written whole where its box reaches.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/barOfPieChart.xlsx and barOfPieChart2.xlsx
+//     split a chart 8.4 pt past page 1's last column. Excel writes the
+//     nine names of the legend beside the plot area on page 2 too, each
+//     ending 1.4 pt before page 2's first column, inside the legend's
+//     padding.
+//   - libreoffice/xlsx: chart2/chart_pie2007.xlsx's legend crosses into
+//     page 2 6.9 pt after its left edge, its names past page 1's last
+//     column: Excel writes them on page 2 alone.
+//   - libreoffice/xlsx: chart2/gapWidth.xlsx's bottom legend of two
+//     entries crosses into page 4 between them: Excel writes the first,
+//     which ends 8 pt before page 4, on page 3 alone.
+//   - openxmlsdk/xlsx: v2FxTestFiles/spreadsheet/O12_templates/BusinessPerformancetest21_with_content_TP10209823.xltx:
+//     Excel writes both lines of the legend entry "Weak/ Dissastisfied"
+//     on pages 3 and 4, its first line's box on page 3 alone.
+func (rd *renderer) entryShown(e legendEntry, left, top, pad float64) bool {
+	if rd.shown == nil {
+		return true
+	}
+	if !reaches(typeset.Rect{X: left, Y: top, Width: e.label.w + pad, Height: e.label.h}, typeset.Matrix{}, *rd.shown) {
+		return false
+	}
+	e.label.shown = nil
+	return true
+}
+
 // legend lays the legend out and places it at its side of the chart, as
 // LibreOffice's VLegend does, taking its room from rem unless it overlays.
 func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
@@ -323,7 +358,9 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 				sy = base - float64(fs*officeKeyRaise) - float64(symH/2)
 			}
 			rd.key(e, typeset.Rect{X: cx, Y: sy, Width: symW, Height: symH})
-			rd.out = append(rd.out, e.label.draw(cx+symPlus+float64(e.label.w/2), cy+float64(e.label.h/2), alignLeft)...)
+			if rd.entryShown(e, cx+symPlus, cy, rightPad) {
+				rd.out = append(rd.out, e.label.draw(cx+symPlus+float64(e.label.w/2), cy+float64(e.label.h/2), alignLeft)...)
+			}
 			cy += rowH[r] + yOff
 		}
 		cx += colW[c] + xOff

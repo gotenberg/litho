@@ -601,6 +601,39 @@ func TestRenderPart_CountsTheSpacesALineEndsWith(t *testing.T) {
 	}
 }
 
+// TestRenderPart_WritesALegendEntryItsPaddingReaches locks that a legend
+// entry is written on a part of the chart its text's box reaches, widened
+// by the legend's padding after the text, its text ending before that part
+// included, as Excel writes it, and not on a part its key alone reaches.
+func TestRenderPart_WritesALegendEntryItsPaddingReaches(t *testing.T) {
+	c := barChart(1, 2)
+	c.Legend = &Legend{Position: LegendRight, Style: TextStyle{Size: 10, Color: typeset.Black}}
+	start := math.NaN()
+	walk(Render(context.Background(), ahem(t), c, chartRect), 0, func(fr typeset.Fragment, _ int) {
+		if tx, ok := fr.(*typeset.Text); ok && len(tx.Glyphs) == 1 && tx.Glyphs[0].Text == "S" {
+			start = tx.Origin.X
+		}
+	})
+	if math.IsNaN(start) {
+		t.Fatal("no legend entry")
+	}
+	written := func(shown typeset.Rect) bool {
+		return slices.Contains(texts(RenderPart(context.Background(), ahem(t), c, chartRect, shown)), "S")
+	}
+	right := func(x float64) typeset.Rect {
+		return typeset.Rect{X: x, Y: chartRect.Y, Width: 400, Height: chartRect.Height}
+	}
+	if !written(right(start + 11)) {
+		t.Error("entry left out where the legend's padding reaches the part that shows")
+	}
+	if written(right(chartRect.X + chartRect.Width - 0.1)) {
+		t.Error("entry written where the legend ends before the part that shows")
+	}
+	if written(typeset.Rect{X: chartRect.X, Y: chartRect.Y, Width: start - 0.5 - chartRect.X, Height: chartRect.Height}) {
+		t.Error("entry written where its key alone reaches the part that shows")
+	}
+}
+
 // TestRender_LabelSeparatorByRules checks the separator of a data label
 // that names none: a comma under Office's rules, a semicolon under
 // LibreOffice's, a line break before a percentage shown without the
