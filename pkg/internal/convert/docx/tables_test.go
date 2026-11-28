@@ -775,3 +775,24 @@ func TestTables_FloatingDropsPageBreaks(t *testing.T) {
 		}
 	}
 }
+
+// TestTables_FloatingInACell locks where a floating table of a table
+// cell stands (17.4.58 tblpPr): tblpX right of the cell's text and tblpY
+// below its paragraph, its distances from the text moving it nowhere; one
+// positioned from the margins keeps its distances.
+func TestTables_FloatingInACell(t *testing.T) {
+	t.Parallel()
+	nested := func(tblpPr string) *css.Style {
+		body := `<w:tbl><w:tblGrid><w:gridCol w:w="6000"/></w:tblGrid><w:tr><w:tc><w:tbl><w:tblPr>` + tblpPr + `</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+			`<w:tr><w:tc><w:p><w:r><w:t>inner</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:tc></w:tr></w:tbl>`
+		return role(build(t, body, nil).root, "Table")[1].Style
+	}
+	st := nested(`<w:tblpPr w:leftFromText="187" w:rightFromText="187" w:vertAnchor="text" w:tblpX="200" w:tblpY="174"/>`)
+	if l, top, r := st.Margin[css.Left], st.Margin[css.Top], st.Margin[css.Right]; !near(l, 10) || !near(top, 8.7) || !near(r, 9.35) || st.Float != css.FloatLeft {
+		t.Errorf("from the text: float %v, margins left %v top %v right %v; want 10, 8.7 and 9.35", st.Float, l, top, r)
+	}
+	st = nested(`<w:tblpPr w:leftFromText="187" w:horzAnchor="margin" w:vertAnchor="page" w:tblpY="174"/>`)
+	if l, top := st.Margin[css.Left], st.Margin[css.Top]; !near(l, 9.35) || !near(top, 0) {
+		t.Errorf("from the margins: margins left %v top %v; want 9.35 and 0", l, top)
+	}
+}

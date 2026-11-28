@@ -1099,6 +1099,36 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 			st.Margin[side] = css.Pts(max(0, v))
 		}
 	}
+	if d.inCell > 0 {
+		cellOffsets(st, f)
+	}
+}
+
+// cellOffsets places the floating table st of a table cell, floated
+// left, by its w:tblpPr f (17.4.58) as Word places it: its edge tblpX
+// right of the cell's text when it is positioned from the text, the
+// column, and its top tblpY below its paragraph's top when anchored to
+// the text, its leftFromText and topFromText keeping the text away from
+// it and moving it nowhere.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/O12_templates/BingoSheet_TP10220238.dotx:
+//     Word prints a table of leftFromText 187, vertAnchor text and tblpY
+//     174 at the start of a cell with its left border on the cell's text
+//     edge and its top border 8.75 points below the cell's top.
+func cellOffsets(st *css.Style, f *ooxml.Element) {
+	switch attrOr(f, "horzAnchor") {
+	case "", "text":
+		if !hasAttr(f, "tblpXSpec") {
+			x, _ := ooxml.Twips(attrOr(f, "tblpX"))
+			st.Margin[css.Left] = css.Pts(x)
+		}
+	}
+	if a := attrOr(f, "vertAnchor"); (a == "" || a == "text") && !hasAttr(f, "tblpYSpec") {
+		y, _ := ooxml.Twips(attrOr(f, "tblpY"))
+		st.Margin[css.Top] = css.Pts(max(0, y))
+	}
 }
 
 // anchorTable places the floating table tbl of the body by its w:tblpPr f
