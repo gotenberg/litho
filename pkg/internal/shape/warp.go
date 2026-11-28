@@ -131,8 +131,11 @@ const (
 // whose path count is odd makes a lane of each path, which a line
 // follows.
 //
-// A preset is evaluated as PowerPoint and Word evaluate it: the guides
-// read the height for the shorter side (ss), whatever the box's shape.
+// A preset is evaluated as PowerPoint evaluates it: on the square as
+// tall as the box, then widened to the box. Its guides read the height
+// for the shorter side (ss), whatever the box's shape, and an arc's
+// angles (20.1.9.3 arcTo) fall where they fall on a circle, not where
+// they point on the box's ellipse.
 //
 // # Corpus evidence
 //
@@ -149,6 +152,13 @@ const (
 //     the two pairs of textDeflateInflate with the two lines of
 //     "Happy" and "Birthday", one a pair, ink from the box's top to its
 //     bottom.
+//   - libreoffice/pptx sd/tdf116350-texteffects: twenty lines of
+//     "FontEffectArcUp" on textArchUp, textArchDown, textCircle and
+//     textButton adjusted from 15 to 359 degrees in 135 by 71 point boxes
+//     start and end within 2.5 points of where the arcs evaluated on the
+//     square put them, at sizes within 0.06 point; on the box's ellipse
+//     the two shortest arcs are 1.75 and 1.6 times shorter than the ones
+//     PowerPoint fits its lines to.
 func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 	def, heightShort := warpDefinition(w)
 	if def == nil || len(def.Paths) == 0 {
@@ -158,7 +168,7 @@ func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 	if w.Custom == nil {
 		g = &Geometry{Adjust: w.Adjust}
 	}
-	ev := newEvaluatorShort(def, g, r, heightShort)
+	ev := newEvaluatorShort(def, g, squareBox(r, heightShort), heightShort)
 	var curves []WarpCurve
 	budget := MaxCommands
 	points := MaxWarpCurvePoints
@@ -169,7 +179,7 @@ func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 		pd := &def.Paths[i]
 		n := min(len(pd.Cmds), budget)
 		budget -= n
-		ops := ev.path(pd, pd.Cmds[:n])
+		ops := stretchToBox(ev.path(pd, pd.Cmds[:n]), r, heightShort)
 		for start := 0; start < len(ops) && len(curves) < 2*maxWarpLanes && points > 0; {
 			end := start + 1
 			for end < len(ops) && ops[end].Kind != typeset.MoveTo {
@@ -271,4 +281,29 @@ func cubicAt(p0, p1, p2, p3 typeset.Point, t float64) typeset.Point {
 		X: float64(a*p0.X) + float64(b*p1.X) + float64(c*p2.X) + float64(d*p3.X),
 		Y: float64(a*p0.Y) + float64(b*p1.Y) + float64(c*p2.Y) + float64(d*p3.Y),
 	}
+}
+
+// squareBox returns the box a warp's geometry is evaluated in: for a
+// preset (square true), the square as tall as r at r's origin, which
+// stretchToBox widens to r afterwards.
+func squareBox(r typeset.Rect, square bool) typeset.Rect {
+	if !square || !numeric.Positive(r.Height) || !numeric.Positive(r.Width) {
+		return r
+	}
+	return typeset.Rect{X: r.X, Y: r.Y, Width: r.Height, Height: r.Height}
+}
+
+// stretchToBox maps ops evaluated in squareBox(r, square) onto r,
+// scaling x about r's left edge.
+func stretchToBox(ops []typeset.PathOp, r typeset.Rect, square bool) []typeset.PathOp {
+	if !square || !numeric.Positive(r.Height) || !numeric.Positive(r.Width) {
+		return ops
+	}
+	k := r.Width / r.Height
+	for i := range ops {
+		for j := range ops[i].P {
+			ops[i].P[j].X = r.X + float64((ops[i].P[j].X-r.X)*k)
+		}
+	}
+	return ops
 }

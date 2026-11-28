@@ -248,3 +248,25 @@ func TestWarpLanes_FollowsAVMLArcTheWayItsSwingRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestWarpLanes_SetsAPresetArcAsOnACircle(t *testing.T) {
+	// textArchUp at 241.92 degrees in a box twice as wide as tall starts
+	// where that angle falls on the circle widened to the box, not where
+	// it points on the box's ellipse (x 49.3).
+	r := typeset.Rect{X: 10, Y: 20, Width: 135, Height: 71}
+	l := WarpLanes(&TextWarp{Preset: "textArchUp", Adjust: []Adjust{{Name: "adj", Value: 14513794}}}, r)
+	if len(l) != 1 || l[0].Envelope() {
+		t.Fatalf("lanes = %d; want one path", len(l))
+	}
+	a := 14513794.0 / 60000 * math.Pi / 180
+	for _, c := range []struct {
+		u float64
+		x float64
+	}{{0, 67.5 + 67.5*math.Cos(a)}, {1, 67.5 - 67.5*math.Cos(a)}} {
+		p, _ := l[0].Top.At(c.u)
+		want := typeset.Point{X: 10 + c.x, Y: 20 + 35.5 + 35.5*math.Sin(a)}
+		if math.Abs(p.X-want.X) > 0.01 || math.Abs(p.Y-want.Y) > 0.01 {
+			t.Errorf("at %v: %v, want %v", c.u, p, want)
+		}
+	}
+}
