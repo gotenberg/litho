@@ -770,8 +770,10 @@ func (d *document) textBoxEffectsOmitted(fx *css.OfficeEffects) {
 // ST_TextAnchoringType t, ctr, b): a shape other than a rectangle, or one
 // with the effects fx (20.1.8.26 effectLst) or an outline no border draws
 // ([pathOutline]), draws behind the text with the fill and outline ss and
-// its effects around it, which the box then leaves unpainted, and the text sits at the top, the middle or the
-// bottom of the box's inset area, as Word places it. A box that grows to
+// its effects around it, which the box then leaves unpainted, its text
+// laid out in the geometry's text rectangle (20.1.9.22 rect; the presets
+// of Annex D), the insets counted from it; and the text sits at the top,
+// the middle or the bottom of the inset area, as Word places it. A box that grows to
 // fit its text (a:spAutoFit) keeps its text at the top; the shape behind
 // it keeps the size the file gives.
 //
@@ -781,6 +783,9 @@ func (d *document) textBoxEffectsOmitted(fx *css.OfficeEffects) {
 //     of preset rightArrow as the arrow, its text centred in it; drawn so,
 //     layout rises from 0.55 to 0.78.
 //   - libreoffice/docx ooxmlexport/fdo77719: layout rises from 0.26 to 0.75.
+//   - libreoffice/docx ooxmlexport/WPGbodyPr.docx: Word sets the first line
+//     of an ellipse 386.25 points tall, inset 3.6 at the top, 63 points
+//     below its top, where its text rectangle starts 56.6 points down.
 func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.ShapeStyle, fx *css.OfficeEffects, w, h float64, anchor string, autoFit bool) {
 	rect := g == nil || (g.Custom == nil && (g.Preset == "" || g.Preset == "rect"))
 	if autoFit || (anchor != "ctr" && anchor != "b") {
@@ -797,6 +802,14 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 	bs := n.Style
 	bs.Position = css.Relative
 	kids := n.Children
+	if !rect && shape.Known(g) {
+		// The insets count from the geometry's text rectangle, not from
+		// the shape's box.
+		tr := shape.TextRect(g, typeset.Rect{Width: w, Height: h})
+		for side, v := range [4]float64{tr.Y, w - tr.X - tr.Width, h - tr.Y - tr.Height, tr.X} {
+			bs.Padding[side] = css.Pts(bs.Padding[side].Value + max(v, 0))
+		}
+	}
 	if anchor != "" {
 		bs.MinHeight = css.Pts(0)
 		bs.Height = css.Pts(max(h, 1))

@@ -357,6 +357,39 @@ func TestTextBox_ShapeAndAnchor(t *testing.T) {
 	}
 }
 
+// TestTextBox_TextRectangle checks that the text of a text box of a preset
+// shape lies in the shape's text rectangle, its insets counted from it:
+// an ellipse's text rectangle lies (1 - cos 45°) / 2 of each side inside
+// its box, a triangle's starts at half its height, a rectangle's is its
+// box.
+func TestTextBox_TextRectangle(t *testing.T) {
+	t.Parallel()
+	box := func(prst string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="` + prst + `"/><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	inset := (1 - math.Cos(math.Pi/4)) / 2
+	for _, tc := range []struct {
+		prst string
+		want [4]float64
+	}{
+		{"ellipse", [4]float64{3.6 + 100*inset, 7.2 + 200*inset, 3.6 + 100*inset, 7.2 + 200*inset}},
+		{"triangle", [4]float64{3.6 + 50, 7.2 + 50, 3.6, 7.2 + 50}},
+		{"rect", [4]float64{3.6, 7.2, 3.6, 7.2}},
+	} {
+		figs := role(build(t, box(tc.prst), nil).root, "Figure")
+		if len(figs) != 1 {
+			t.Fatalf("%s: %d figures, want 1", tc.prst, len(figs))
+		}
+		for side, want := range tc.want {
+			if got := figs[0].Style.Padding[side]; !near(got, want) {
+				t.Errorf("%s: padding %d %v, want %.2f", tc.prst, side, got, want)
+			}
+		}
+	}
+}
+
 // TestTextBox_InsetsLeaveNoRoom checks that a text box whose top and
 // bottom insets take its whole height prints no text, as Word prints it,
 // and warns, where a box with room keeps its text.
