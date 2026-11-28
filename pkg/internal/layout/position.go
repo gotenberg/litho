@@ -912,9 +912,14 @@ func (e *engine) pageCB(b *box) absCB {
 // clampToPage moves the absolutely positioned box b, laid out, whole onto
 // the page box of page p (css.Style.PageClamp): down to its top edge when
 // b starts above it, else up until b's bottom edge meets its bottom edge,
-// the top edge winning; b then paints on page p alone.
+// the top edge winning; b then paints on page p alone. A box of
+// css.Office.PageCut stays where it is, on page p alone.
 func (e *engine) clampToPage(b *box, p int) {
 	if e.err != nil {
+		return
+	}
+	if b.st.PageCut {
+		b.pageAnchored, b.anchorPage = true, p
 		return
 	}
 	pb := e.box(p)

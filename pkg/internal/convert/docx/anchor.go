@@ -141,7 +141,20 @@ func fromPageV(rel string) bool {
 // page box of its anchor's page (css.Style.PageAnchor), its offsets
 // measured from its section's page; any other is positioned from its
 // paragraph, a horizontal offset from the page measured from the
-// paragraph's start at the margin.
+// paragraph's start at the margin. One of no wrapping positioned from its
+// paragraph or its line lies on its paragraph's page where its offsets
+// put it, a part past the page's edge cut off rather than the drawing
+// moved onto the page (css.Office.PageCut).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/tdf106153.docx: Word prints four text boxes
+//     of paragraph offsets -306.75, 133.9, 142.15 and 738.4 points on one
+//     page, the first cut by the page's top edge, the last by its bottom,
+//     the two others by its left and right edges.
+//   - libreoffice/docx ooxmlimport/tdf105143.docx: Word prints a VML
+//     shape of margin-top 248.65 points from 319.55 to 386.9 on a page
+//     366.85 points tall.
 func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 	st := n.Style
 	if d.pageAnchors() && wordWraps(p.wrap) {
@@ -233,9 +246,11 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 		if p.relV == "paragraph" {
 			d.fromPara = append(d.fromPara, n)
 		}
-		// LibreOffice keeps a drawing positioned from its paragraph
-		// inside the page its paragraph is on.
+		// Word keeps a drawing positioned from its paragraph on the page
+		// its paragraph is on, where its offsets put it, cut by the
+		// page's edges.
 		st.PageClamp = d.pageAnchors()
+		st.PageCut = true
 		if fromPageV(p.relV) {
 			d.warn(warn.ContentUnsupported, warn.Approximated, "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)

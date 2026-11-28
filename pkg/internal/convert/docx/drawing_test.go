@@ -158,6 +158,38 @@ func TestDrawings_FromThePage(t *testing.T) {
 	}
 }
 
+// TestDrawings_CutByThePage checks that a drawing of no wrapping
+// positioned from its paragraph lies on its paragraph's page where its
+// offset puts it, past the page's top or bottom edge too, as Word prints
+// it, and adds no page.
+func TestDrawings_CutByThePage(t *testing.T) {
+	t.Parallel()
+	const sect = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/></w:sectPr>`
+	for _, tc := range []struct {
+		name   string
+		offset int
+		bottom float64
+	}{
+		{"past the bottom", 700, 72 + 700 + 50},
+		{"past the top", -100, 72 - 100 + 50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			run := `<w:r><w:drawing><wp:anchor behindDoc="0"><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>` +
+				`<wp:positionV relativeFrom="paragraph"><wp:posOffset>` + strconv.Itoa(tc.offset*12700) + `</wp:posOffset></wp:positionV>` +
+				`<wp:extent cx="1270000" cy="635000"/><wp:wrapNone/><wp:docPr id="2" name="q"/>` + strings.Replace(graphic(""), ` rot="5400000" flipH="1"`, "", 1) + `</wp:anchor></w:drawing></w:r>`
+			doc := convertBytes(t, docx(t, `<w:p>`+run+`<w:r><w:t>text</w:t></w:r></w:p>`+sect, map[string]string{"word/media/a.png": pngData(t, 4, 2)}), office.Options{})
+			if len(doc.Pages) != 1 {
+				t.Fatalf("%d pages, want 1", len(doc.Pages))
+			}
+			got := imageBottoms(doc.Pages[0])
+			if len(got) != 1 || math.Abs(got[0]-tc.bottom) > 0.5 {
+				t.Errorf("picture bottoms %v, want %v", got, tc.bottom)
+			}
+		})
+	}
+}
+
 func TestDrawings_PageAnchoredGroup(t *testing.T) {
 	t.Parallel()
 	body := `<w:p><w:r><w:pict><v:group style="position:absolute;margin-left:100pt;margin-top:50pt;width:200pt;height:100pt;mso-position-horizontal-relative:page;mso-position-vertical-relative:page" coordsize="200,100">` +

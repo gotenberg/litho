@@ -159,3 +159,60 @@ func TestPageClamp(t *testing.T) {
 		})
 	}
 }
+
+// TestPageCut checks that an absolutely positioned box of css.Office.PageCut
+// keeps the place its offsets give, on its anchor's page alone: the page
+// box's edges cut what reaches past them, and none adds a page.
+func TestPageCut(t *testing.T) {
+	pb := PageBox{Width: px(8), Height: px(8), Margin: [4]float64{px(2), px(2), px(2), px(2)}}
+	tests := []struct {
+		name string
+		top  float64
+		h    float64
+		want string
+	}{
+		{"above", -3, 2, `
+			__RR____
+			________
+			__BB____
+			________
+			________
+			________
+			________
+			________`},
+		{"below", 5, 3, `
+			________
+			________
+			__BB____
+			________
+			________
+			________
+			________
+			__RR____`},
+		{"inside", 1, 2, `
+			________
+			________
+			__BB____
+			__RR____
+			__RR____
+			________
+			________
+			________`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frame := el(sty(func(s *css.Style) {
+				s.Position = css.Absolute
+				s.PageClamp = true
+				s.PageCut = true
+				s.Top = css.Pts(px(tt.top))
+			}, width(2), height(tt.h), bg(red)))
+			anchor := el(sty(height(1), width(2), bg(blue), func(s *css.Style) { s.Position = css.Relative }), frame)
+			res := run(t, doc(anchor), pb)
+			if len(res.Pages) != 1 {
+				t.Fatalf("%d pages, want 1", len(res.Pages))
+			}
+			assertPixels(t, res, 1, tt.want)
+		})
+	}
+}

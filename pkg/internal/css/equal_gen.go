@@ -2323,6 +2323,9 @@ func equalOffice(a, b *Office) bool {
 	if a.StrokeBorders != b.StrokeBorders {
 		return false
 	}
+	if a.PageCut != b.PageCut {
+		return false
+	}
 	if math.Float64bits(a.PageTop) != math.Float64bits(b.PageTop) {
 		return false
 	}
@@ -2394,6 +2397,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixString(h, x.Chain)
 	h = mix(h, uint64(x.ChainIndex))
 	h = mixBool(h, x.StrokeBorders)
+	h = mixBool(h, x.PageCut)
 	h = mix(h, math.Float64bits(x.PageTop))
 	h = mixBool(h, x.ExactHeight)
 	h = mixBool(h, x.WriterLines)

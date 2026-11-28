@@ -245,6 +245,13 @@ type Office struct {
 	// draws no border. The other border styles and the radii paint as CSS
 	// paints them.
 	StrokeBorders bool
+	// PageCut keeps an absolutely positioned box of [Style.PageClamp]
+	// where its offsets put it: it lies on its anchor's page whole and
+	// paints there alone, adding no page, and the page box's edges cut
+	// what reaches past them, where PageClamp alone moves it onto the page
+	// box. Word places a drawing that does not wrap the text so (ECMA-376
+	// Part 1, 20.4.2.3 anchor with 20.4.2.15 wrapNone).
+	PageCut bool
 	// PageTop, when greater than 0, is how far below the top edge of its
 	// page's page box an in-flow table, or any block-level box that
 	// starts a block formatting context, starts at the least, in points:
