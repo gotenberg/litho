@@ -708,9 +708,13 @@ func (b *builder) bottomBaseline(z float64) float64 {
 // as t says.
 func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.TextAlign, t paraTurn) *layout.Node {
 	st := b.paraStyle(f, lineH, align, d.wrap, t)
+	text := d.text
+	if !b.doc.ExcelRules {
+		text = b.calcTabs(st, d)
+	}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if len(d.runs) == 0 {
-		tn := &layout.Node{Kind: layout.Text, Style: st, Text: d.text}
+		tn := &layout.Node{Kind: layout.Text, Style: st, Text: text}
 		office.SymbolNode(tn, b.fonts, b.symbolRule(), b.symbols)
 		n.Children = []*layout.Node{tn}
 		return n
@@ -737,6 +741,36 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 	}
 	return n
 }
+
+// calcTabs sets the tabs of d's paragraph style st as Calc draws them and
+// returns d's plain text to lay out: a cell Calc draws through its edit
+// engine, one of several lines or of runs, advances a tab to the next
+// multiple of the engine's default 0.72 cm from the text's start; a
+// plain cell of one line draws a tab with no advance at all.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf103829_textTab.ods, Liberation Sans 24: in
+//     a cell of two paragraphs a leading tab advances 20.41 points and
+//     three tabs after "[" end 42.71 points on, at the stops 20.41
+//     points apart from the text's start; in a cell of one paragraph the
+//     leading tab and the three tabs between brackets advance nothing.
+func (b *pageBuilder) calcTabs(st *css.Style, d *display) string {
+	edit := len(d.runs) > 0 || strings.Contains(d.text, "\n")
+	if edit {
+		st.TabStops = []css.TabStop{}
+		st.TabSize = css.Pts(calcEditTab)
+		// Text that does not wrap runs past the cell's edge, its tabs
+		// with it.
+		st.TabOverMargin = !d.wrap
+		return d.text
+	}
+	return strings.ReplaceAll(d.text, "\t", "")
+}
+
+// calcEditTab is the default tab interval of LibreOffice's edit engine,
+// 720 hundredths of a millimetre (editeng DEFTAB), in points.
+const calcEditTab = 720 * 72 / 2540.0
 
 // runLine returns the line of a run in the font f, wrapped or not: the
 // face's own ascent and descent, so that a line of runs in several fonts

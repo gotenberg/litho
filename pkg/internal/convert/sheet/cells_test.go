@@ -3,6 +3,7 @@ package sheet
 import (
 	"context"
 	"image"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -879,5 +880,31 @@ func TestConvert_GeneralDecimalsLimit(t *testing.T) {
 		if r.text == "17.6" || r.text == "24.11" {
 			t.Errorf("without a limit %q is rounded", r.text)
 		}
+	}
+}
+
+// TestConvert_CalcTabs checks the tabs of a cell under Calc's rules: a
+// cell of several lines advances them to the edit engine's stops, 0.72
+// cm apart from the text's start, past the cell's edge when the text does
+// not wrap; a plain cell of one line gives them no advance
+// (sc/tdf103829_textTab.ods).
+func TestConvert_CalcTabs(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "\tA\n[\t\t\t]", nil)}},
+		{Index: 1, Cells: []Cell{textCell(0, "\tB [\t\t\t]", nil)}},
+	}}
+	sh.DefaultRowHeight = 30
+	pg := convert(t, newDoc(sh), office.Options{}).Pages[0]
+	stop := 720 * 72 / 2540.0
+	a, open, plain := find(t, pg, "A"), find(t, pg, "["), find(t, pg, "B []")
+	left := open.x
+	if !near(a.x-left, stop, 0.05) {
+		t.Errorf("leading tab of an edit cell ends %.2f after the text's start, want %.2f\n%s", a.x-left, stop, dump(pg))
+	}
+	if want := left + float64(math.Ceil((open.endX-left)/stop)+2)*stop; !near(find(t, pg, "]").x, want, 0.05) {
+		t.Errorf("three tabs end at %.2f, want %.2f\n%s", find(t, pg, "]").x, want, dump(pg))
+	}
+	if !near(plain.x, left, 0.01) {
+		t.Errorf("plain cell starts at %.2f, want %.2f, its tabs advancing nothing\n%s", plain.x, left, dump(pg))
 	}
 }
