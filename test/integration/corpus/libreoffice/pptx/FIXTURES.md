@@ -69,19 +69,22 @@ Recorded while LibreOffice built this corpus's references, until 2026-11-11: the
 
 ## Expected text
 
-Twelve references hold no text, or read it one letter a token, where the slide shows text. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
+Fifteen references hold no text, or read it one letter a token, where the slide shows text. Each keeps, under `options/<fixture ID with / written __>/`, an `options.json` naming `expectedText` and the file `expected-text.txt` it names: the page's text in reading order, written from the source's runs and read against the reference drawn at 72 dpi. `corpus update` rewrites the lists alone and leaves the directory, and a directory that names no listed fixture fails the corpus's load. The `diff` cell scores litho's text against the file and reads the reference for the pages, layout, links and outline alone; the reference is the one built without the file (`FEATURES.md`, "Expected text").
 
-| Fixture                                      | What the reference does                                                            |
-| -------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `oox/camera-rotation-revolution-nonwps.pptx` | Draws a text box turned 90 degrees and a box under a camera revolution as outlines |
-| `oox/tdf149551_TextRot.pptx`                 | Draws text turned within its shape (`bodyPr rot`) as outlines                      |
-| `oox/tdf149551_vert270AndTextRot.pptx`       | Draws vertical text turned within its shape as outlines                            |
-| `oox/transparent-text.pptx`                  | Draws translucent text as a picture                                                |
-| `sd/smartart-autoTxRot.pptx`                 | Draws the text of turned SmartArt nodes as outlines, the upright ones aside        |
-| `sd/smartart-rotation.pptx`                  | As `sd/smartart-autoTxRot.pptx`                                                    |
-| `sd/tdf100065.pptx`                          | Draws the text of a turned shape as outlines                                       |
-| `sd/tdf128206.pptx`                          | Draws text turned by a camera in its body as outlines                              |
-| `sd/tdf128212.pptx`                          | As `sd/tdf128206.pptx`                                                             |
-| `sd/tdf128213.pptx`                          | As `sd/tdf128206.pptx`                                                             |
-| `sd/tdf128213-shaperot.pptx`                 | As `sd/tdf128206.pptx`, in a turned shape                                          |
-| `sd/tcPr-vert-roundtrip.pptx`                | Holds the stacked text of a table cell one letter a line (`S t a c k e d`)         |
+| Fixture                                      | What the reference does                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `oox/camera-rotation-revolution-nonwps.pptx` | Draws a text box turned 90 degrees and a box under a camera revolution as outlines         |
+| `oox/tdf125582_TextOnCircle.pptx`            | Sets each glyph of warped text by a turned matrix of its own, which PDF.js reads in pieces |
+| `oox/tdf149551_TextRot.pptx`                 | Draws text turned within its shape (`bodyPr rot`) as outlines                              |
+| `oox/tdf149551_vert270AndTextRot.pptx`       | Draws vertical text turned within its shape as outlines                                    |
+| `oox/transparent-text.pptx`                  | Draws translucent text as a picture                                                        |
+| `sd/smartart-autoTxRot.pptx`                 | Draws the text of turned SmartArt nodes as outlines, the upright ones aside                |
+| `sd/smartart-rotation.pptx`                  | As `sd/smartart-autoTxRot.pptx`                                                            |
+| `sd/tdf100065.pptx`                          | Draws the text of a turned shape as outlines                                               |
+| `sd/tdf116350-texteffects.pptx`              | As `oox/tdf125582_TextOnCircle.pptx`, on arches, circles and buttons                       |
+| `sd/tdf125573_FontWorkScaleX.pptx`           | As `oox/tdf125582_TextOnCircle.pptx`, on an arch and a wave                                |
+| `sd/tdf128206.pptx`                          | Draws text turned by a camera in its body as outlines                                      |
+| `sd/tdf128212.pptx`                          | As `sd/tdf128206.pptx`                                                                     |
+| `sd/tdf128213.pptx`                          | As `sd/tdf128206.pptx`                                                                     |
+| `sd/tdf128213-shaperot.pptx`                 | As `sd/tdf128206.pptx`, in a turned shape                                                  |
+| `sd/tcPr-vert-roundtrip.pptx`                | Holds the stacked text of a table cell one letter a line (`S t a c k e d`)                 |
