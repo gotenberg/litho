@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -859,17 +861,28 @@ type lineBox struct {
 
 // lines returns the line box of a paragraph whose largest run is set in
 // the style ts at the scaling f, with the faces' metrics when fontLines (ImpEditEngine::CreateLines, the line
-// spacing rules): a natural line is the face's ascent plus descent, or
+// spacing rules): a natural line is the ascent plus descent of the faces
+// that draw the runs of that size (drawnMetrics), or
 // 1.2 times the size with the size as ascent when the body spaces lines
 // independently of the faces; a proportional spacing above 1 adds its
 // room above the glyphs, below 1 it shrinks the line and caps the ascent
 // at four fifths of it; an exact spacing changes the ascent by the
 // difference.
-func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) lineBox {
+func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool, runs []Run, big *RunStyle) lineBox {
 	s := ts.Size
 	a, n := s, float64(s*fixedLineFactor)
 	if fontLines {
-		m := b.faceMetrics(ts)
+		m, fc := b.faceAndMetrics(ts)
+		if d, ok := b.drawnMetrics(runs, ts, f.font, fc, big); ok {
+			// Shaped bounds are on the shaper's 1/64 grid: a face that
+			// draws the runs itself keeps its own metrics.
+			if math.Abs(d.Ascent-m.Ascent) > shapedGrid {
+				m.Ascent = d.Ascent
+			}
+			if math.Abs(d.Descent-m.Descent) > shapedGrid {
+				m.Descent = d.Descent
+			}
+		}
 		a, n = m.Ascent, m.Ascent+m.Descent
 	}
 	sf := f.spacing
@@ -901,6 +914,195 @@ func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) line
 	return lb
 }
 
+// drawnMetrics returns the line bounds of the faces that draw the runs
+// set at the size of ts at the font scale k: the largest ascent and the
+// largest descent among them, false when no such run draws a glyph. Impress measures a line by
+// the fonts its portions are drawn in (ImpEditEngine::CreateLines,
+// FormatterFontMetric), so a run whose family is missing, or whose
+// characters fall back to another face, takes that face's height: a
+// Chinese run in a Latin family is as tall as its CJK face.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf153161_FlushToSave.odp, Chinese text in a
+//     family the fonts lack, 140 % proportional spacing: Impress spaces
+//     the lines 40.05 pt apart at 22 pt with 90 % spacing, 1.448 em times
+//     1.4 times 0.9, the height of Noto Sans CJK SC, which draws it.
+func (b *builder) drawnMetrics(runs []Run, ts text.Style, k float64, fc *text.Face, big *RunStyle) (text.Metrics, bool) {
+	if len(runs) == 0 || ownFaceDraws(runs, ts, k, fc, big) {
+		return text.Metrics{}, false
+	}
+	key := drawnKey{run: &runs[0], size: ts.Size}
+	if d, ok := b.drawn[key]; ok {
+		return d.m, d.ok
+	}
+	m, ok := b.measureDrawn(runs, ts, k)
+	if b.drawn == nil {
+		b.drawn = map[drawnKey]drawnBounds{}
+	}
+	if len(b.drawn) < maxMetrics {
+		b.drawn[key] = drawnBounds{m: m, ok: ok}
+	}
+	return m, ok
+}
+
+// ownFaceDraws reports whether fc, the face the largest run big matches
+// in ts, draws every run of ts's size by itself: each such run is set in
+// big's families, weight, posture and language, and fc holds its
+// characters. The line then takes fc's metrics, as before any run is
+// shaped.
+func ownFaceDraws(runs []Run, ts text.Style, k float64, fc *text.Face, big *RunStyle) bool {
+	if fc == nil || big == nil {
+		return false
+	}
+	for i := range runs {
+		r := &runs[i]
+		if r.Break || r.Formula != nil || r.Text == "" || scaledSize(r.Style.Size, k) != ts.Size {
+			continue
+		}
+		if r.Style.Bold != big.Bold || r.Style.Italic != big.Italic || r.Style.Lang != big.Lang ||
+			!slices.Equal(r.Style.Families, big.Families) || !drawsAll(fc, r.Text) {
+			return false
+		}
+	}
+	return true
+}
+
+// drawnKey and drawnBounds cache drawnMetrics: a paragraph is laid out
+// once a scale level a fit tries.
+type drawnKey struct {
+	run  *Run
+	size float64
+}
+
+type drawnBounds struct {
+	m  text.Metrics
+	ok bool
+}
+
+// measureDrawn shapes the runs drawnMetrics measures.
+//
+// A run its own face draws whole takes that face's metrics unshaped; only
+// a run with characters another face draws is shaped.
+func (b *builder) measureDrawn(runs []Run, ts text.Style, k float64) (text.Metrics, bool) {
+	var in []text.ParagraphRun
+	var m text.Metrics
+	left := maxMeasuredText
+	for i := range runs {
+		r := &runs[i]
+		if r.Break || r.Formula != nil || r.Text == "" || left <= 0 {
+			continue
+		}
+		rs := b.textStyle(&r.Style, k)
+		if rs.Size != ts.Size {
+			continue
+		}
+		t := r.Text
+		if n := utf8.RuneCountInString(t); n > left {
+			t = string([]rune(t)[:left])
+		}
+		left -= utf8.RuneCountInString(t)
+		st := ts
+		st.Families, st.Weight, st.Italic, st.Lang = rs.Families, rs.Weight, rs.Italic, rs.Lang
+		st.Fallback = b.doc.Fallback
+		if em, ok := b.ownFace(r, st); ok {
+			m.Ascent = max(m.Ascent, float64(em.Ascent*st.Size))
+			m.Descent = max(m.Descent, float64(em.Descent*st.Size))
+			continue
+		}
+		in = append(in, text.ParagraphRun{Text: t, Style: st})
+	}
+	if len(in) == 0 {
+		return m, m.Ascent+m.Descent > 0
+	}
+	p, _, err := b.fonts.Shape(b.ctx, in, text.ParagraphOptions{})
+	if err != nil {
+		return text.Metrics{}, false
+	}
+	for _, sp := range p.Line(0, p.Len(), false).Spans {
+		if sp.Text == nil || len(sp.Text.Glyphs) == 0 {
+			continue
+		}
+		m.Ascent = max(m.Ascent, sp.Ascent)
+		m.Descent = max(m.Descent, sp.Descent)
+	}
+	return m, m.Ascent+m.Descent > 0
+}
+
+// ownFace returns the metrics at 1 point of the face the run r matches in
+// st, true when that face draws every character of r; the answer is kept
+// for the run, whatever its size.
+func (b *builder) ownFace(r *Run, st text.Style) (text.Metrics, bool) {
+	if o, ok := b.own[r]; ok {
+		return o.em, o.ok
+	}
+	var o ownBounds
+	if fc := b.faceOf(st); fc != nil && drawsAll(fc, r.Text) {
+		o = ownBounds{em: fc.Metrics(1), ok: true}
+	}
+	if b.own == nil {
+		b.own = map[*Run]ownBounds{}
+	}
+	if len(b.own) < maxMetrics {
+		b.own[r] = o
+	}
+	return o.em, o.ok
+}
+
+// faceOf returns the face st matches, kept by its families, weight,
+// posture and language.
+func (b *builder) faceOf(st text.Style) *text.Face {
+	k := faceKey{families: strings.Join(st.Families, ","), weight: st.Weight, italic: st.Italic, lang: st.Lang}
+	if fc, ok := b.faces[k]; ok {
+		return fc
+	}
+	fc := b.fonts.Match(st)
+	if b.faces == nil {
+		b.faces = map[faceKey]*text.Face{}
+	}
+	if len(b.faces) < maxMetrics {
+		b.faces[k] = fc
+	}
+	return fc
+}
+
+// faceKey is what faceOf keeps a face by.
+type faceKey struct {
+	families, lang string
+	weight         int
+	italic         bool
+}
+
+// ownBounds is what ownFace found for a run.
+type ownBounds struct {
+	em text.Metrics
+	ok bool
+}
+
+// drawsAll reports whether the face fc holds every character of s but
+// the white space and the controls, which draw no ink of their own.
+func drawsAll(fc *text.Face, s string) bool {
+	for _, r := range s {
+		if r < 0x20 || unicode.IsSpace(r) {
+			continue
+		}
+		if !fc.Covers(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// shapedGrid is the step of the line bounds the shaper gives, 1/64 of a
+// point: a shaped bound within it of a face's own is that face's.
+const shapedGrid = 1.0 / 64
+
+// maxMeasuredText caps the characters of a paragraph shaped to find the
+// faces that draw it. Anti-DoS guard, not spec-mandated: the faces of a
+// paragraph show in its first characters, and a slide's paragraph seldom
+// holds more.
+const maxMeasuredText = 1024
+
 // maxLineSpacing caps a proportional line spacing. Anti-DoS guard, not
 // spec-mandated: DrawingML allows 132 times single spacing (21.1.10.64
 // ST_TextSpacingPercentOrPercentString).
@@ -908,20 +1110,34 @@ const maxLineSpacing = 132
 
 // faceMetrics returns the metrics of the face ts matches at its size.
 func (b *builder) faceMetrics(ts text.Style) text.Metrics {
+	m, _ := b.faceAndMetrics(ts)
+	return m
+}
+
+// faceAndMetrics returns the metrics of the face ts matches at its size
+// and the face, nil when none matches.
+func (b *builder) faceAndMetrics(ts text.Style) (text.Metrics, *text.Face) {
 	k := fmt.Sprintf("%s|%d|%v|%g", strings.Join(ts.Families, ","), ts.Weight, ts.Italic, ts.Size)
-	if m, ok := b.metrics[k]; ok {
-		return m
+	if e, ok := b.metrics[k]; ok {
+		return e.m, e.fc
 	}
 	m := text.Metrics{Ascent: ts.Size * 0.9, Descent: ts.Size * 0.2}
-	if fc := b.fonts.Match(ts); fc != nil {
+	fc := b.fonts.Match(ts)
+	if fc != nil {
 		if mm := fc.Metrics(ts.Size); mm.Ascent+mm.Descent > 0 {
 			m = mm
 		}
 	}
 	if len(b.metrics) < maxMetrics {
-		b.metrics[k] = m
+		b.metrics[k] = faceEntry{m: m, fc: fc}
 	}
-	return m
+	return m, fc
+}
+
+// faceEntry is a face faceAndMetrics matched, with its metrics.
+type faceEntry struct {
+	m  text.Metrics
+	fc *text.Face
 }
 
 // maxMetrics caps the cached face metrics. Anti-DoS guard, not
@@ -1130,7 +1346,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	if len(runs) == 0 {
 		lf = emptyFit
 	}
-	lb := b.lines(p, bigTS, lf, body.FontLineSpacing)
+	lb := b.lines(p, bigTS, lf, body.FontLineSpacing, runs, big)
 	boxes := b.formulaBoxes(runs, f.font)
 	for _, fb := range boxes {
 		// A line grows to hold its formulas: its ascent to the tallest
@@ -1283,7 +1499,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		// it, as tall as the paragraph's end mark makes it.
 		if k := len(node.Children) - 1; k > 0 && hasText(runs) {
 			node.Children = node.Children[:k]
-			empty := b.lines(p, b.textStyle(&p.Style, f.font), emptyFit, body.FontLineSpacing)
+			empty := b.lines(p, b.textStyle(&p.Style, f.font), emptyFit, body.FontLineSpacing, nil, nil)
 			st.Padding[css.Bottom] = css.Pts(st.Padding[css.Bottom].Value + empty.height)
 		} else {
 			node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "\u200b"})

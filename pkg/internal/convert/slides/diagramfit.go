@@ -28,7 +28,7 @@ func TextFits(ctx context.Context, fonts *text.Fonts, s *Shape) bool {
 	if body == nil || len(body.Paragraphs) == 0 {
 		return true
 	}
-	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: &Document{}, fonts: fonts, symbols: office.NewSymbolCodes(), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: &Document{}, fonts: fonts, symbols: office.NewSymbolCodes(), warned: map[string]bool{}, metrics: map[string]faceEntry{}}
 	inner := insetRect(shape.TextRect(s.Geometry, s.Box), body.Insets)
 	w, h := inner.Width, inner.Height
 	if body.Vertical.Vertical() {

@@ -65,7 +65,14 @@ type builder struct {
 	// formulas lays the formulas out, nil until the first one.
 	formulas *formula.Setter
 	// metrics caches the font metrics of the faces the text matched.
-	metrics map[string]text.Metrics
+	metrics map[string]faceEntry
+	// drawn holds the line bounds drawnMetrics found, by the first run of
+	// a paragraph and the size.
+	drawn map[drawnKey]drawnBounds
+	// own holds, by run, the face that draws it whole (ownFace).
+	own map[*Run]ownBounds
+	// faces holds the faces faceOf matched.
+	faces map[faceKey]*text.Face
 	// slide is the slide being drawn, number its number in the show,
 	// hidden slides counted, and count the show's slides, for the fields.
 	slide         *Slide
@@ -223,7 +230,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the presentation out: %w", text.ErrNoFonts)
 	}
-	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, statedLang(doc), opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, statedLang(doc), opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]faceEntry{}}
 	var shown []*Slide
 	for _, s := range doc.Slides {
 		if s != nil && (!s.Hidden || opts.HiddenSlides) {

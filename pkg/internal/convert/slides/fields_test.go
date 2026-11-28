@@ -5,7 +5,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -58,7 +57,7 @@ func TestText_HorizontalAnchor(t *testing.T) {
 // widthOf returns the advance of s set in rs.
 func widthOf(t *testing.T, s string, rs RunStyle) float64 {
 	t.Helper()
-	b := &builder{ctx: t.Context(), fonts: pinnedFonts(t), metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: t.Context(), fonts: pinnedFonts(t), metrics: map[string]faceEntry{}}
 	return b.width(s, b.textStyle(&rs, 1))
 }
 

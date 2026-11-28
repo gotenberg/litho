@@ -97,6 +97,42 @@ func TestText_FontLinePlacement(t *testing.T) {
 	}
 }
 
+// TestText_DrawnFaceLineHeight checks that an OpenDocument line is as tall
+// as the face that draws it: Chinese text in a family the fonts lack is
+// drawn in Noto Sans CJK SC, 1.448 em tall, and its lines at 140 %
+// proportional spacing stand 1.448 x 20 x 1.4 = 40.54 points apart, as
+// Impress spaces sd/tdf153161_FlushToSave.odp; Latin text in Liberation
+// Sans keeps that face's 1.117 em.
+func TestText_DrawnFaceLineHeight(t *testing.T) {
+	cjk := RunStyle{Families: []string{"方正楷体_GBK", "Liberation Sans"}, Size: 20, Lang: "zh-CN", Color: css.Color{A: 1}}
+	ls := RunStyle{Families: []string{"Liberation Sans"}, Size: 20, Color: css.Color{A: 1}}
+	lined := func(p Paragraph) Paragraph {
+		p.LineSpacing = 1.4
+		return p
+	}
+	for _, tc := range []struct {
+		name  string
+		style RunStyle
+		a, b  string
+		pitch float64
+	}{
+		{"cjk", cjk, "早期一", "早期二", float64(1.448 * 20 * 1.4)},
+		{"latin", ls, "Hxg0", "Hxg1", float64(1.117 * 20 * 1.4)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := box(28.35, 28.35, 340, 340, lined(para(tc.a, tc.style)), lined(para(tc.b, tc.style)))
+			sh.Text.FontLineSpacing, sh.Text.MaxParagraphSpacing = true, true
+			doc := deck(&Slide{Shapes: []*Shape{sh}})
+			doc.Fallback = text.FallbackLibreOffice
+			pg := convert(t, doc, office.Options{}).Pages[0]
+			a, b := find(t, pg, tc.a), find(t, pg, tc.b)
+			if got := b.y - a.y; !near(got, tc.pitch, 0.1) {
+				t.Errorf("lines %.2f apart, want %.2f", got, tc.pitch)
+			}
+		})
+	}
+}
+
 // TestText_UnwrappedOverflow checks where unwrapped text wider than its
 // box sits, as Impress prints sd/tdf113198.pptx (centred, overflowing both
 // sides) and sd/tdf104722.pptx (start-aligned, overflowing right): every
