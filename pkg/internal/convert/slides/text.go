@@ -245,7 +245,8 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 		f = g
 	}
 	dx := 0.0
-	if body.HorizontalAnchor != HorizontalStart && !vertical {
+	centred := powerPointCentresBlock(b.doc, body)
+	if body.HorizontalAnchor != HorizontalStart && (!vertical || centred) {
 		// A block of lines anchored at the centre or the end is as wide as
 		// its widest line, each line aligned in it, and sits at the
 		// rectangle's centre or end (SdrTextObj::TakeTextRect,
@@ -266,13 +267,27 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 		// (SdrObjCustomShape::TakeTextRect), and past the end of a vertical
 		// text's lines alike.
 		if nat := b.naturalWidth(body, f); nat > lw {
-			dx = (lw - nat) * overflowShare(body)
+			share := overflowShare(body)
+			if centred {
+				share = 0.5
+			}
+			dx = (lw - nat) * share
 			lw = nat
 		}
 	}
 	lay := b.layoutBody(body, lw, lh, f)
 	if lay == nil {
 		return res
+	}
+	if centred && body.Wrap && dx == 0 {
+		// The lines wrap at the rectangle; the block then narrows to the
+		// widest of them and sits in the rectangle's middle.
+		if w := b.widestWrapped(body, lay, lw, lh, f) + maxRightMargin(body) + blockSlack; w < lw {
+			if narrow := b.layoutBody(body, w, lh, f); narrow != nil {
+				dx = float64(lw-w) / 2
+				lw, lay = w, narrow
+			}
+		}
 	}
 	h := lay.height
 	if body.Autofit == AutofitGrow && h > lh && !vertical {
@@ -461,6 +476,120 @@ func (b *builder) resolveJump(l *typeset.Link) bool {
 // blockSlack widens a block of lines as wide as its widest line, in
 // points, so that rounding never wraps that line.
 const blockSlack = 0.01
+
+// powerPointCentresBlock reports whether the block of lines of body sits
+// in the middle of its text rectangle as PowerPoint places a body anchored
+// at the centre (ECMA-376 Part 1, 21.1.2.1.1 bodyPr anchorCtr): the block
+// as wide as its widest line, once wrapped at the rectangle, each line
+// aligned in it; an unwrapped block wider than the rectangle overflows
+// both of its sides; vertical text alike, along its lines. Impress
+// centres only a horizontal block narrower than its rectangle, and
+// overflows an unwrapped one on the side its alignment leaves free.
+// Right-to-left text keeps Impress's placement: no page shows it.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: 70-point boxes of Calibri 18 with no insets, wrapped,
+//     anchorCtr: lines aligned left start where the widest wrapped line,
+//     centred, starts (41.8 for 40 + (70 - 66.5) / 2); lines aligned right
+//     end where it ends (368.7 for 368.2); centred lines stay centred; a
+//     vert270 line of 116 points in a 150-point box is centred along it.
+//   - libreoffice/pptx: oox/tdf151008_eaVertAnchor.pptx's unwrapped eaVert
+//     lines of 97 points in 56.7-point squares anchored at the centre
+//     overflow both ends equally (207.2 to 303.9 over 226.8 to 283.5).
+//   - libreoffice/pptx: oox/tdf149551_TextRot.pptx prints its wrapped,
+//     left-aligned Courier New lines centred on the wider one.
+func powerPointCentresBlock(doc *Document, body *TextBody) bool {
+	if doc == nil || doc.Fallback == text.FallbackLibreOffice {
+		return false
+	}
+	if body.HorizontalAnchor != HorizontalCenter || body.RightToLeft {
+		return false
+	}
+	for i := range body.Paragraphs {
+		if body.Paragraphs[i].RightToLeft {
+			return false
+		}
+	}
+	return true
+}
+
+// maxRightMargin returns the largest right margin of body's paragraphs,
+// at least 0.
+func maxRightMargin(body *TextBody) float64 {
+	m := 0.0
+	for i := range body.Paragraphs {
+		if v := body.Paragraphs[i].MarginRight; numeric.Finite(v) {
+			m = max(m, v)
+		}
+	}
+	return m
+}
+
+// widestWrapped returns the right edge of the widest line of body wrapped
+// at lw, as if every line started at the left: lay itself when every
+// paragraph is aligned at the start, else body laid out again with its
+// paragraphs aligned left.
+func (b *builder) widestWrapped(body *TextBody, lay *laidBody, lw, lh float64, f fit) float64 {
+	left := true
+	for i := range body.Paragraphs {
+		if a := body.Paragraphs[i].Align; a != css.AlignAuto && a != css.AlignStart && a != css.AlignLeft {
+			left = false
+			break
+		}
+	}
+	if left {
+		return b.widestLine(lay.frags)
+	}
+	nb := *body
+	nb.Paragraphs = make([]Paragraph, len(body.Paragraphs))
+	copy(nb.Paragraphs, body.Paragraphs)
+	for i := range nb.Paragraphs {
+		nb.Paragraphs[i].Align = css.AlignLeft
+	}
+	l := b.layoutBody(&nb, lw, lh, f)
+	if l == nil {
+		return lw
+	}
+	return b.widestLine(l.frags)
+}
+
+// widestLine returns the right edge of the furthest glyph of frags, a text
+// body laid out at the origin, white space left out: the width of its
+// widest line when every line starts at the left.
+func (b *builder) widestLine(frags []typeset.Fragment) float64 {
+	right := 0.0
+	var walk func([]typeset.Fragment, typeset.Matrix, int)
+	walk = func(frags []typeset.Fragment, m typeset.Matrix, depth int) {
+		if depth > maxGroupDepth {
+			return
+		}
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Text:
+				hs := 1.0
+				if v.HScale > 0 {
+					hs = v.HScale
+				}
+				for i, g := range v.Glyphs {
+					if strings.TrimSpace(g.Text) == "" {
+						continue
+					}
+					x := v.Origin.X + float64(g.X*hs) + b.outlines.Advance(v, i)
+					right = max(right, float64(m.A*x)+m.E)
+				}
+			case *typeset.Group:
+				gm := v.Transform
+				if gm == (typeset.Matrix{}) {
+					gm = typeset.Identity
+				}
+				walk(v.Content, then(gm, m), depth+1)
+			}
+		}
+	}
+	walk(frags, typeset.Identity, 0)
+	return right
+}
 
 // stretchText lays the body out unwrapped and scales it to fill the
 // rectangle inner, its font size to the height and its glyphs' width to

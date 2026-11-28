@@ -312,6 +312,57 @@ func TestText_KeepInWord(t *testing.T) {
 	}
 }
 
+// TestText_PowerPointCentresBlock checks that under PowerPoint's rules a
+// body anchored at the centre that wraps narrows to its widest line in the
+// middle of its rectangle, lines aligned left or right in it, and that an
+// unwrapped vertical line longer than its rectangle overflows both ends;
+// under Impress's rules the wrapped block keeps the rectangle's width and
+// the vertical line overflows past its end.
+func TestText_PowerPointCentresBlock(t *testing.T) {
+	a20 := arial(20)
+	wide := widthOf(t, "bbbbbbbbb", a20)
+	wrapped := func(fallback text.Fallback, align css.TextAlign) *typeset.Page {
+		p := para("Aa bbbbbbbbb cc", a20)
+		p.Align = align
+		sh := box(100, 100, 120, 200, p)
+		sh.Text.HorizontalAnchor = HorizontalCenter
+		d := deck(&Slide{Shapes: []*Shape{sh}})
+		d.Fallback = fallback
+		return convert(t, d, office.Options{}).Pages[0]
+	}
+	if wide >= 120 {
+		t.Fatalf("the widest line is %v points, want it narrower than the box", wide)
+	}
+	start := 100 + (120-wide)/2
+	if got := find(t, wrapped(text.FallbackFontconfig, css.AlignLeft), "b").x; !near(got, start, 0.5) {
+		t.Errorf("left-aligned widest line at %v under PowerPoint's rules, want %v", got, start)
+	}
+	pg := wrapped(text.FallbackFontconfig, css.AlignRight)
+	if got := find(t, pg, "b").x; !near(got, start, 0.5) {
+		t.Errorf("right-aligned widest line at %v under PowerPoint's rules, want %v", got, start)
+	}
+	if got, want := find(t, pg, "cc").x+widthOf(t, "cc", a20), start+wide; !near(got, want, 0.5) {
+		t.Errorf("right-aligned last line ends at %v under PowerPoint's rules, want %v", got, want)
+	}
+	if got := find(t, wrapped(text.FallbackLibreOffice, css.AlignLeft), "b").x; !near(got, 100, 0.5) {
+		t.Errorf("left-aligned widest line at %v under Impress's rules, want 100", got)
+	}
+	vertical := func(fallback text.Fallback) float64 {
+		sh := box(100, 100, 50, 50, para("Long line here", a20))
+		sh.Text.Wrap, sh.Text.Vertical, sh.Text.HorizontalAnchor = false, css.VerticalRL, HorizontalCenter
+		d := deck(&Slide{Shapes: []*Shape{sh}})
+		d.Fallback = fallback
+		return find(t, convert(t, d, office.Options{}).Pages[0], "Long").y
+	}
+	long := widthOf(t, "Long line here", a20)
+	if got, want := vertical(text.FallbackFontconfig), 100+(50-long)/2; !near(got, want, 0.5) {
+		t.Errorf("vertical line starts at %v under PowerPoint's rules, want %v", got, want)
+	}
+	if got := vertical(text.FallbackLibreOffice); !near(got, 100, 0.5) {
+		t.Errorf("vertical line starts at %v under Impress's rules, want 100", got)
+	}
+}
+
 // TestText_NonNegativeAdvance checks that under PowerPoint's rules a
 // spacing of -4000 points, past the cap, sets every glyph of "ABC" where
 // the first is, where under Impress's rules the spacing past the cap is
