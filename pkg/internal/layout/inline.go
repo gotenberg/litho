@@ -257,6 +257,9 @@ func (p *ifcPara) allowed(i int) bool {
 		// themselves.
 		return false
 	}
+	if p.atomicBesideNoBreakSpace(i, a, b) {
+		return true
+	}
 	if p.p.Break(i) == text.NoBreak {
 		// break-all on either side opens the boundary between two letters,
 		// as at the edge of a span that sets it.
@@ -275,6 +278,36 @@ func (p *ifcPara) allowed(i int) bool {
 		return false
 	}
 	return !p.keptTogether(i, a, b)
+}
+
+// atomicBesideNoBreakSpace reports, under [Options.BrowserRules], the
+// boundary between a no-break space and an atomic inline, on either side:
+// CSS Text 3, 5.1 opens a soft wrap opportunity before and after each
+// atomic inline "even when adjacent to a character that would normally
+// suppress them, including U+00A0 NO-BREAK SPACE", where UAX #14 keeps
+// the space glued (LB12). Chromium opens it beside U+00A0 alone, and not
+// beside the other glue characters the clause covers (U+202F, U+2007,
+// U+2060, U+034F), on screen and in print alike: litho follows it. An
+// atomic inline that stands for a character in line breaking (a ruby, a
+// sticky image) breaks as that character.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 breaks "AB",
+//     U+00A0 and an inline-block or an img in a 100px line before the
+//     atomic inline, and an inline-block, U+00A0 and "CD" after it, the
+//     space in a span or not; it keeps U+202F, U+2007 and U+2060 glued to
+//     an inline-block on either side.
+//   - wpt: css/css-text/line-breaking/line-breaking-atomic-001 and -002.
+func (p *ifcPara) atomicBesideNoBreakSpace(i int, a, b rune) bool {
+	if !p.browser {
+		return false
+	}
+	atomic := func(j int) bool {
+		r := p.p.RunOf(j)
+		return p.infos[r].kind == runAtomic && (p.runs[r].Object == nil || p.runs[r].Object.BreakAs == 0)
+	}
+	return a == noBreakSpace && atomic(i) || b == noBreakSpace && atomic(i-1)
 }
 
 // keptTogether reports a boundary between two letters or digits that

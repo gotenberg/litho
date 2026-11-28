@@ -307,3 +307,27 @@ func TestLineBreak_WordKeepsASolidus(t *testing.T) {
 		})
 	}
 }
+
+// TestLineBreak_AtomicBesideNoBreakSpace breaks a line between U+00A0 and
+// an inline-block on either side under browser rules (CSS Text 3, 5.1, as
+// Chromium applies it to U+00A0 alone), and keeps U+202F glued.
+func TestLineBreak_AtomicBesideNoBreakSpace(t *testing.T) {
+	ib := func() *Node { return el(sty(display(css.InlineBlock), width(20), height(10))) }
+	for _, tc := range []struct {
+		name  string
+		kids  func(*css.Style) []*Node
+		lines int
+	}{
+		{"before the atomic inline", func(st *css.Style) []*Node { return []*Node{txt(st, "AB "), ib()} }, 2},
+		{"after the atomic inline", func(st *css.Style) []*Node { return []*Node{ib(), txt(st, " CD")} }, 2},
+		{"narrow no-break space", func(st *css.Style) []*Node { return []*Node{txt(st, "AB "), ib()} }, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := sty(width(30))
+			rb := boxesWith(t, doc(el(st, tc.kids(st)...)), Options{Page: page(200, 200), BrowserRules: true})
+			if got := len(kid(t, rb, 0, 0).lines); got != tc.lines {
+				t.Errorf("%d lines, want %d", got, tc.lines)
+			}
+		})
+	}
+}
