@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-28T02:06:06Z",
+  "captured_at": "2026-11-28T09:59:09Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -37188,8 +37188,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 242,
-          "mismatched": 27,
+          "matched": 244,
+          "mismatched": 25,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37687,12 +37687,12 @@
               "text_f1": 1
             },
             "oox/tdf125582_TextOnCircle.pptx": {
-              "layout": 0,
+              "layout": 0.9023,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.5333
+              "strict": 1,
+              "text_f1": 0.2857
             },
             "oox/tdf131082.pptx": {
               "layout": 0.9919,
@@ -38516,7 +38516,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 1
             },
             "sd/smartart-autofit-sync.pptx": {
               "layout": 0.993,
@@ -38748,7 +38748,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5
+              "text_f1": 1
             },
             "sd/smartart-rotation2.pptx": {
               "layout": 0.9958,
@@ -39135,12 +39135,12 @@
               "text_f1": 1
             },
             "sd/tdf116350-texteffects.pptx": {
-              "layout": 0.5294,
+              "layout": 0.9535,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2647
+              "strict": 1,
+              "text_f1": 0.1705
             },
             "sd/tdf118776.pptx": {
               "layout": 1,
@@ -39263,12 +39263,12 @@
               "text_f1": 1
             },
             "sd/tdf125573_FontWorkScaleX.pptx": {
-              "layout": 0.6323,
+              "layout": 0.8279,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8065
+              "text_f1": 0.7182
             },
             "sd/tdf126234.pptx": {
               "layout": 0.9505,
@@ -106098,8 +106098,8 @@
     "poi/pptx": {
       "features": {
         "diff": {
-          "matched": 38,
-          "mismatched": 4,
+          "matched": 40,
+          "mismatched": 2,
           "skipped": 10,
           "metrics": {
             "convert_error": 0,
@@ -106386,7 +106386,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 1
             },
             "slideshow/smartart-simple.pptx": {
               "layout": 0.9695,
@@ -106394,7 +106394,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3759
+              "text_f1": 1
             },
             "slideshow/table-with-no-theme.pptx": {
               "layout": 0.9846,
