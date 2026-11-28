@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -787,6 +788,32 @@ func TestConvert_ExcelWrappedPitch(t *testing.T) {
 		one, two := find(t, pg, "alpha "), find(t, pg, "beta ")
 		if got := one.y - two.y; !near(got, tc.want, 1e-6) {
 			t.Errorf("Calibri %v: wrapped lines %.3f apart, want %.3f", tc.size, got, tc.want)
+		}
+	}
+}
+
+// TestConvert_ExcelTopLinesShown locks the wrapped lines Excel writes of a
+// top-aligned cell: those that start inside the cell, the first alone in a
+// standard row, every one in a row tall enough.
+func TestConvert_ExcelTopLinesShown(t *testing.T) {
+	st := &Style{Font: Font{Families: []string{"Carlito"}, Size: 11}, Align: Alignment{Wrap: true, Vertical: VTop}}
+	for _, tc := range []struct {
+		name   string
+		height float64
+		want   []string
+	}{
+		{"standard row", 14.52, []string{"alpha "}},
+		{"two rows", 29.04, []string{"alpha ", "beta "}},
+		{"tall row", 200, []string{"alpha ", "beta ", "gamma"}},
+	} {
+		sh := &Sheet{Name: "S", DefaultColumnWidth: 44, Rows: []Row{
+			{Index: 0, Height: tc.height, CustomHeight: true, Cells: []Cell{textCell(0, "alpha beta gamma", st)}},
+			{Index: 1, Height: 14.52, CustomHeight: true, Cells: []Cell{textCell(0, "zeta", nil)}},
+		}}
+		got := texts(convert(t, excelDoc(sh), office.Options{}).Pages[0])
+		got = slices.DeleteFunc(got, func(s string) bool { return s == "zeta" })
+		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }

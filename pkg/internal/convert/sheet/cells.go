@@ -545,6 +545,9 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	// sheet's direction as its paragraph's base direction, as Calc's
 	// cells take the direction of the sheet above them ([grid.mirrored]).
 	para := b.paragraph(&d, f, pitch, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft || rg.rtl})
+	if b.doc.ExcelRules && d.wrap && !rotated && st.Align.Vertical == VTop {
+		b.keepShownLines(para, u.h-padTop-shift, pitch)
+	}
 	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: padTop, bottom: padBottom, vertical: st.Align.Vertical, shift: shift}
 	var inner *css.Style
 	if !rotated {
@@ -584,6 +587,28 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		para.Role = "Link"
 	}
 	return n, cx0, cx1
+}
+
+// keepShownLines keeps, of the wrapped lines of the paragraph para set
+// pitch points apart from the top of a room h points tall, those that
+// start inside it: Excel writes no line of a top-aligned cell that starts
+// below the cell, where the cell's clip would hide it whole.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: real_invoice writes the first of the two and three
+//     wrapped lines of its top-aligned descriptions and rich_text the first
+//     of three, in rows of 14.52 points, and no word of the others.
+func (b *pageBuilder) keepShownLines(para *layout.Node, h, pitch float64) {
+	if !numeric.PositiveFinite(pitch) || !numeric.Finite(h) {
+		return
+	}
+	// A page is at most maxSide points tall: more lines than it holds a
+	// hundredth of a point apart clamp nothing.
+	lines := min(math.Floor(max(h, 0)/max(pitch, 0.01)-1e-9), maxSide*100)
+	st := *para.Style
+	st.LineClamp.MaxLines = 1 + max(int(lines), 0) // fits int: at most maxSide*100
+	para.Style = &st
 }
 
 // excelScriptShift returns how far down Excel moves the text of a cell
