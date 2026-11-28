@@ -63,13 +63,16 @@ type reader struct {
 	draw          *odf.DrawStyles
 	data          *odf.DataStyles
 	builtin       *odf.Styles
-	warnings      []typeset.Warning
-	warned        map[string]bool
-	err           error
-	steps         int
-	shapes        int
-	paras         int
-	pics          map[string]*picResult
+	// builtinPres holds the built-in presentation styles, nil until a
+	// placeholder needs them.
+	builtinPres *odf.Styles
+	warnings    []typeset.Warning
+	warned      map[string]bool
+	err         error
+	steps       int
+	shapes      int
+	paras       int
+	pics        map[string]*picResult
 	// layers maps a draw:layer name to its draw:display (ODF 1.3, Part 3,
 	// 10.2.3 and 19.153): always, screen, printer or none.
 	layers map[string]string

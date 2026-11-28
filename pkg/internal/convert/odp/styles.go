@@ -22,11 +22,52 @@ const builtinXML = `<office:document-styles xmlns:office="` + odf.NSOffice + `" 
 	`<style:text-properties style:use-window-font-color="true" fo:font-family="'Liberation Sans'" fo:font-size="18pt" fo:font-style="normal" fo:font-weight="normal" style:text-underline-style="none" style:text-line-through-style="none" style:font-family-asian="'Noto Sans CJK SC'" style:font-family-complex="'Noto Sans Devanagari'"/></style:style>` +
 	`</office:styles></office:document-styles>`
 
+// builtinPresentationXML holds the presentation styles Impress makes for
+// a master page whose own a file leaves out (SdStyleSheetPool::
+// CreateLayoutStyleSheets), named builtinPrefix plus a class: no fill, no
+// line and no inset, the title at 44 points and the subtitle at 32, both
+// centred, the outline levels at 32, 28, 24 and 20 points with 0.5, 0.4,
+// 0.3, 0.2 and 0.1 cm above them. They are parsed when a placeholder
+// first needs them.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf96708.odp's second slide, whose master has no
+//     presentation style, prints its title and subtitle at 44 points,
+//     centred on the frame both ways, and its outline levels at 32, 28,
+//     24 and 20 points, 0.4, 0.3 and 0.2 cm apart, from the frame's top
+//     left corner, unfilled. The outline's first level's 0.5 cm, which
+//     the first paragraph does not take, and the levels past the fourth
+//     are not measured.
+const builtinPresentationXML = `<office:document-styles xmlns:office="` + odf.NSOffice + `" xmlns:style="` + odf.NSStyle +
+	`" xmlns:draw="` + odf.NSDraw + `" xmlns:fo="` + odf.NSFO + `"><office:styles>` +
+	`<style:style style:name="builtin-title" style:family="presentation"><style:graphic-properties draw:stroke="none" draw:fill="none" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm" draw:textarea-vertical-align="middle"/><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-family="'Liberation Sans'" style:use-window-font-color="true" fo:font-size="44pt"/></style:style>` +
+	`<style:style style:name="builtin-subtitle" style:family="presentation"><style:graphic-properties draw:stroke="none" draw:fill="none" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm" draw:textarea-vertical-align="middle"/><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-family="'Liberation Sans'" style:use-window-font-color="true" fo:font-size="32pt"/></style:style>` +
+	`<style:style style:name="builtin-notes" style:family="presentation"><style:graphic-properties draw:stroke="none" draw:fill="none" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/><style:text-properties fo:font-family="'Liberation Sans'" style:use-window-font-color="true" fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline1" style:family="presentation"><style:graphic-properties draw:stroke="none" draw:fill="none" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/><style:paragraph-properties fo:margin-top="0.5cm"/><style:text-properties fo:font-family="'Liberation Sans'" style:use-window-font-color="true" fo:font-size="32pt"/></style:style>` +
+	`<style:style style:name="builtin-outline2" style:family="presentation" style:parent-style-name="builtin-outline1"><style:paragraph-properties fo:margin-top="0.4cm"/><style:text-properties fo:font-size="28pt"/></style:style>` +
+	`<style:style style:name="builtin-outline3" style:family="presentation" style:parent-style-name="builtin-outline2"><style:paragraph-properties fo:margin-top="0.3cm"/><style:text-properties fo:font-size="24pt"/></style:style>` +
+	`<style:style style:name="builtin-outline4" style:family="presentation" style:parent-style-name="builtin-outline3"><style:paragraph-properties fo:margin-top="0.2cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline5" style:family="presentation" style:parent-style-name="builtin-outline4"><style:paragraph-properties fo:margin-top="0.1cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline6" style:family="presentation" style:parent-style-name="builtin-outline5"><style:paragraph-properties fo:margin-top="0.1cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline7" style:family="presentation" style:parent-style-name="builtin-outline6"><style:paragraph-properties fo:margin-top="0.1cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline8" style:family="presentation" style:parent-style-name="builtin-outline7"><style:paragraph-properties fo:margin-top="0.1cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`<style:style style:name="builtin-outline9" style:family="presentation" style:parent-style-name="builtin-outline8"><style:paragraph-properties fo:margin-top="0.1cm"/><style:text-properties fo:font-size="20pt"/></style:style>` +
+	`</office:styles></office:document-styles>`
+
+// builtinPrefix starts the names of the built-in presentation styles.
+const builtinPrefix = "builtin-"
+
 // builtinStyles parses [builtinXML] under ctx. Only ctx's error can fail
 // the parse: the styles are then empty, and the conversion stops at its
 // next check of ctx.
 func builtinStyles(ctx context.Context) *odf.Styles {
-	root, err := odf.ParseXML(ctx, []byte(builtinXML))
+	return parseStyles(ctx, builtinXML)
+}
+
+// parseStyles parses a document of styles held as a constant.
+func parseStyles(ctx context.Context, xml string) *odf.Styles {
+	root, err := odf.ParseXML(ctx, []byte(xml))
 	if err != nil {
 		return odf.NewStyles(&odf.Package{})
 	}
@@ -168,6 +209,9 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 		ss.outline = make([][]layer, maxOutlineLevels)
 		for lv := range maxOutlineLevels {
 			styles := r.styles.Chain(odf.ScopeStyles, family, prefix+"outline"+string(rune('1'+lv)))
+			if prefix == builtinPrefix {
+				styles = r.presentationBuiltins().Chain(odf.ScopeStyles, family, prefix+"outline"+string(rune('1'+lv)))
+			}
 			if len(styles) == 0 {
 				ss.outline[lv] = ss.text
 				continue
@@ -190,8 +234,10 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 // presentation style for a placeholder of class (title, subtitle,
 // outline, notes) whose own presentation style chain holds no common
 // style: Impress bases every presentation object on its master's style
-// of its class, "<master>-title", "-subtitle", "-outline1" or "-notes".
-// nil when the chain reaches a common style already.
+// of its class, "<master>-title", "-subtitle", "-outline1" or "-notes",
+// and on its built-in one when the master has none
+// ([builtinPresentationXML]). nil
+// when the chain reaches a common style already.
 //
 // # Corpus evidence
 //
@@ -207,7 +253,10 @@ func (r *reader) placeholderBase(chain []*odf.Style, class string, pc *pageCtx) 
 			return nil
 		}
 	}
-	return r.styles.Chain(odf.ScopeStyles, odf.FamilyPresentation, pc.mp.Name+"-"+suffix)
+	if base := r.styles.Chain(odf.ScopeStyles, odf.FamilyPresentation, pc.mp.Name+"-"+suffix); len(base) > 0 {
+		return base
+	}
+	return r.presentationBuiltins().Chain(odf.ScopeStyles, odf.FamilyPresentation, builtinPrefix+suffix)
 }
 
 // levelLayers returns the layers a paragraph of list level lv, 0 for the
@@ -217,4 +266,13 @@ func (ss *shapeStyle) levelLayers(lv int) []layer {
 		return ss.text
 	}
 	return ss.outline[min(max(lv, 0), maxOutlineLevels-1)]
+}
+
+// presentationBuiltins returns [builtinPresentationXML] parsed, once a
+// conversion.
+func (r *reader) presentationBuiltins() *odf.Styles {
+	if r.builtinPres == nil {
+		r.builtinPres = parseStyles(r.ctx, builtinPresentationXML)
+	}
+	return r.builtinPres
 }

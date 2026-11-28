@@ -266,6 +266,33 @@ func TestRead_PlaceholderBaseStyle(t *testing.T) {
 	}
 }
 
+// TestRead_BuiltinPresentationStyles checks that a placeholder whose
+// master has no presentation style of its class takes Impress's built-in
+// one: the title centred at 44 points, the outline's second level at 28
+// points 0.4 cm below the first, neither filled nor inset.
+func TestRead_BuiltinPresentationStyles(t *testing.T) {
+	f := flat{
+		auto:   `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="28cm" fo:page-height="15.75cm"/></style:page-layout>`,
+		master: `<style:master-page style:name="M" style:page-layout-name="pm1"/>`,
+		body: `<draw:page draw:master-page-name="M"><draw:frame presentation:class="title" presentation:style-name="none" svg:width="20cm" svg:height="3cm"><draw:text-box><text:p>T</text:p></draw:text-box></draw:frame>` +
+			`<draw:frame presentation:class="outline" presentation:style-name="none" svg:width="20cm" svg:height="8cm"><draw:text-box><text:list><text:list-item><text:p>A</text:p><text:list><text:list-item><text:p>B</text:p></text:list-item></text:list></text:list-item></text:list></draw:text-box></draw:frame></draw:page>`,
+	}
+	doc, _ := read(t, f.bytes())
+	title, outline := doc.Slides[0].Shapes[0], doc.Slides[0].Shapes[1]
+	if p := title.Text.Paragraphs[0]; p.Align != css.AlignCenter || !near(p.Runs[0].Style.Size, 44) {
+		t.Errorf("title = align %v size %v, want centred at 44", p.Align, p.Runs[0].Style.Size)
+	}
+	if title.Fill.Kind != slides.FillNone || outline.Fill.Kind != slides.FillNone {
+		t.Errorf("fills = %v, %v, want none", title.Fill, outline.Fill)
+	}
+	if b := outline.Text.Paragraphs[1]; !near(b.Runs[0].Style.Size, 28) || !near(b.SpaceBefore, cm(0.4)) {
+		t.Errorf("second level = size %v before %v, want 28 and %v", b.Runs[0].Style.Size, b.SpaceBefore, cm(0.4))
+	}
+	if in := outline.Text.Insets; in != [4]float64{} {
+		t.Errorf("outline insets = %+v, want none", in)
+	}
+}
+
 func TestRead_ParagraphSpacingTabsAndRise(t *testing.T) {
 	t.Parallel()
 	f := flat{
