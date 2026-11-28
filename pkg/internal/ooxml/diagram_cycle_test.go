@@ -7,8 +7,8 @@ import (
 )
 
 // TestDiagramCycle states Office's cycle (ECMA-376 Part 1, 21.4.2.1 alg
-// cycle): nodes of the size the constraints set, neighbours their width
-// plus sibSp apart along the chord, a centre node's ring at the centre's
+// cycle): nodes of the size the constraints set, neighbours sibSp apart
+// between their outlines along the line of their centres, a centre node's ring at the centre's
 // half width, sp and the node's half width when that is farther, the block
 // scaled to the box and centred.
 func TestDiagramCycle(t *testing.T) {
@@ -63,6 +63,22 @@ func TestDiagramCycle(t *testing.T) {
 			texts: []string{"a", "b", "c"},
 			w:     4800, h: 3200,
 			want: []string{"background rect 0,0 4800x3200", "node rect 1600,0 1599x1599", "node rect 2523,1599 1599x1599", "node rect 676,1600 1599x1599"},
+		},
+		{
+			// Three squares at sibSp 0.5: along the line of centres, 30
+			// degrees off the level, a box reaches 0.5774 widths, so the
+			// centres stand 1.6547 widths apart, 0.9553 widths from the
+			// centre (the chord rule's 0.866 would measure the gap between
+			// circles). The block, 2.433 widths tall, fills the box: a node is
+			// 1315 wide, its neighbours 1884 down, 1088 to either side.
+			name: "the gap between boxes measured along the line of centres",
+			layout: `<dgm:alg type="cycle"/><dgm:shape/><dgm:constrLst>` +
+				`<dgm:constr type="w" for="ch" ptType="node" refType="w"/>` +
+				`<dgm:constr type="sibSp" refType="w" refFor="ch" refPtType="node" fact="0.5"/></dgm:constrLst>` +
+				nodeList("rect", circle),
+			texts: []string{"a", "b", "c"},
+			w:     4800, h: 3200,
+			want: []string{"background rect 0,0 4800x3200", "node rect 1742,0 1315x1315", "node rect 2830,1884 1315x1315", "node rect 654,1884 1315x1315"},
 		},
 	}
 	for _, c := range cases {

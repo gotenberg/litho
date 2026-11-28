@@ -15,9 +15,10 @@ import (
 //   - Each node takes the width and height the cycle's constraints set for
 //     its name or point type (21.4.2.6 constr), then those its own layout
 //     node sets from its other side (a circle's h refType w).
-//   - Two neighbouring nodes stand their width plus sibSp apart, centre to
-//     centre, along the chord between them, and never closer than the
-//     radius at which their boxes just stop overlapping ([cycleApart]).
+//   - Two neighbouring nodes stand sibSp apart along the chord between
+//     their centres, measured between their outlines there ([cycleGap]),
+//     and never closer than the radius at which their boxes just stop
+//     overlapping ([cycleApart]).
 //     With a first node in the centre (ctrShpMap fNode), a ring node
 //     stands the centre node's half width, sp and its own half width from
 //     the centre when that is farther.
@@ -29,9 +30,10 @@ import (
 //
 // The standard gives neither the radius nor the scaling: those are read
 // from Office's pages. A cycle whose constraints size no node keeps the
-// quarter-box layout of [cycle]: no page shows one. Twelve and sixteen
-// turned nodes stand farther out than their boxes need, by a rule the
-// pages do not settle.
+// quarter-box layout of [cycle]: no page shows one. Turned nodes at a
+// sibSp other than 0 follow a rule the pages do not settle: three of them
+// keep where their boxes touch at -0.35 and 0.5, twelve at 0.5 and sixteen
+// at -0.1 stand where the gap rule of upright nodes puts them.
 //
 // # Corpus evidence
 //
@@ -54,12 +56,17 @@ import (
 //     boxes of two neighbours just touch (the chord rule gives 0.375 and
 //     0.577), the block 319.7 points tall. Turned along the path, at
 //     sibSp -0.35, 0 and 0.5, the same 0.667.
-//   - probe, pptx: arrow5's four, six and eight square arrows turned along
-//     the path at sibSp 0 stand 1.0, 1.157 and 1.414 widths from the
-//     centre, where their upright boxes just touch (1, 1.155, 1.414), the
-//     block 319.7 points tall; twelve stand 2.757 widths out (the boxes
-//     need 2), and libreoffice/pptx sd/smartart-autoTxRot's sixteen at
-//     sibSp -0.1 stand 2.83 (the boxes need 2.61).
+//   - probe, pptx: arrow5's four, six, eight, ten, twelve and sixteen
+//     square arrows turned along the path at sibSp 0 stand 1.0, 1.157,
+//     1.414, 2.017, 2.757 and 3.081 widths from the centre, where their
+//     upright boxes just touch (1, 1.155, 1.414, 2, 2.732 and 3.086, set by
+//     the neighbours 30 and 60 degrees round for twelve), the block 319.7
+//     points tall; twelve at sibSp 0.5 stand about 3.73 widths out, and
+//     libreoffice/pptx sd/smartart-autoTxRot's sixteen at sibSp -0.1 stand
+//     2.83, where the boxes stand 0.5 and -0.1 widths apart along the line
+//     of centres (3.70, 2.83).
+//   - probe, pptx: arrow5's three upright arrows at sibSp 0.5 stand 0.959
+//     widths out, three upright ellipses 0.869 ([cycleGap]).
 func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 	if s.W <= 0 || s.H <= 0 {
 		return false
@@ -120,11 +127,8 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 		step = spanAng / float64(n)
 	}
 	var radius float64
-	if n > 1 && !turned {
-		half := math.Abs(step) / 2 * math.Pi / 180
-		if sin := detmath.Sin(half); sin > 0 {
-			radius = (nodeW + props[""]["sibSp"]) / float64(2*sin)
-		}
+	if !turned {
+		radius = e.cycleGap(ring, sizeOf, stAng, step, props[""]["sibSp"])
 	}
 	radius = max(radius, e.cycleApart(ring, sizeOf, stAng, step))
 	if centre != nil && n > 0 {
@@ -194,6 +198,68 @@ func (e *engine) officeCycle(a *DiagramAtom, s *DiagramShape) bool {
 		k.Rot = trunc((connAngle + ang) * perDegree)
 	}
 	return true
+}
+
+// cycleGap returns the radius at which every two neighbouring ring nodes,
+// each taken upright at its angle, stand sibSp apart along the line
+// between their centres, measured between their outlines on that line:
+// an ellipse's own outline, the box of any other shape. The last node
+// neighbours the first on a full circle. One pass over the ring.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: arrow5's three upright down arrows at sibSp 0.5 of the
+//     node width stand 0.959 widths from the centre, their boxes 0.5 widths
+//     apart along the line of centres (0.955); three upright ellipses at
+//     0.5 stand 0.869 widths out, the circles 0.5 apart (0.866).
+func (e *engine) cycleGap(ring []*DiagramShape, sizeOf func(*DiagramShape) (float64, float64), stAng, step, sibSp float64) float64 {
+	n := len(ring)
+	if n < 2 {
+		return 0
+	}
+	pairs := n - 1
+	if math.Abs(float64(step*float64(n))) >= 360 {
+		pairs = n
+	}
+	reach := func(k *DiagramShape, c, s float64) float64 {
+		w, h := sizeOf(k)
+		a, b := w/2, h/2
+		if !(a > 0) || !(b > 0) {
+			return 0
+		}
+		if k.Preset() == "ellipse" {
+			return 1 / math.Sqrt(float64(c*c/float64(a*a))+float64(s*s/float64(b*b)))
+		}
+		r := math.Inf(1)
+		if c > apartEpsilon {
+			r = a / c
+		}
+		if s > apartEpsilon {
+			r = min(r, b/s)
+		}
+		return r
+	}
+	var r float64
+	for i := range pairs {
+		if e.step() {
+			break
+		}
+		j := (i + 1) % n
+		ai := float64(stAng+float64(float64(i)*step)) * math.Pi / 180
+		aj := float64(stAng+float64(float64(j)*step)) * math.Pi / 180
+		dx := detmath.Sin(aj) - detmath.Sin(ai)
+		dy := detmath.Cos(ai) - detmath.Cos(aj)
+		d := detmath.Hypot(dx, dy)
+		if !(d > apartEpsilon) {
+			continue
+		}
+		c, s := math.Abs(dx/d), math.Abs(dy/d)
+		need := float64(reach(ring[i], c, s)+reach(ring[j], c, s)+sibSp) / d
+		if numeric.Finite(need) {
+			r = max(r, need)
+		}
+	}
+	return r
 }
 
 // cycleApart returns the smallest radius at which no two neighbouring
