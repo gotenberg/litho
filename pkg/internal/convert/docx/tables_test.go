@@ -747,3 +747,31 @@ func TestTables_FloatingBreaks(t *testing.T) {
 		}
 	}
 }
+
+// TestTables_FloatingDropsPageBreaks locks that a page break in a
+// floating table's cell (17.3.3.1 br, 17.4.58 tblpPr) breaks nothing:
+// the text after it runs on in its line, where a table in the flow
+// breaks there.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo68607.docx: Word prints the cells of
+//     a floating table whose runs hold five page breaks with the words
+//     on each side of a break joined on one line, "describe thefeeling".
+func TestTables_FloatingDropsPageBreaks(t *testing.T) {
+	t.Parallel()
+	cell := `<w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>before</w:t></w:r><w:r><w:br w:type="page"/><w:t>after</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>`
+	for _, tc := range []struct {
+		name, tblPr string
+		joined      bool
+	}{
+		{"floating", `<w:tblpPr w:tblpY="200"/>`, true},
+		{"in the flow", ``, false},
+	} {
+		doc := convertBytes(t, docx(t, `<w:tbl><w:tblPr>`+tc.tblPr+`</w:tblPr>`+cell, nil), office.Options{})
+		joined := len(doc.Pages) == 1 && strings.Contains(pageText(doc.Pages[0]), "before after")
+		if joined != tc.joined {
+			t.Errorf("%s: %d pages, text %q; want the words joined %v", tc.name, len(doc.Pages), docText(doc), tc.joined)
+		}
+	}
+}

@@ -156,6 +156,9 @@ type document struct {
 	// inCell counts the table cells being built, whose paragraphs'
 	// frame properties are ignored.
 	inCell int
+	// inFloating counts the floating tables (17.4.58) being built, whose
+	// page breaks are dropped ([document.run]).
+	inFloating int
 	// under is the shading the paragraph being built lies on: its own
 	// (17.3.1.31 shd), else its table cell's (17.4.32 shd), nil for
 	// none; it decides the colour of automatic text ([autoTextBackground]).

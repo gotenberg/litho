@@ -1466,6 +1466,11 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		case c.Is(w, "br"):
 			switch attrOr(c, "type") {
 			case "page", "column":
+				if d.inFloating > 0 && attrOr(c, "type") == "page" {
+					// Word sets a floating table's text past a page
+					// break as if there were none.
+					break
+				}
 				emit()
 				sink.pageBreak(attrOr(c, "type") == "column")
 			default:

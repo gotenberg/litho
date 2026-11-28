@@ -632,6 +632,10 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	// its column. One no paragraph follows floats too: Word places it as
 	// one the paragraph after it anchors.
 	floating := tp.floating != nil
+	if floating {
+		d.inFloating++
+		defer func() { d.inFloating-- }()
+	}
 	anchored := floating && d.pageAnchors() && !d.columned
 	banded := floating && !anchored && d.inMargin && d.nested == 0 && bandTable(tp.floating)
 	if floating && !anchored && !banded {
