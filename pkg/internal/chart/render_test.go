@@ -567,6 +567,40 @@ func TestRenderPart_WritesTheTextThatReachesThePage(t *testing.T) {
 	}
 }
 
+// TestRenderPart_CountsTheSpacesALineEndsWith locks that a wrapped line
+// whose letters end before the part that shows, and whose ending space
+// reaches it, is written, as Excel writes it.
+func TestRenderPart_CountsTheSpacesALineEndsWith(t *testing.T) {
+	c := barChart(1, 2)
+	// Twenty 14 pt Ahem squares and a space, then a second line.
+	first := strings.Repeat("A", 20)
+	c.Title = &Title{Text: first + " BBBBB", Style: TextStyle{Size: 14, Color: typeset.Black}}
+	end := math.NaN()
+	walk(Render(context.Background(), ahem(t), c, chartRect), 0, func(fr typeset.Fragment, _ int) {
+		if tx, ok := fr.(*typeset.Text); ok && len(tx.Glyphs) > 0 && tx.Glyphs[0].Text == "A" {
+			end = tx.Origin.X + 20*14
+		}
+	})
+	if math.IsNaN(end) {
+		t.Fatal("no first title line")
+	}
+	written := func(x float64) bool {
+		shown := typeset.Rect{X: x, Y: chartRect.Y, Width: 400, Height: chartRect.Height}
+		for _, s := range texts(RenderPart(context.Background(), ahem(t), c, chartRect, shown)) {
+			if strings.HasPrefix(s, first) {
+				return true
+			}
+		}
+		return false
+	}
+	if !written(end + 7) {
+		t.Error("first line left out where its space reaches the part that shows")
+	}
+	if written(end + 15) {
+		t.Error("first line written where its space ends before the part that shows")
+	}
+}
+
 // TestRender_LabelSeparatorByRules checks the separator of a data label
 // that names none: a comma under Office's rules, a semicolon under
 // LibreOffice's, a line break before a percentage shown without the

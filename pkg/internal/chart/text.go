@@ -47,6 +47,9 @@ type block struct {
 	// shown, when not nil, is the part of the page that shows: a line
 	// whose box does not reach it is not drawn.
 	shown *typeset.Rect
+	// hang, set with shown, is the advance of the spaces each line ends
+	// with, which its box takes for the test against shown.
+	hang []float64
 }
 
 // rotated returns the block's bounding box size once rotated.
@@ -95,6 +98,12 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	}
 	b := &block{lines: lines, style: st, shown: rd.shown}
 	b.style.Size = ts.Size
+	if rd.shown != nil {
+		b.hang = make([]float64, len(lines))
+		for i, l := range lines {
+			b.hang[i] = rd.hangingAdvance(l, ts)
+		}
+	}
 	for _, l := range lines {
 		b.w = max(b.w, l.Width)
 		h := lineHeight(ts.Size)
@@ -105,6 +114,49 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 		b.h += h
 	}
 	return b
+}
+
+// hangingAdvance returns the advance of the spaces that end the line l,
+// laid out in ts: the width they add between two letters. Excel counts
+// them in the box of a line it tests against a page's edge
+// ([RenderPart]).
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/external_str_ref.xlsx's 18 pt bold title
+//     wraps after "9A ", and Excel writes that line, its space included,
+//     on page 2, where the line ends 3.7 pt inside the clip with the
+//     space and would end 0.3 pt short of it without.
+func (rd *renderer) hangingAdvance(l text.Line, ts text.Style) float64 {
+	var spaces []rune
+	for i := len(l.Runs) - 1; i >= 0; i-- {
+		gs := l.Runs[i].Glyphs
+		j := len(gs) - 1
+		for ; j >= 0; j-- {
+			t := gs[j].Text
+			if t == "" {
+				continue
+			}
+			if strings.TrimSpace(t) != "" {
+				break
+			}
+			spaces = append(spaces, []rune(t)...)
+		}
+		if j >= 0 {
+			break
+		}
+	}
+	if len(spaces) == 0 {
+		return 0
+	}
+	width := func(s string) float64 {
+		ls, _, err := rd.fonts.Layout(rd.ctx, []text.Run{{Text: s, Style: ts}}, 1e4, text.Options{Whitespace: text.Preserve})
+		if err != nil || len(ls) != 1 {
+			return 0
+		}
+		return ls[0].Width
+	}
+	return math.Max(0, width("x"+string(spaces)+"x")-width("xx"))
 }
 
 // chartLineHeight is the height of a line of chart text, in ems.
@@ -170,7 +222,11 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 		case alignLeft:
 		}
 		base := y + float64((b.lineH[i]-l.Ascent-l.Descent)/2) + l.Ascent
-		if b.shown != nil && !reaches(typeset.Rect{X: x0 + dx, Y: y, Width: l.Width, Height: b.lineH[i]}, turn, *b.shown) {
+		box := typeset.Rect{X: x0 + dx, Y: y, Width: l.Width, Height: b.lineH[i]}
+		if i < len(b.hang) {
+			box.Width += b.hang[i]
+		}
+		if b.shown != nil && !reaches(box, turn, *b.shown) {
 			y += b.lineH[i]
 			continue
 		}
