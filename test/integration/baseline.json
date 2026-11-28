@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-28T13:16:25Z",
+  "captured_at": "2026-11-28T16:26:05Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -931,6 +931,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -3986,6 +3987,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -6902,6 +6904,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -19039,7 +19042,7 @@
               "text_f1": 1
             },
             "sd-data/TextFittingBulletEditVsView.odp": {
-              "layout": 0.9978,
+              "layout": 0.8771,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19255,7 +19258,7 @@
               "text_f1": 1
             },
             "sd/autofitted-textbox-indent.odp": {
-              "layout": 0.9947,
+              "layout": 0.9939,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19455,7 +19458,7 @@
               "text_f1": 1
             },
             "sd/numfmt.odp": {
-              "layout": 0.9633,
+              "layout": 0.9678,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19535,7 +19538,7 @@
               "text_f1": 1
             },
             "sd/slide-bitmap-background.odp": {
-              "layout": 0.9847,
+              "layout": 0.9842,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24194,12 +24197,12 @@
               "text_f1": 0.9147
             },
             "chart2/tdf108021.ods": {
-              "layout": 0.3283,
+              "layout": 0.343,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9479
+              "text_f1": 0.985
             },
             "chart2/tdf120348.ods": {
               "layout": 0.9874,
@@ -24634,7 +24637,7 @@
               "text_f1": 1
             },
             "sc/dependencyTree.ods": {
-              "layout": 0.9968,
+              "layout": 0.9969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24882,7 +24885,7 @@
               "text_f1": 1
             },
             "sc/lookup_target.fods": {
-              "layout": 0.5165,
+              "layout": 0.517,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.8,
@@ -25170,7 +25173,7 @@
               "text_f1": 1
             },
             "sc/rich-text-cells.ods": {
-              "layout": 0.9754,
+              "layout": 0.9743,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25420,7 +25423,7 @@
               "text_f1": 1
             },
             "sc/tdf118624.ods": {
-              "layout": 0.9003,
+              "layout": 0.9282,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31475,8 +31478,8 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 165,
-          "mismatched": 30,
+          "matched": 168,
+          "mismatched": 27,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -31534,12 +31537,12 @@
               "text_f1": 0.2747
             },
             "layout/U-min.fodt": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/abi11870-2.odt": {
               "layout": 0.5043,
@@ -31750,7 +31753,7 @@
               "text_f1": 1
             },
             "layout/stable-at-page-anchored-fly-position.odt": {
-              "layout": 0.6434,
+              "layout": 0.9385,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31766,11 +31769,11 @@
               "text_f1": 1
             },
             "layout/tabellen_test_windows_1.odt": {
-              "layout": 0.978,
+              "layout": 0.9876,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "layout/table-extrusion1.odt": {
@@ -31803,7 +31806,7 @@
               "outline_recall": 0.8333,
               "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0.6542
+              "text_f1": 0.6589
             },
             "layout/tdf116830.odt": {
               "layout": 0.8697,
@@ -31814,7 +31817,7 @@
               "text_f1": 1
             },
             "layout/tdf116848.odt": {
-              "layout": 0.8351,
+              "layout": 0.8353,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31822,7 +31825,7 @@
               "text_f1": 0.9791
             },
             "layout/tdf117187.odt": {
-              "layout": 0.9959,
+              "layout": 0.996,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32174,7 +32177,7 @@
               "text_f1": 1
             },
             "odfexport/nestedTableInFooter.odt": {
-              "layout": 0.6969,
+              "layout": 0.9987,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46012,8 +46015,8 @@
     "libreoffice/xlsx": {
       "features": {
         "diff": {
-          "matched": 209,
-          "mismatched": 19,
+          "matched": 212,
+          "mismatched": 16,
           "skipped": 24,
           "metrics": {
             "convert_error": 0,
@@ -46116,7 +46119,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7
+              "text_f1": 1
             },
             "chart2/barOfPieChart2.xlsx": {
               "layout": 0.8413,
@@ -46124,7 +46127,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7
+              "text_f1": 1
             },
             "chart2/bar_chart_simple.xlsx": {
               "layout": 0.9543,
@@ -46135,12 +46138,12 @@
               "text_f1": 1
             },
             "chart2/barchart_totalsrow.xlsx": {
-              "layout": 0.6354,
+              "layout": 0.9244,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8878
+              "text_f1": 1
             },
             "chart2/bartest-stroke.xlsx": {
               "layout": 0.9518,
@@ -60344,7 +60347,7 @@
               "text_f1": 1
             },
             "animation-time-zero": {
-              "layout": 0.9931,
+              "layout": 0.9666,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -74317,8 +74320,8 @@
     "litho/pptx": {
       "features": {
         "diff": {
-          "matched": 119,
-          "mismatched": 7,
+          "matched": 120,
+          "mismatched": 6,
           "skipped": 14,
           "metrics": {
             "convert_error": 0,
@@ -74464,12 +74467,12 @@
               "text_f1": 1
             },
             "chart-surface": {
-              "layout": 0,
+              "layout": 0.7818,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2619
+              "text_f1": 0.9155
             },
             "chart-untitled": {
               "layout": 0.9798,
@@ -78732,8 +78735,8 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 152,
-          "mismatched": 5,
+          "matched": 153,
+          "mismatched": 4,
           "skipped": 11,
           "metrics": {
             "convert_error": 0,
@@ -78887,12 +78890,12 @@
               "text_f1": 1
             },
             "charts_radar_stock_surface": {
-              "layout": 0.5865,
+              "layout": 0.7625,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9258
+              "text_f1": 0.9662
             },
             "charts_scatter_bubble": {
               "layout": 0.7118,
@@ -95891,7 +95894,7 @@
               "text_f1": 0.5
             },
             "O14ISOStrict/Graphics/Axis_Title-O12-XL-ChartProperties.xlsx": {
-              "layout": 0.7635,
+              "layout": 0.7657,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96064,7 +96067,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.4118,
-              "text_f1": 0.9156
+              "text_f1": 0.9165
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProductCompetitiveAnalysis_TP10186503.xltx": {
               "layout": 0.7702,
@@ -98553,6 +98556,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -104552,6 +104556,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -109179,6 +109184,7 @@
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
             "report_disagrees": 0,
+            "ua_pass_stated": 0,
             "verapdf_disagrees": 0,
             "verapdf_unavailable": 0,
             "version_strict_failed": 0
@@ -118921,8 +118927,8 @@
     "resvg": {
       "features": {
         "svgdraw": {
-          "matched": 477,
-          "mismatched": 27,
+          "matched": 475,
+          "mismatched": 29,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119349,13 +119355,13 @@
             "structure/g/deeply-nested-groups.svg": "pass",
             "structure/g/recursive-inheritance.svg": "pass",
             "structure/style-attribute/comments.svg": "pass",
-            "structure/style-attribute/non-presentational-attribute.svg": "pass",
+            "structure/style-attribute/non-presentational-attribute.svg": "fail",
             "structure/style-attribute/simple-case.svg": "pass",
             "structure/style/class-selector.svg": "pass",
             "structure/style/combined-selectors.svg": "pass",
             "structure/style/current-color-stroke-before-color.svg": "fail",
             "structure/style/important.svg": "pass",
-            "structure/style/non-presentational-attribute.svg": "pass",
+            "structure/style/non-presentational-attribute.svg": "fail",
             "structure/style/rule-specificity.svg": "pass",
             "structure/style/style-after-usage.svg": "pass",
             "structure/style/style-inside-CDATA.svg": "pass",
@@ -119818,8 +119824,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5976,
-          "mismatched": 518,
+          "matched": 5985,
+          "mismatched": 509,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119849,7 +119855,7 @@
             "css/CSS2/abspos/between-float-and-text.html": "pass",
             "css/CSS2/abspos/hypothetical-inline-alone-on-second-line.html": "pass",
             "css/CSS2/abspos/static-fixed-inside-abspos.html": "pass",
-            "css/CSS2/abspos/static-inside-float-inside-inline.html": "fail",
+            "css/CSS2/abspos/static-inside-float-inside-inline.html": "pass",
             "css/CSS2/abspos/static-inside-inline-001.html": "pass",
             "css/CSS2/abspos/static-inside-inline-002.html": "fail",
             "css/CSS2/abspos/static-inside-inline-003.html": "pass",
@@ -120187,7 +120193,7 @@
             "css/CSS2/colors/colors-007.xht": "pass",
             "css/CSS2/floats-clear/adjoining-float-before-clearance.html": "pass",
             "css/CSS2/floats-clear/adjoining-float-nested-forced-clearance-002.html": "pass",
-            "css/CSS2/floats-clear/adjoining-float-nested-forced-clearance-003.html": "fail",
+            "css/CSS2/floats-clear/adjoining-float-nested-forced-clearance-003.html": "pass",
             "css/CSS2/floats-clear/adjoining-float-nested-forced-clearance-004.html": "pass",
             "css/CSS2/floats-clear/adjoining-float-nested-forced-clearance.html": "pass",
             "css/CSS2/floats-clear/clear-002.xht": "pass",
@@ -120299,7 +120305,7 @@
             "css/CSS2/floats-clear/margin-collapse-clear-003.xht": "pass",
             "css/CSS2/floats-clear/margin-collapse-clear-008.xht": "pass",
             "css/CSS2/floats-clear/margin-collapse-clear-014.xht": "pass",
-            "css/CSS2/floats-clear/margin-collapse-clear-015.xht": "fail",
+            "css/CSS2/floats-clear/margin-collapse-clear-015.xht": "pass",
             "css/CSS2/floats-clear/margin-collapse-clear-016.xht": "pass",
             "css/CSS2/floats-clear/margin-collapse-clear-017.xht": "pass",
             "css/CSS2/floats-clear/negative-clearance-after-bottom-margin.html": "pass",
@@ -120494,7 +120500,7 @@
             "css/CSS2/generated-content/content-080.xht": "pass",
             "css/CSS2/generated-content/content-081.xht": "pass",
             "css/CSS2/generated-content/content-082.xht": "pass",
-            "css/CSS2/generated-content/content-085.xht": "fail",
+            "css/CSS2/generated-content/content-085.xht": "pass",
             "css/CSS2/generated-content/content-086.xht": "pass",
             "css/CSS2/generated-content/content-097.xht": "pass",
             "css/CSS2/generated-content/content-099.xht": "pass",
@@ -120531,7 +120537,7 @@
             "css/CSS2/generated-content/quotes-applies-to-008.xht": "pass",
             "css/CSS2/generated-content/quotes-applies-to-009.xht": "pass",
             "css/CSS2/linebox/anonymous-inline-inherit-001.html": "pass",
-            "css/CSS2/linebox/baseline-block-with-overflow-001.html": "fail",
+            "css/CSS2/linebox/baseline-block-with-overflow-001.html": "pass",
             "css/CSS2/linebox/border-padding-bleed-001.xht": "pass",
             "css/CSS2/linebox/border-padding-bleed-003.xht": "pass",
             "css/CSS2/linebox/empty-inline-001.xht": "pass",
@@ -121539,7 +121545,7 @@
             "css/compositing/root-element-blend-mode.html": "pass",
             "css/compositing/root-element-filter.html": "pass",
             "css/compositing/root-element-opacity.html": "pass",
-            "css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.html": "fail",
+            "css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.html": "pass",
             "css/css-align/distribution-values/space-evenly-001.html": "pass",
             "css/css-align/self-alignment/self-align-normal-flex.html": "pass",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-001.html": "pass",
@@ -124630,8 +124636,8 @@
             "css/css-text/line-break/line-break-anywhere-overrides-uax-behavior-007.html": "pass",
             "css/css-text/line-break/line-break-anywhere-overrides-uax-behavior-008.html": "pass",
             "css/css-text/line-break/line-break-anywhere-overrides-uax-behavior-009.html": "pass",
-            "css/css-text/line-breaking/line-breaking-atomic-001.html": "fail",
-            "css/css-text/line-breaking/line-breaking-atomic-002.html": "fail",
+            "css/css-text/line-breaking/line-breaking-atomic-001.html": "pass",
+            "css/css-text/line-breaking/line-breaking-atomic-002.html": "pass",
             "css/css-text/line-breaking/line-breaking-atomic-003.html": "pass",
             "css/css-text/line-breaking/line-breaking-atomic-004.html": "pass",
             "css/css-text/line-breaking/line-breaking-atomic-005.html": "pass",
@@ -125321,7 +125327,7 @@
             "css/css-writing-modes/baseline-inline-non-replaced-005.xht": "pass",
             "css/css-writing-modes/baseline-inline-replaced-002.xht": "pass",
             "css/css-writing-modes/baseline-inline-replaced-003.xht": "pass",
-            "css/css-writing-modes/baseline-with-orthogonal-flow-001.html": "fail",
+            "css/css-writing-modes/baseline-with-orthogonal-flow-001.html": "pass",
             "css/css-writing-modes/bidi-plaintext-br-001.html": "pass",
             "css/css-writing-modes/block-flow-direction-slr-043.xht": "pass",
             "css/css-writing-modes/block-flow-direction-slr-047.xht": "pass",

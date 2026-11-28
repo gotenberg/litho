@@ -25,7 +25,7 @@ The pinned image leaves LibreOffice's locale empty, so LibreOffice prints a page
 
 ## Locale
 
-A source whose `options.json` names `locale` converts with `WithLocale`, and `corpus references` builds its reference in a container whose LibreOffice runs under that locale (`LC_ALL` set to the tag; see `FEATURES.md`).
+A source whose `options.json` names `locale` converts with `WithLocale`, and `corpus references` builds its reference under that locale (the route's `locale` field; see `FEATURES.md`).
 
 | Source                         | Pages (LibreOffice) | Options          | Exercises                                                                                                                                                                                                                                                                                                   |
 | ------------------------------ | ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -111,10 +111,10 @@ type OfficeOptions struct {
 	// Locale is the locale a spreadsheet or CSV source is formatted
 	// under, a BCP 47 tag of the models Locale constants
 	// (pdf.WithLocale). Default none, en-US. LibreOffice's references
-	// are built under it: the container that converts the source runs
-	// with LC_ALL set to the tag, which LibreOffice reads. Office for the
-	// web takes no locale, so in a format Microsoft's references judge the
-	// key counts as litho's own ([Office.LithoOptions]).
+	// are built under it: the conversion posts the tag as the route's
+	// locale field. Office for the web takes no locale, so in a format
+	// Microsoft's references judge the key counts as litho's own
+	// ([Office.LithoOptions]).
 	Locale string `json:"locale,omitempty"`
 	// ExpectedText names a text file of the source directory holding the
 	// text of the pages in reading order, written from the source, for a
@@ -142,9 +142,10 @@ var OfficeLithoOptionNames = []string{"trackedChanges", "sheets", "sheetNumbers"
 const SinglePageName = "singlePage"
 
 // LocaleName is the key of an Office options file that formats a
-// spreadsheet or CSV source under a locale ([OfficeOptions.Locale]): no
-// route field of the pinned image, which the reference builder applies to
-// the container instead, so it is not among [OfficeOptionNames].
+// spreadsheet or CSV source under a locale ([OfficeOptions.Locale]): the
+// reference builder posts it as the LibreOffice route's field of the same
+// name. Office for the web takes none, so it is not among
+// [OfficeOptionNames].
 const LocaleName = "locale"
 
 // ReferenceOfName is the key of an Office options file that borrows another

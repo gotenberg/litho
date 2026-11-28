@@ -141,8 +141,8 @@ type referenceBuilders struct {
 
 // build builds the references of m, the ones only names when set.
 func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []string) error {
-	return buildReferences(ctx, func(ctx context.Context, fonts []string, locale string) (referenceConverter, error) {
-		return b.converter(ctx, m.References.Engine, fonts, locale)
+	return buildReferences(ctx, func(ctx context.Context, fonts []string) (referenceConverter, error) {
+		return b.converter(ctx, m.References.Engine, fonts)
 	}, m, b.pins, only)
 }
 
@@ -150,7 +150,7 @@ func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []strin
 // directories fonts installed, started the first time a corpus asks for
 // it. Office for the web installs no font: a source of its corpora that
 // names some is never converted (see [fixture.Office.LithoOptions]).
-func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts []string, locale string) (referenceConverter, error) {
+func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts []string) (referenceConverter, error) {
 	if engine == engineMicrosoft {
 		if b.ms == nil {
 			ms, err := newMSGraph(ctx)
@@ -161,7 +161,7 @@ func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts 
 		}
 		return b.ms, nil
 	}
-	key := strings.Join(fonts, "\n") + "\x00" + locale
+	key := strings.Join(fonts, "\n")
 	if g, ok := b.g[key]; ok {
 		return g, nil
 	}
@@ -169,7 +169,7 @@ func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts 
 	if image == "" {
 		return nil, errors.New("GOTENBERG_IMAGE is not pinned")
 	}
-	g, err := startGotenberg(ctx, image, fonts, locale)
+	g, err := startGotenberg(ctx, image, fonts)
 	if err != nil {
 		return nil, fmt.Errorf("starting %s: %w", image, err)
 	}
@@ -213,20 +213,8 @@ const gotenbergFontsDir = "/usr/local/share/fonts"
 // startGotenberg starts image on a free loopback port, with the fixture
 // font directories fonts installed under [gotenbergFontsDir], and waits for
 // its health route and for fontconfig to list every font file of fonts.
-// A locale other than "" runs the container with LC_ALL set to that BCP
-// 47 tag, which LibreOffice reads as its locale: the pinned image's route
-// takes none.
-//
-// # Corpus evidence
-//
-//   - probe, csv: gotenberg/gotenberg:9.4.1 started with LC_ALL=de-DE
-//     prints "1.234,5" and 13.01.2026 of a CSV file as 1234,5 and
-//     13.01.26, Calc's de-DE reading; without it as the file's text.
-func startGotenberg(ctx context.Context, image string, fonts []string, locale string) (*gotenberg, error) {
+func startGotenberg(ctx context.Context, image string, fonts []string) (*gotenberg, error) {
 	args := []string{"run", "-d", "--rm", "-p", "127.0.0.1::3000"}
-	if locale != "" {
-		args = append(args, "-e", "LC_ALL="+locale)
-	}
 	installed, err := installedFontMounts(fonts)
 	if err != nil {
 		return nil, err
@@ -485,8 +473,8 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 // litho-only keys it sets: a source that sets some is not converted, and
 // the reference manifest records why (see [referencePlan]). fonts are the
 // fixture font directories its options.json names under installedFonts,
-// installed in the container that converts it, locale the locale that
-// container runs under ([fixture.LocaleName]).
+// installed in the container that converts it, locale the locale its
+// conversion asks for ([fixture.LocaleName]).
 type referenceJob struct {
 	name, path, options, source string
 	litho                       []string
@@ -495,9 +483,9 @@ type referenceJob struct {
 }
 
 // key returns what tells apart the containers jobs convert in: the fonts
-// installed and the locale.
+// installed.
 func (j referenceJob) key() string {
-	return strings.Join(j.fonts, "\n") + "\x00" + j.locale
+	return strings.Join(j.fonts, "\n")
 }
 
 // sourceDigest returns the SHA-256 a reference records for the source at
@@ -590,7 +578,15 @@ func optionsDigest(path string) (string, error) {
 }
 
 // convert posts one source to the route of engine and returns the status
-// and body.
+// and body. A job that names a locale posts it as the LibreOffice route's
+// locale field.
+//
+// # Corpus evidence
+//
+//   - probe, csv: gotenberg/gotenberg:9.10.3 posted locale=de-DE prints
+//     "1.250" and 13.01.2026 of a CSV file as 1250 and 13.01.26, Calc's
+//     de-DE reading; without the field as 1.25 and the file's text, also
+//     when the container runs with LC_ALL=de-DE.
 func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) (int, []byte, error) {
 	opts, err := readOptionFields(j.options)
 	if err != nil {
@@ -608,6 +604,9 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 					fields = append(fields, [2]string{k, v})
 				}
 			}
+		}
+		if j.locale != "" {
+			fields = append(fields, [2]string{fixture.LocaleName, j.locale})
 		}
 		return g.post(ctx, "/forms/libreoffice/convert", []formFile{{src.Document, filepath.Base(src.Document)}}, fields)
 	}
@@ -679,7 +678,7 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 // and no sign-in, and once for each set of installed fixture fonts the
 // sources to convert name: a source converts with exactly the fonts it
 // names, and its record holds their digest (see [installedFontsDigest]).
-func buildReferences(ctx context.Context, open func(ctx context.Context, fonts []string, locale string) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
+func buildReferences(ctx context.Context, open func(ctx context.Context, fonts []string) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) || hasFlatPapers(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
@@ -713,7 +712,7 @@ func buildReferences(ctx context.Context, open func(ctx context.Context, fonts [
 		if _, ok := convs[key]; ok || len(j.litho) > 0 {
 			continue
 		}
-		conv, err := open(ctx, j.fonts, j.locale)
+		conv, err := open(ctx, j.fonts)
 		if err != nil {
 			return err
 		}
