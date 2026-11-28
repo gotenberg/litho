@@ -601,7 +601,8 @@ func costSalesODS(sheets, rows int) ([]byte, error) {
 }
 
 // costDeckODP returns an OpenDocument presentation of n slides, each a
-// title and a bulleted list in placeholder frames of one master page.
+// title and a bulleted list in placeholder frames of one master page,
+// whose presentation styles it states as Impress saves them.
 func costDeckODP(n int) ([]byte, error) {
 	r := rand.New(rand.NewPCG(15, 16)) //nolint:gosec // a fixed seed, for the same bytes each build
 	esc := html.EscapeString
@@ -625,7 +626,12 @@ func costDeckODP(n int) ([]byte, error) {
 	styles := `<?xml version="1.0" encoding="UTF-8"?><office:document-styles ` + costODFNS + `>` + costODFFonts +
 		`<office:styles><style:default-style style:family="graphic"><style:text-properties style:font-name="Liberation Sans" fo:font-size="18pt" fo:language="en" fo:country="US"/></style:default-style>` +
 		`<style:presentation-page-layout style:name="AL1"><presentation:placeholder presentation:object="title" svg:x="1.4cm" svg:y="0.8cm" svg:width="25.2cm" svg:height="2.6cm"/>` +
-		`<presentation:placeholder presentation:object="outline" svg:x="1.4cm" svg:y="3.8cm" svg:width="25.2cm" svg:height="10.8cm"/></style:presentation-page-layout></office:styles>` +
+		`<presentation:placeholder presentation:object="outline" svg:x="1.4cm" svg:y="3.8cm" svg:width="25.2cm" svg:height="10.8cm"/></style:presentation-page-layout>` +
+		// The master's presentation styles, which Impress writes with every
+		// deck: unfilled, uninset, set from the top left.
+		`<style:style style:name="Default-title" style:family="presentation"><style:graphic-properties draw:fill="none" draw:stroke="none" fo:padding="0cm" draw:textarea-vertical-align="top"/><style:paragraph-properties fo:text-align="start" fo:margin-top="0cm"/></style:style>` +
+		`<style:style style:name="Default-outline1" style:family="presentation"><style:graphic-properties draw:fill="none" draw:stroke="none" fo:padding="0cm" draw:textarea-vertical-align="top"/><style:paragraph-properties fo:text-align="start" fo:margin-top="0cm"/></style:style>` +
+		`</office:styles>` +
 		`<office:automatic-styles><style:page-layout style:name="PM1"><style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" fo:page-width="28cm" fo:page-height="15.75cm" style:print-orientation="landscape"/></style:page-layout>` +
 		`<style:style style:name="dp0" style:family="drawing-page"><style:drawing-page-properties draw:fill="solid" draw:fill-color="#ffffff"/></style:style></office:automatic-styles>` +
 		`<office:master-styles><style:master-page style:name="Default" style:page-layout-name="PM1" draw:style-name="dp0"/></office:master-styles></office:document-styles>`
