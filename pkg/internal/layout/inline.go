@@ -283,7 +283,8 @@ func (p *ifcPara) allowed(i int) bool {
 // CJK alike; one between two Hangul characters that
 // [css.Office.KeepHangul] closes; one between two emoji that
 // [css.Office.KeepEmoji] closes; one after a closing bracket, a solidus,
-// a question or an exclamation mark that [css.Office.KeepInWord] closes; and, under [css.Style.WordRules], one
+// a question or an exclamation mark or an ellipsis that
+// [css.Office.KeepInWord] closes; and, under [css.Style.WordRules], one
 // after a solidus (see keptAfterSolidus).
 func (p *ifcPara) keptTogether(i int, a, b rune) bool {
 	st := p.styleAt(i)
@@ -296,11 +297,11 @@ func (p *ifcPara) keptTogether(i int, a, b rune) bool {
 
 // keptInWord reports a character after which [css.Office.KeepInWord]
 // opens no line break before a character other than a space: a closing
-// parenthesis or square bracket, a solidus, a question or an exclamation
-// mark.
+// parenthesis, square bracket or curly bracket, a solidus, a question or
+// an exclamation mark, a horizontal ellipsis.
 func keptInWord(a rune) bool {
 	switch a {
-	case ')', ']', '/', '?', '!':
+	case ')', ']', '}', '/', '?', '!', '\u2026':
 		return true
 	}
 	return false

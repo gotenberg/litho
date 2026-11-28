@@ -1641,8 +1641,8 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 }
 
 // powerPointKeepsInWord reports whether the runs of doc keep a closing
-// bracket, a solidus, a question or an exclamation mark with the
-// character after it ([css.Office.KeepInWord]): under PowerPoint's rules,
+// bracket, a solidus, a question or an exclamation mark or an ellipsis
+// with the character after it ([css.Office.KeepInWord]): under PowerPoint's rules,
 // which break a line inside a word only after a hyphen, or where the line
 // ends when no other opportunity is left; Impress breaks where UAX #14
 // does.
@@ -1659,6 +1659,11 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 //     "aaaa/bbb" and "b/cccc", "aaaa?bbbb!cccc" "aaaa?bb" and "bb!cccc",
 //     "aaaa(bb)(cccc" "aaaa(bb)(" and "cccc", each broken where the line
 //     ends, and "aaaa-bbbb-cccc" breaks after each hyphen.
+//   - probe, pptx: in the same boxes "aaaa}bbbb}cccc" prints "aaaa}bbb"
+//     and "b}cccc", "aaaa…bbbb…cc" "aaaa…bb" and "bb…cc", where
+//     "aaaa—bbbb—cc" breaks after the first em dash; ";", ":", ">", "&",
+//     "%" between digits and straight quotes break only where the line
+//     ends, as UAX #14 has them.
 func powerPointKeepsInWord(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }

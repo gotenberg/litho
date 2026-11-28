@@ -310,6 +310,14 @@ func TestText_KeepInWord(t *testing.T) {
 	if got := starts(text.FallbackLibreOffice, "Aa bc/defgh"); len(got) < 2 || !strings.HasPrefix(got[1], "defgh") {
 		t.Errorf("lines %q under Impress's rules, want the second to start with defgh", got)
 	}
+	for _, s := range []string{"Aa bc}defgh", "Aa bc…defgh"} {
+		if got := starts(text.FallbackFontconfig, s); len(got) < 2 || !strings.HasPrefix(got[1], "bc") {
+			t.Errorf("lines %q under PowerPoint's rules, want the second to start with bc", got)
+		}
+		if got := starts(text.FallbackLibreOffice, s); len(got) < 2 || !strings.HasPrefix(got[1], "defgh") {
+			t.Errorf("lines %q under Impress's rules, want the second to start with defgh", got)
+		}
+	}
 }
 
 // TestText_PowerPointCentresBlock checks that under PowerPoint's rules a
