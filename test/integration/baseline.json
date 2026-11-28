@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-27T23:14:57Z",
+  "captured_at": "2026-11-28T00:11:29Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9333,8 +9333,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 248,
-          "mismatched": 35,
+          "matched": 249,
+          "mismatched": 34,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9480,12 +9480,12 @@
               "text_f1": 1
             },
             "layout/tdf122878.docx": {
-              "layout": 0.3751,
+              "layout": 0.9903,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9368
+              "text_f1": 1
             },
             "layout/tdf124261.docx": {
               "layout": 0.9572,
@@ -10720,7 +10720,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo64350.docx": {
-              "layout": 0.4153,
+              "layout": 0.4152,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55433,7 +55433,7 @@
               "text_f1": 1
             },
             "para-borders-shading": {
-              "layout": 0.576,
+              "layout": 0.5773,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55569,7 +55569,7 @@
               "text_f1": 1
             },
             "sections-page-borders": {
-              "layout": 0.9205,
+              "layout": 0.9204,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55625,7 +55625,7 @@
               "text_f1": 1
             },
             "shapes-horizontal-rules": {
-              "layout": 0.7949,
+              "layout": 0.8151,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55713,11 +55713,11 @@
               "text_f1": 1
             },
             "tables-borders": {
-              "layout": 0.8022,
+              "layout": 0.8093,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 1
             },
             "tables-cell-margins-alignment": {
@@ -84161,7 +84161,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/rPr-bdr-Text_Border-val_dotDash_color_auto.docx": {
-              "layout": 0.8325,
+              "layout": 0.7917,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -84241,7 +84241,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx": {
-              "layout": 0.3775,
+              "layout": 0.7136,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
