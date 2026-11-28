@@ -132,6 +132,11 @@ func (b *builder) optimalHeights(g *grid) error {
 				}
 				continue
 			}
+			if excel && !fit && g.style(ri, c.Column, c).Align.Vertical == VTop {
+				// A book whose fonts Excel knows keeps a row's top-aligned
+				// lines to its height ([excelHeight]).
+				continue
+			}
 			u := &unit{r: ri, c: c.Column, lastR: ri, lastC: lastC, cell: c, st: g.style(ri, c.Column, c)}
 			u.w = g.spanW(c.Column, lastC)
 			d, ok := pb.display(u)
@@ -493,15 +498,23 @@ const rowsPerCheck = 4096
 // its own whose wrapped text takes a count of lines set pitch points
 // apart ([builder.excelLine]), in whole printer pixels. Excel fits such a
 // row as it opens a workbook, and leaves a row whose text is merely taller
-// than the default unfitted.
+// than the default unfitted. In a book whose fonts it knows, the lines of
+// a top-aligned cell do not count: the row keeps its height and shows the
+// first lines.
 //
 // # Corpus evidence
 //
 //   - litho/xlsx: alignment prints its rows of three wrapped lines of
-//     Calibri 11 43.56 points tall, three rows of 14.52; fonts prints its
-//     row of 14 point text without a height 14.52 points tall.
-//   - libreoffice/xlsx: sc/tdf139934.xlsx prints its rows of two wrapped
-//     lines of Arial 10 24.72 points tall, two rows of 12.36.
+//     Calibri 11 43.56 points tall, three rows of 14.52, bottom-aligned,
+//     justified and distributed alike; fonts prints its row of 14 point
+//     text without a height 14.52 points tall; intl_cjk its row of wrapped
+//     bottom-aligned Japanese text on three lines.
+//   - litho/xlsx: real_invoice prints its rows of two and three wrapped
+//     top-aligned lines, and rich_text its row of three, at the standard
+//     row, their first line alone; all three books state knownFonts.
+//   - libreoffice/xlsx: sc/tdf139934.xlsx, without knownFonts, prints its
+//     rows of two wrapped top-aligned lines of Arial 10 24.72 points tall,
+//     two rows of 12.36.
 func excelHeight(pitch, lines float64) float64 {
 	return math.Round(pitch*max(lines, 1)/excelPixel) * excelPixel
 }

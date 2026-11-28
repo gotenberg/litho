@@ -37,7 +37,7 @@ func TestOptimalHeights_FallbackFaces(t *testing.T) {
 // TestOptimalHeights_ExcelRules locks the rows of a book laid out by
 // Excel's rules: a row keeps its stored height whatever its text needs, a
 // row without one keeps the sheet's default for taller text and grows a
-// default row a line for wrapped text.
+// default row a line for wrapped text, unless that text is top-aligned.
 func TestOptimalHeights_ExcelRules(t *testing.T) {
 	big := &Style{Font: Font{Size: 30}}
 	sh := &Sheet{Name: "S", DefaultRowHeight: 14.52, Rows: []Row{
@@ -57,6 +57,9 @@ func TestOptimalHeights_ExcelRules(t *testing.T) {
 	}
 	if h := g.rowHeight(2); h < 2*14.52-1e-9 || !near(math.Mod(h+1e-9, 14.52), 0, 1e-6) {
 		t.Errorf("row of wrapped text %v, want whole default rows of 14.52", h)
+	}
+	if h := g.rowHeight(3); !near(h, 14.52, 1e-9) {
+		t.Errorf("row of wrapped top-aligned text %v, want the default 14.52", h)
 	}
 	doc.ExcelRules = false
 	b = newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
