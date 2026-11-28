@@ -319,7 +319,7 @@ func legacyField(instr string, ff *ooxml.Element) (typeset.Field, bool) {
 
 // legacyResult starts the result of the legacy form field fl. A check
 // box, which has no result, prints as a box whatever the options say, as
-// LibreOffice prints one (see [legacyBox]), and becomes a field when the
+// Word prints one (see [legacyBox]), and becomes a field when the
 // conversion writes them; a text input or a drop-down that becomes a field
 // collects its result as the content of a control, which
 // [document.endLegacy] closes. It reports whether it handled the result.
@@ -357,21 +357,24 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 }
 
 // legacyBox returns the box a legacy check box (17.16.5.18 FORMCHECKBOX)
-// prints in the run style st: a square as wide as the text's size, drawn
-// with a hairline, its bottom 0.155 of the size below the baseline, and
-// both its diagonals when checked. Its size (17.16.7) is ignored, as
-// LibreOffice ignores it. The box is a Form element, whose PrintField
-// attributes, a cb role and its state, the caller sets: the strokes carry
-// no character, and the attributes are what tells a reader of the
-// structure tree the box is checked (ISO 32000-1, 14.8.5.6, Table 348).
+// prints in the run style st, as Word prints it: a square as wide as the
+// text's size, its bottom 0.155 of the size below the baseline, set
+// [checkBoxBefore] after the text before it and [checkBoxAfter] before
+// the text after it, drawn as [boxMark] draws it. Its size (17.16.7) is
+// ignored. The box is a Form element, whose PrintField attributes, a cb
+// role and its state, the caller sets: the strokes carry no character,
+// and the attributes are what tells a reader of the structure tree the
+// box is checked (ISO 32000-1, 14.8.5.6, Table 348).
 //
 // # Corpus evidence
 //
-//   - litho/docx form-fields-legacy, converted by LibreOffice on
-//     gotenberg/gotenberg:9.4.1 with exportFormFields false: each check
-//     box in 11 point text prints as a 10.95 point square of 0.1 point
-//     lines, its bottom 1.7 points below the baseline, the checked ones
-//     with both diagonals; the 14 point one (w:size 28) prints the same.
+//   - libreoffice/docx ooxmlimport/n766477.docx: Word prints the checked
+//     box of an 11 point Calibri paragraph as an 11 point square from
+//     73.03, the paragraph starting at 72, its bottom 1.5 below the
+//     baseline, and the text after it at 85.53.
+//   - poi/docx document/checkboxes.docx: Word prints the boxes of 10
+//     point Arial text as 9 point squares, the text after them 1.5
+//     points past their right edge.
 //   - litho/docx form-fields-legacy, poi/docx document/checkboxes.docx
 //     and libreoffice/docx ooxmlexport/fdo53985.docx, converted by
 //     LibreOffice on gotenberg/gotenberg:9.4.1 with exportFormFields
@@ -385,6 +388,7 @@ func legacyBox(st *css.Style, checked bool) *layout.Node {
 	box.Width, box.Height = css.Pts(size), css.Pts(size)
 	box.Border = [4]css.Border{}
 	box.Margin[css.Bottom] = css.Pts(-0.155 * size)
+	box.Margin[css.Left], box.Margin[css.Right] = css.Pts(checkBoxBefore), css.Pts(checkBoxAfter)
 	ks := *st
 	ks.Display = css.Block
 	ks.Width, ks.Height = css.Pts(size), css.Pts(size)
@@ -395,27 +399,45 @@ func legacyBox(st *css.Style, checked bool) *layout.Node {
 	return &layout.Node{Kind: layout.Element, Style: &box, Role: "Form", Children: []*layout.Node{kid}}
 }
 
-// boxMark draws a legacy check box in r: its square, and both diagonals
-// when checked.
+// The room Word leaves before and after a legacy check box, in points
+// ([legacyBox]).
+const (
+	checkBoxBefore = 1.025
+	checkBoxAfter  = 1.5
+)
+
+// boxMark draws a legacy check box in r as Word prints one: its square
+// stroked 0.75 point wide along r's edges, and when checked both its
+// diagonals, 0.5 point wide, from the square's top corners to 0.25 point
+// past the opposite bottom ones.
+//
+// # Corpus evidence
+//
+//   - poi/docx document/checkboxes.docx, libreoffice/docx
+//     ooxmlimport/n766477.docx: Word strokes a 9 point box as "x y 9 9
+//     re" at 0.75 point and its diagonals at 0.5 from (x, y+9) to
+//     (x+9.25, y-0.25) and from (x+9.25, y+9) to (x, y-0.25), in PDF
+//     space.
 func boxMark(r typeset.Rect, checked bool) []typeset.Fragment {
-	const line = 0.1
-	stroke := &typeset.Stroke{Color: typeset.Black, Width: line}
-	ops := []typeset.PathOp{
+	square := []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
 		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
 		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
 		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
 		{Kind: typeset.ClosePath},
 	}
+	out := []typeset.Fragment{&typeset.Path{Ops: square, Stroke: &typeset.Stroke{Color: typeset.Black, Width: 0.75}}}
 	if checked {
-		ops = append(ops,
-			typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
-			typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-			typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
-			typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
-		)
+		const past = 0.25
+		cross := []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width + past, Y: r.Y + r.Height + past}}},
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X + r.Width + past, Y: r.Y}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height + past}}},
+		}
+		out = append(out, &typeset.Path{Ops: cross, Stroke: &typeset.Stroke{Color: typeset.Black, Width: 0.5}})
 	}
-	return []typeset.Fragment{&typeset.Path{Ops: ops, Stroke: stroke}}
+	return out
 }
 
 // endLegacy closes the control the result of the legacy form field fl

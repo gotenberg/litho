@@ -82,15 +82,19 @@ func TestConvertContentControlsOff(t *testing.T) {
 	if text := pageText(d.Pages[0]); !strings.Contains(text, "ACME") || !strings.Contains(text, "Jane") {
 		t.Errorf("page text = %q", text)
 	}
-	// The legacy check box prints as its square and diagonals.
-	var box *typeset.Path
+	// The legacy check box prints as Word prints it: its square stroked
+	// 0.75 point wide, its diagonals 0.5.
+	var square, cross *typeset.Path
 	var walk func([]typeset.Fragment)
 	walk = func(frags []typeset.Fragment) {
 		for _, f := range frags {
 			switch v := f.(type) {
 			case *typeset.Path:
-				if len(v.Ops) == 9 {
-					box = v
+				switch {
+				case len(v.Ops) == 5 && v.Ops[4].Kind == typeset.ClosePath:
+					square = v
+				case len(v.Ops) == 4 && v.Ops[2].Kind == typeset.MoveTo:
+					cross = v
 				}
 			case *typeset.Group:
 				walk(v.Content)
@@ -98,8 +102,8 @@ func TestConvertContentControlsOff(t *testing.T) {
 		}
 	}
 	walk(d.Pages[0].Content)
-	if box == nil || box.Stroke == nil || box.Stroke.Width != 0.1 {
-		t.Errorf("the checked legacy check box draws %+v", box)
+	if square == nil || square.Stroke == nil || square.Stroke.Width != 0.75 || cross == nil || cross.Stroke == nil || cross.Stroke.Width != 0.5 {
+		t.Errorf("the checked legacy check box draws %+v and %+v", square, cross)
 	}
 }
 
