@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -305,7 +306,7 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	if v, err := intconv.Atoi(c.A(odf.NSTable, "number-rows-spanned")); err == nil && v > 1 {
 		n.RowSpan = min(v, maxRepeat)
 	}
-	content := c
+	content := withoutParagraphAfterTable(c)
 	if text, ok := b.cellValueText(c); ok {
 		content = valueParagraph(c, text)
 	}
@@ -316,4 +317,46 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	b.cellStyle, b.inCell = saved, savedIn
 	b.boxed--
 	return n
+}
+
+// withoutParagraphAfterTable returns the table cell c without its last
+// child when that child is an empty text:p that follows a table: Writer
+// prints a cell that ends with a nested table and one empty paragraph
+// as tall as one that ends with the table. It returns c itself
+// otherwise.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a cell holding a
+//     nested table then an empty paragraph takes the height of one
+//     holding the table alone; an empty paragraph before the table, a
+//     paragraph of text after it, and each of two empty paragraphs after
+//     it take a line each.
+//   - libreoffice/odt: odfexport/nestedTableInFooter.odt prints its
+//     footer's row as tall as the nested table and the cell's padding.
+func withoutParagraphAfterTable(c *odf.Element) *odf.Element {
+	last, prev := -1, -1
+	for i := len(c.Children) - 1; i >= 0; i-- {
+		k := c.Children[i]
+		if k.IsText() && strings.TrimSpace(k.Text) == "" {
+			continue
+		}
+		if last < 0 {
+			last = i
+			continue
+		}
+		prev = i
+		break
+	}
+	if prev < 0 || !c.Children[prev].Is(odf.NSTable, "table") || !c.Children[last].Is(odf.NSText, "p") {
+		return c
+	}
+	for _, k := range c.Children[last].Children {
+		if !k.IsText() || strings.TrimSpace(k.Text) != "" {
+			return c
+		}
+	}
+	out := *c
+	out.Children = slices.Delete(slices.Clone(c.Children), last, last+1)
+	return &out
 }

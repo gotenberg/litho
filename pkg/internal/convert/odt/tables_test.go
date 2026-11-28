@@ -106,3 +106,30 @@ func TestConvert_TableBodyBesideItsHeader(t *testing.T) {
 		t.Errorf("structure %s, want no TBody without header rows", got)
 	}
 }
+
+// TestCell_EmptyParagraphAfterANestedTable locks that a cell ending with
+// a nested table and one empty paragraph is as tall as one ending with
+// the table (see [withoutParagraphAfterTable], which holds the
+// measurements), and that the paragraphs it does not drop take a line.
+func TestCell_EmptyParagraphAfterANestedTable(t *testing.T) {
+	inner := `<table:table><table:table-column/><table:table-row><table:table-cell><text:p>in</text:p></table:table-cell></table:table-row></table:table>`
+	outer := func(label, content string) string {
+		return `<text:p>` + label + `</text:p><table:table><table:table-column table:number-columns-repeated="2"/><table:table-row>` +
+			`<table:table-cell>` + content + `</table:table-cell><table:table-cell><text:p>b</text:p></table:table-cell></table:table-row></table:table>`
+	}
+	body := outer("L1", inner+`<text:p/>`) + outer("L2", inner) + outer("L3", inner+`<text:p/><text:p/>`) + outer("L4", inner+`<text:p>after</text:p>`) + `<text:p>L5</text:p>`
+	res := convertDoc(t, doc{body: body}.pack(t), office.Options{})
+	y := map[string]float64{}
+	for _, l := range lines(res.Pages[0]) {
+		y[strings.TrimSpace(l.text)] = l.y
+	}
+	alone := y["L3"] - y["L2"]
+	if d := y["L2"] - y["L1"]; !near(d, alone, 0.1) {
+		t.Errorf("table then an empty paragraph: %.2f tall, the table alone %.2f", d, alone)
+	}
+	for _, pair := range [][2]string{{"L3", "L4"}, {"L4", "L5"}} {
+		if d := y[pair[1]] - y[pair[0]]; d < alone+10 {
+			t.Errorf("%s: %.2f tall, want a line more than %.2f", pair[0], d, alone)
+		}
+	}
+}
