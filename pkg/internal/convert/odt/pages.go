@@ -604,11 +604,11 @@ func (f *pageFlow) hf(el *odf.Element, props odf.Props, x, w float64, top bool) 
 const maxSubLayoutPages = 2
 
 // hfNodes builds the content of a header or footer for the page number
-// of pages.
-func (f *pageFlow) hfNodes(g *hfGeom, number, pages int, format string) []*layout.Node {
+// of pages, after pages following it.
+func (f *pageFlow) hfNodes(g *hfGeom, number, pages, after int, format string) []*layout.Node {
 	b := f.b
 	saved, savedScope := b.hf, b.scope
-	b.hf = &hfFields{number: number, count: pages, format: format}
+	b.hf = &hfFields{number: number, count: pages, format: format, after: after}
 	b.scope = odf.ScopeStyles
 	if b.pkg.Flat {
 		b.scope = odf.ScopeContent
@@ -625,7 +625,7 @@ func (f *pageFlow) measure(g *hfGeom, pages int) float64 {
 	if f.b.fonts == nil {
 		return 0
 	}
-	nodes := f.hfNodes(g, 1, max(pages, 1), "1")
+	nodes := f.hfNodes(g, 1, max(pages, 1), max(pages-1, 0), "1")
 	st := baseStyle()
 	st.Display = css.Block
 	st.Width = css.Pts(g.w)
@@ -669,9 +669,15 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Frag
 	head, foot := g, g
 	pageH := e.box.Height
 	count := pages + len(f.blanks)
+	after := pages - 1 - info.Index
+	for i := range f.blanks {
+		if i > info.Index {
+			after++
+		}
+	}
 	if f.opts.SinglePage {
 		head, foot, _ = f.singleParts()
-		count = 1
+		count, after = 1, 0
 	}
 	if info.Height > 0 {
 		pageH = info.Height
@@ -700,7 +706,7 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Frag
 		st.Position = css.Absolute
 		st.Left, st.Top = css.Pts(hg.x), css.Pts(y)
 		st.Width = css.Pts(hg.w)
-		rn.Children = append(rn.Children, &layout.Node{Kind: layout.Element, Style: st, Children: f.hfNodes(hg, e.number, count, part.format)})
+		rn.Children = append(rn.Children, &layout.Node{Kind: layout.Element, Style: st, Children: f.hfNodes(hg, e.number, count, after, part.format)})
 	}
 	res, err := layout.Layout(f.b.ctx, rn, f.b.fonts, layout.Options{
 		Page: layout.PageBox{Width: e.box.Width, Height: pageH}, MaxPages: maxSubLayoutPages,

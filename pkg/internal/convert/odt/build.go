@@ -183,10 +183,12 @@ type builder struct {
 	formIDs map[string]*odf.Element
 }
 
-// hfFields is the page a header or footer is built for.
+// hfFields is the page a header or footer is built for: its number,
+// the page count, the number format and how many pages follow it.
 type hfFields struct {
 	number, count int
 	format        string
+	after         int
 }
 
 // heading is a text:h of the content tree, for the outline.
@@ -1071,7 +1073,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			if n := b.changeBound(c); n != nil {
 				*out = append(*out, n)
 			}
-		case "page-number", "page-count":
+		case "page-number", "page-count", "page-continuation":
 			b.pageField(c, t, out, ws, depth)
 		case "date", "time":
 			if v, ok := b.dateField(c); ok {
@@ -1324,20 +1326,55 @@ func (b *builder) changeMark(c *odf.Element) {
 	}
 }
 
-// pageField appends a text:page-number or text:page-count (ODF 1.3, Part
-// 3, 7.3.4 and 7.5.18): in a header or footer the number of the page it
-// is drawn on, in the page layout's number format, else the content the
-// document saved.
+// pageField appends a text:page-number, text:page-count or
+// text:page-continuation (ODF 1.3, Part 3, 7.3.4, 7.5.18 and 7.3.5): in
+// a header or footer the number of the page it is drawn on, moved by
+// text:page-adjust and a text:select-page of previous or next, in the
+// page layout's number format, else the content the document saved. A
+// number past the last page is empty, and so is a continuation to the
+// next page on the last page, as Writer prints them.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a footer of a
+//     three-page document prints a page number of page-adjust 1 or of
+//     select-page next as 2 and 3 on pages 1 and 2 and empty on page 3,
+//     one of page-adjust 5 empty on every page, ones of page-adjust -1
+//     or select-page previous as 0, 1 and 2; a continuation of
+//     select-page next prints its string on pages 1 and 2 alone, one of
+//     select-page previous on every page.
+//   - libreoffice/odt: layout/U-min.fodt prints its one page with an
+//     empty footer of page-adjust 1.
 func (b *builder) pageField(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState, depth int) {
 	if b.hf == nil {
 		b.inline(c, t, out, ws, depth)
 		return
 	}
+	step := 0
+	switch c.A(odf.NSText, "select-page") {
+	case "next":
+		step = 1
+	case "previous":
+		step = -1
+	}
+	if c.Name.Local == "page-continuation" {
+		if step <= b.hf.after {
+			*out = append(*out, b.run(c.A(odf.NSText, "string-value"), t))
+			ws.space = false
+		}
+		return
+	}
 	n := b.hf.number
 	if c.Name.Local == "page-count" {
 		n = b.hf.count
-	} else if adj, err := intconv.Atoi(c.A(odf.NSText, "page-adjust")); err == nil {
-		n += max(-intconv.MaxCountStart, min(adj, intconv.MaxCountStart))
+	} else {
+		if adj, err := intconv.Atoi(c.A(odf.NSText, "page-adjust")); err == nil {
+			step += max(-intconv.MaxCountStart, min(adj, intconv.MaxCountStart))
+		}
+		if step > b.hf.after {
+			return
+		}
+		n += step
 	}
 	format := c.A(odf.NSStyle, "num-format")
 	if format == "" {

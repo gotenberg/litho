@@ -231,6 +231,35 @@ func TestConvert_HeadersAndPages(t *testing.T) {
 	}
 }
 
+// TestConvert_PageFieldsPastTheLastPage locks the page fields of a
+// footer that point past the last page (see [builder.pageField], which
+// holds the measurements).
+func TestConvert_PageFieldsPastTheLastPage(t *testing.T) {
+	masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"><style:footer>` +
+		`<text:p>A[<text:page-number text:select-page="current" text:page-adjust="1">9</text:page-number>]` +
+		`B[<text:page-number text:select-page="next">9</text:page-number>]` +
+		`C[<text:page-number text:select-page="previous">9</text:page-number>]` +
+		`D[<text:page-continuation text:select-page="next" text:string-value="cont"/>]` +
+		`E[<text:page-continuation text:select-page="previous" text:string-value="prev"/>]` +
+		`G[<text:page-number text:page-adjust="5">9</text:page-number>]</text:p></style:footer></style:master-page>`
+	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
+	body := `<text:p>One</text:p><text:p text:style-name="PB">Two</text:p><text:p text:style-name="PB">Three</text:p>`
+	res := convertDoc(t, doc{masters: masters, contentAuto: auto, body: body}.pack(t), office.Options{})
+	want := []string{
+		"One\nA[2]B[2]C[0]D[cont]E[prev]G[]",
+		"Two\nA[3]B[3]C[1]D[cont]E[prev]G[]",
+		"Three\nA[]B[]C[2]D[]E[prev]G[]",
+	}
+	if len(res.Pages) != len(want) {
+		t.Fatalf("pages = %d", len(res.Pages))
+	}
+	for i, w := range want {
+		if got := pageText(res.Pages[i]); got != w {
+			t.Errorf("page %d = %q, want %q", i+1, got, w)
+		}
+	}
+}
+
 func TestConvert_Notes(t *testing.T) {
 	note := func(class, n, body string) string {
 		return `<text:note text:note-class="` + class + `"><text:note-citation>` + n + `</text:note-citation><text:note-body><text:p>` + body + `</text:p></text:note-body></text:note>`
