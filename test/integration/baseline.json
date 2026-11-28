@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-28T00:11:29Z",
+  "captured_at": "2026-11-28T02:06:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9066,12 +9066,12 @@
               "text_f1": 1
             },
             "sc/tdf152980.csv": {
-              "layout": 0.9605,
+              "layout": 0.9864,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8889
+              "text_f1": 1
             },
             "sc/tdf48731.csv": {
               "layout": 0.9978,
@@ -19004,8 +19004,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 155,
-          "mismatched": 15,
+          "matched": 156,
+          "mismatched": 14,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19223,7 +19223,7 @@
               "text_f1": 1
             },
             "sd/Tdf112594.fodp": {
-              "layout": 0.5412,
+              "layout": 0.5311,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19991,7 +19991,7 @@
               "text_f1": 1
             },
             "sd/tdf149551_btlr.odp": {
-              "layout": 0.8441,
+              "layout": 0.8484,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19999,7 +19999,7 @@
               "text_f1": 1
             },
             "sd/tdf149551_tbrl90.odp": {
-              "layout": 0.8606,
+              "layout": 0.8485,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -20047,12 +20047,12 @@
               "text_f1": 1
             },
             "sd/tdf153161_FlushToSave.odp": {
-              "layout": 0.5246,
+              "layout": 0.96,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2857
+              "text_f1": 0.8
             },
             "sd/tdf156955.odp": {
               "layout": 0.8323,
@@ -20327,11 +20327,11 @@
               "text_f1": 1
             },
             "sd/tdf96708.odp": {
-              "layout": 0.6795,
+              "layout": 0.922,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.75,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/tdf99213-target-missing.odp": {
@@ -23991,8 +23991,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 240,
-          "mismatched": 16,
+          "matched": 241,
+          "mismatched": 15,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -25283,7 +25283,7 @@
               "text_f1": 1
             },
             "sc/tdf103829_textTab.ods": {
-              "layout": 0.6392,
+              "layout": 0.96,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -53952,20 +53952,20 @@
               "text_f1": 1
             },
             "tabs": {
-              "layout": 0.9417,
+              "layout": 0.9973,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8889
+              "text_f1": 1
             },
             "tabs-ref": {
-              "layout": 0.9417,
+              "layout": 0.9973,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8889
+              "text_f1": 1
             }
           },
           "score_tolerance": 0.02
@@ -119818,8 +119818,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 5967,
-          "mismatched": 527,
+          "matched": 5976,
+          "mismatched": 518,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -125733,21 +125733,21 @@
             "css/css-writing-modes/sizing-orthog-vrl-in-htb-024.xht": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-001.html": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-002.html": "pass",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-003.html": "fail",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-004.html": "fail",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-003.html": "pass",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-004.html": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-005.html": "pass",
             "css/css-writing-modes/sizing-orthogonal-percentage-margin-006.html": "pass",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-007.html": "fail",
-            "css/css-writing-modes/sizing-orthogonal-percentage-margin-008.html": "fail",
-            "css/css-writing-modes/sizing-percentages-replaced-orthogonal-001.html": "fail",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-007.html": "pass",
+            "css/css-writing-modes/sizing-orthogonal-percentage-margin-008.html": "pass",
+            "css/css-writing-modes/sizing-percentages-replaced-orthogonal-001.html": "pass",
             "css/css-writing-modes/slr-alongside-vlr-floats.html": "fail",
             "css/css-writing-modes/srl-alongside-vrl-floats.html": "fail",
             "css/css-writing-modes/table-cell-001.html": "pass",
             "css/css-writing-modes/table-cell-002.html": "fail",
-            "css/css-writing-modes/table-cell-align-001.html": "fail",
-            "css/css-writing-modes/table-cell-align-002.html": "fail",
-            "css/css-writing-modes/table-cell-align-003.html": "fail",
-            "css/css-writing-modes/table-cell-align-004.html": "fail",
+            "css/css-writing-modes/table-cell-align-001.html": "pass",
+            "css/css-writing-modes/table-cell-align-002.html": "pass",
+            "css/css-writing-modes/table-cell-align-003.html": "pass",
+            "css/css-writing-modes/table-cell-align-004.html": "pass",
             "css/css-writing-modes/table-cell-align-005.html": "pass",
             "css/css-writing-modes/table-cell-align-006.html": "fail",
             "css/css-writing-modes/table-cell-valign-001.html": "fail",
