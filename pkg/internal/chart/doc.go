@@ -56,9 +56,12 @@
 // Bars are boxes, cylinders, cones or pyramids, lines ribbons and areas
 // slabs, each in its row along the depth axis, painted back to front with
 // their faces shaded by fixed factors; walls, floor and gridlines are
-// projected. A pie is a tilted ellipse on a rim.
+// projected. A pie is a tilted ellipse on a rim. A surface is the same
+// turned box, its grid's cells cut into the bands of its value axis, each
+// band filled with one colour or, as a wireframe, drawn as lines; a
+// contour is the surface seen from straight above.
 //
-// Not drawn: lighting, surface charts, trendlines and error bars of a 3D
+// Not drawn: lighting, trendlines and error bars of a 3D
 // group, the equations of trendlines, the high-low lines and up-down bars
 // of a 3D group, leader lines, multi-level categories (their levels join
 // on one label).

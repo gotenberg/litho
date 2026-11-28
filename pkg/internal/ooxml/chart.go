@@ -57,7 +57,8 @@ func hexColor(v uint32) css.Color {
 // c:strLit and c:numLit); a series with none keeps its range reference and
 // is reported with [warn.ChartNoCache]. External data and the formatting of
 // Office 2013's chart style parts are ignored. A 3D chart keeps its view,
-// floor and walls; a 3D surface chart is not drawn.
+// floor and walls; a surface chart keeps its view too, a contour seen from
+// straight above when the file states none.
 //
 // A picture fill (a:blipFill) paints the picture pictures loads for the
 // chart part and the relationship id, tiled at its natural size by the
@@ -404,7 +405,7 @@ const (
 func (p *chartReader) readView3D(ch *Element) {
 	var g3 *chart.Group
 	for _, g := range p.c.Groups {
-		if g.ThreeD {
+		if g.ThreeD || g.Kind == chart.Surface {
 			g3 = g
 			break
 		}
@@ -416,6 +417,10 @@ func (p *chartReader) readView3D(ch *Element) {
 	v := &chart.View3D{RotX: defaultRotX, RotY: defaultRotY, Depth: defaultDepth, Perspective: defaultPerspective}
 	if g3.Kind == chart.Pie {
 		v.RotY = 0
+	}
+	if g3.Kind == chart.Surface && !g3.ThreeD {
+		// A contour is its surface seen from straight above.
+		v.RotX, v.RotY, v.Perspective = 90, 0, 0
 	}
 	if x := floatVal(e, "rotX"); !math.IsNaN(x) {
 		v.RotX = math.Max(-90, math.Min(x, 90))
@@ -438,10 +443,11 @@ func (p *chartReader) readView3D(ch *Element) {
 	p.c.SideWall = p.frame(ch.Child(NSChart, "sideWall").Child(NSChart, "spPr"), chart.Frame{})
 	p.c.BackWall = p.frame(ch.Child(NSChart, "backWall").Child(NSChart, "spPr"), chart.Frame{})
 	for _, g := range p.c.Groups {
-		if !g.ThreeD {
+		if !g.ThreeD && g.Kind != chart.Surface {
 			continue
 		}
 		switch g.Kind {
+		case chart.Surface:
 		case chart.Bar, chart.Line, chart.Area:
 			// Right-angled axes are drawn as an oblique projection, which
 			// keeps the front plane facing the viewer.

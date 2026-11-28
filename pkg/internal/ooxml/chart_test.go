@@ -337,7 +337,7 @@ func TestChartFromElement_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"equation", "surface"} {
+	for _, want := range []string{"equation", "lighting"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
@@ -475,8 +475,35 @@ func TestChartFromElement_ApplicationTitles(t *testing.T) {
 	if g := stock.Groups[0]; g.Kind != chart.Line || !g.Stock {
 		t.Errorf("stock group = %+v", g)
 	}
-	if surface := readChart(t, chartXML("", "", `<c:surfaceChart>`+ser(0, "Z", "", "1")+`</c:surfaceChart>`), false); !surface.Surface || len(surface.Groups) != 0 {
+	if surface := readChart(t, chartXML("", "", `<c:surfaceChart>`+ser(0, "Z", "", "1")+`</c:surfaceChart>`), false); !surface.Surface || len(surface.Groups) != 1 || surface.Groups[0].Kind != chart.Surface {
 		t.Errorf("surface chart: Surface %v, %d groups", surface.Surface, len(surface.Groups))
+	}
+}
+
+// TestChartFromElement_Surface reads a surface group: its series in rows,
+// its wireframe, its band formats by index, its series axis, and the view
+// of a contour, seen from straight above when the file states none.
+func TestChartFromElement_Surface(t *testing.T) {
+	bands := `<c:bandFmts><c:bandFmt><c:idx val="1"/><c:spPr><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></c:spPr></c:bandFmt></c:bandFmts>`
+	axes := `<c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>`
+	defs := `<c:catAx><c:axId val="1"/></c:catAx><c:valAx><c:axId val="2"/></c:valAx><c:serAx><c:axId val="3"/></c:serAx>`
+	contour := readChart(t, chartXML("", "", `<c:surfaceChart><c:wireframe val="1"/>`+ser(0, "A", "", "1", "2")+ser(1, "B", "", "3", "4")+bands+axes+`</c:surfaceChart>`+defs), false)
+	g := contour.Groups[0]
+	if g.Kind != chart.Surface || g.ThreeD || !g.Rows || !g.Wireframe || g.ZAxis != 2 || len(g.Series) != 2 {
+		t.Errorf("contour group = %+v", g)
+	}
+	if len(g.Bands) != 2 || g.Bands[0].Fill != nil || g.Bands[1].Fill == nil || g.Bands[1].Fill.Color != (typeset.Color{G: 1, A: 1}) {
+		t.Errorf("bands = %+v, want band 1 green alone", g.Bands)
+	}
+	if v := contour.View3D; v == nil || v.RotX != 90 || v.RotY != 0 || v.Perspective != 0 {
+		t.Errorf("contour view = %+v, want straight above", v)
+	}
+	solid := readChart(t, chartXML("", "", `<c:surface3DChart>`+ser(0, "A", "", "1", "2")+axes+`</c:surface3DChart>`+defs), false)
+	if g := solid.Groups[0]; g.Kind != chart.Surface || !g.ThreeD || g.Wireframe {
+		t.Errorf("3-D surface group = %+v", g)
+	}
+	if v := solid.View3D; v == nil || v.RotX != 15 || v.RotY != 20 {
+		t.Errorf("3-D surface view = %+v, want Office's default", v)
 	}
 }
 

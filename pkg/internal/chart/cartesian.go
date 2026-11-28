@@ -446,7 +446,9 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	} else {
 		x.category = true
 		x.between = x.ax == nil || x.ax.BetweenCategories
-		if g0.Kind == Area && x.ax == nil {
+		if g0.Kind == Area && x.ax == nil || g0.Kind == Surface {
+			// A surface's points stand on the category ticks, whatever
+			// its value axis says.
 			x.between = false
 		}
 	}

@@ -136,6 +136,9 @@ type projection struct {
 	depth, rowDepth, solid float64
 	// horizontal lays the categories down the page.
 	horizontal bool
+	// surface puts the series of a surface on the depth axis's ticks, the
+	// first at the front and the last at the back, rowDepth apart.
+	surface bool
 
 	// turned selects the turned view; the fields below are its own.
 	turned bool
@@ -225,6 +228,10 @@ func (p *projection) farther(a, b float64, k int) bool {
 
 // row returns the front and back depths of the solids of row i.
 func (p *projection) row(i int) (float64, float64) {
+	if p.surface {
+		z := float64(float64(i) * p.rowDepth)
+		return z, z
+	}
 	z0 := float64(float64(i)*p.rowDepth) + float64((p.rowDepth-p.solid)/2)
 	return z0, z0 + p.solid
 }
@@ -237,18 +244,21 @@ const maxDepthShare = 0.5
 // in three dimensions, nil when it draws it flat: the turned view under
 // [OfficeRules] for a view without right-angled axes, as Office gives
 // rAngAx precedence over the perspective ([MS-OI29500], ECMA-376 Part 1,
-// 21.2.2.136 perspective), the oblique view otherwise.
+// 21.2.2.136 perspective), the oblique view otherwise. A surface is always
+// turned, a contour being seen from straight above.
 func (rd *renderer) threeD(g0 *Group) *projection {
 	v := rd.c.View3D
-	if v == nil || !g0.ThreeD || (g0.Kind != Bar && g0.Kind != Line && g0.Kind != Area) {
+	surface := g0.Kind == Surface
+	projected := surface || g0.ThreeD && (g0.Kind == Bar || g0.Kind == Line || g0.Kind == Area)
+	if v == nil || !projected {
 		return nil
 	}
 	rx, ry := clampFinite(v.RotX, -90, 90), v.RotY
 	if !numeric.Finite(ry) {
 		ry = 0
 	}
-	p := &projection{horizontal: g0.Kind == Bar && g0.Horizontal}
-	if rd.office() && !v.RightAngle {
+	p := &projection{horizontal: g0.Kind == Bar && g0.Horizontal, surface: surface}
+	if rd.office() && (!v.RightAngle || surface) {
 		p.turned = true
 		p.sinY, p.cosY = detmath.Sincos(ry * math.Pi / 180)
 		p.sinX, p.cosX = detmath.Sincos(rx * math.Pi / 180)
@@ -291,12 +301,15 @@ func (v *View3D) depthPercent() float64 {
 //     v2FxTestFiles/presentation/Chart_3D_Column_.pptx (three rows over
 //     four): a box fitted to Office's tick marks is 0.333 and 0.751 of its
 //     width deep.
+//   - litho/pptx: chart-surface's contours, six categories by five series
+//     seen from above: PowerPoint's grid is 229 by 190 pixels, 1.21 to 1,
+//     where series as far apart as the categories make it 1.25 to 1.
 func (p *projection) layout(rd *renderer, g0 *Group, x *dim, inner typeset.Rect) typeset.Rect {
 	k := 1
 	rows := 1
 	if g0.Rows {
 		for _, g := range rd.c.Groups {
-			if g.ThreeD {
+			if g.ThreeD || g.Kind == Surface {
 				rows = max(rows, len(g.Series))
 			}
 		}
@@ -316,6 +329,10 @@ func (p *projection) layout(rd *renderer, g0 *Group, x *dim, inner typeset.Rect)
 	dp := rd.c.View3D.depthPercent() / 100
 	// The depth per point of the category axis's length.
 	ratio := float64(rows) * dp * (1 + gd) / (units * (float64(k) - float64(float64(k-1)*ov) + gap))
+	if p.surface {
+		// A surface's series stand as far apart as its categories.
+		ratio = float64(max(rows-1, 1)) * dp / units
+	}
 	// The names of the rows stand beside the floor, inside the plot area.
 	if w := rd.rowLabelsWidth(p, g0); w > 0 && w < inner.Width/2 {
 		inner.Width -= w
@@ -327,6 +344,9 @@ func (p *projection) layout(rd *renderer, g0 *Group, x *dim, inner typeset.Rect)
 		f := p.turn(rd.c.View3D, inner, ratio)
 		p.rowDepth = p.depth / float64(rows)
 		p.solid = p.rowDepth / (1 + gd)
+		if p.surface {
+			p.rowDepth, p.solid = p.depth/float64(max(rows-1, 1)), 0
+		}
 		return f
 	}
 	ax, ay := math.Abs(p.dx), math.Abs(p.dy)
@@ -582,7 +602,7 @@ func (rd *renderer) series3D(p *projection, x *dim, yOf map[*Group]*dim) []func(
 		if y == nil {
 			continue
 		}
-		if !g.ThreeD {
+		if !g.ThreeD && g.Kind != Surface {
 			labels = append(labels, rd.series(g, x, y)...)
 			continue
 		}
@@ -595,6 +615,8 @@ func (rd *renderer) series3D(p *projection, x *dim, yOf map[*Group]*dim) []func(
 			s = rd.areas3D(p, g, x, y)
 		case Line:
 			s = rd.lines3D(p, g, x, y)
+		case Surface:
+			s = rd.surface3D(p, g, x, y)
 		case Pie, Doughnut, Scatter, Bubble, Radar, Unsupported, Waterfall, BoxWhisker, Funnel, Treemap, Sunburst:
 		}
 		ss = append(ss, s...)
@@ -1092,17 +1114,25 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 		edge, al, dir = f.X, alignRight, -1
 	}
 	gap := labelSpacing
+	ticks := len(g.Series) + 1
+	if p.surface {
+		ticks = len(g.Series)
+	}
 	if p.turned {
 		gap = float64(officeSideLabelGap * fontSize(a.Style.Size))
 		if rowTicks(a) {
-			for i := 0; i <= len(g.Series); i++ {
+			for i := range ticks {
 				q := p.at(edge, f.Y+f.Height, float64(float64(i)*p.rowDepth))
 				rd.add(line(q.X, q.Y, q.X+float64(dir*tickLength), q.Y, a.Line))
 			}
 		}
 	}
+	step := rd.rowLabelStep(p, g, a, edge, f)
 	reach := 0.0
 	for i, s := range g.Series {
+		if i%step != 0 {
+			continue
+		}
 		z0, z1 := p.row(i)
 		b := rd.measure(s.Name, a.Style, 0)
 		if b == nil {
@@ -1120,6 +1150,43 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 		rd.frame(typeset.Rect{X: x - float64(w/2), Y: mid.Y - float64(h/2), Width: w, Height: h}, a.Title.Frame)
 		rd.out = append(rd.out, b.draw(x, mid.Y, alignCenter)...)
 	}
+}
+
+// rowLabelStep returns the interval of the row names rowLabels writes: 1
+// for every row, or under the turned view of a surface the least k such
+// that every k-th name, from the first, clears the one before it up the
+// page, as Office thins the names of a surface's rows.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: chart-surface's 3-D surfaces of five rows, whose names
+//     stand 13 pt apart up the page in 12 pt text: PowerPoint writes Y0,
+//     Y2 and Y4; its contours, 34 pt apart, all five.
+func (rd *renderer) rowLabelStep(p *projection, g *Group, a *Axis, edge float64, f typeset.Rect) int {
+	if !p.surface || !p.turned || len(g.Series) < 2 {
+		return 1
+	}
+	var hs []float64
+	var ys []float64
+	for i, s := range g.Series {
+		b := rd.measure(s.Name, a.Style, 0)
+		h := 0.0
+		if b != nil {
+			_, h = b.rotated()
+		}
+		hs = append(hs, h)
+		ys = append(ys, p.at(edge, f.Y+f.Height, float64(float64(i)*p.rowDepth)).Y)
+	}
+	for k := 1; k < len(g.Series); k++ {
+		clear := true
+		for i := k; i < len(g.Series) && clear; i += k {
+			clear = math.Abs(ys[i]-ys[i-k]) >= (hs[i]+hs[i-k])/2
+		}
+		if clear {
+			return k
+		}
+	}
+	return len(g.Series)
 }
 
 // pie3D is the tilt of a three-dimensional pie: its height over its width

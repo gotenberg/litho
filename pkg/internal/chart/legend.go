@@ -61,6 +61,24 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 			}
 			continue
 		}
+		if g.Kind == Surface {
+			// A surface lists its bands.
+			levels, y := rd.surfaceBands(g)
+			nb := len(levels) - 1
+			for k := 0; k < nb; k++ {
+				if len(out) < maxLegendEntries && !hidden[n] {
+					e := legendEntry{label: rd.measure(y.tickText(levels[k])+"-"+y.tickText(levels[k+1]), st, maxW)}
+					if g.Wireframe {
+						e.fill, e.border = &Paint{None: true}, rd.bandLine(g, k, nb)
+					} else {
+						e.fill = rd.bandFill(g, k, nb)
+					}
+					out = append(out, e)
+				}
+				n++
+			}
+			continue
+		}
 		// A pie lists its categories; another group whose points vary in
 		// colour does too.
 		vary := (g.Kind == Pie || g.Kind == Doughnut || g.VaryColors && len(g.Series) == 1) && len(g.Series) > 0

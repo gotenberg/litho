@@ -185,6 +185,8 @@ func groupKind(g *Group) string {
 		return "treemap"
 	case Sunburst:
 		return "sunburst"
+	case Surface:
+		return "surface"
 	case Unsupported:
 		return ""
 	}
@@ -278,7 +280,7 @@ func categoriesPhrase(c *Chart) string {
 	switch first.Kind {
 	case Scatter, Bubble:
 		return ""
-	case Bar, Line, Area, Pie, Doughnut, Radar, Unsupported, Waterfall, BoxWhisker, Funnel, Treemap, Sunburst:
+	case Bar, Line, Area, Pie, Doughnut, Radar, Unsupported, Waterfall, BoxWhisker, Funnel, Treemap, Sunburst, Surface:
 	}
 	if binnedGroup(first) {
 		return ""

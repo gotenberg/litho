@@ -99,9 +99,9 @@ type Chart struct {
 	PowerPoint bool
 	// Surface marks a chart whose file holds a surface chart group
 	// (ECMA-376 Part 1, 21.2.2.203 surfaceChart, and surface3DChart; ODF
-	// 1.3 Part 3, 19.15 chart:class chart:surface),
-	// which the reader leaves out of Groups: [Render] draws none. Only
-	// [AltText] reads it.
+	// 1.3 Part 3, 19.15 chart:class chart:surface). Only [AltText] reads
+	// it: an OOXML surface group is a [Surface] group of Groups, an ODF
+	// one is left out of them.
 	Surface bool
 }
 
@@ -181,6 +181,14 @@ const (
 	// around a hole, a ring a level of their parents ([Series.Hierarchy];
 	// MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout sunburst).
 	Sunburst
+	// Surface draws the values of its series as a surface over a grid,
+	// the categories across and the series one behind the other, its
+	// faces filled by bands of value, each band a major interval of the
+	// value axis (ECMA-376 Part 1, 21.2.2.203 surfaceChart, and
+	// surface3DChart). It is always seen through a projection: a
+	// two-dimensional surface chart, a contour, is the surface seen from
+	// straight above.
+	Surface
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -214,6 +222,8 @@ func (k Kind) String() string {
 		return "treemap"
 	case Sunburst:
 		return "sunburst"
+	case Surface:
+		return "surface"
 	}
 	return "unknown"
 }
@@ -312,6 +322,13 @@ type Group struct {
 	// category, a bar from the first series' value to the last's
 	// (21.2.2.218 upDownBars).
 	UpDown *UpDownBars
+	// Wireframe draws a surface group as lines, each band's in its colour,
+	// with no fill (ECMA-376 Part 1, 21.2.2 wireframe).
+	Wireframe bool
+	// Bands are the formats of a surface group's bands, by index from the
+	// lowest (21.2.2.13 bandFmt); a band it does not list, or whose frame
+	// sets nothing, takes the automatic one.
+	Bands []Frame
 }
 
 // OfPie is how a pie of pie or bar of pie splits its points and draws the

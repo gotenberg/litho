@@ -283,4 +283,9 @@ type renderer struct {
 	// shown, when not nil, is the part of the page that shows
 	// ([RenderPart]).
 	shown *typeset.Rect
+	// levels are the bounds of the bands of the chart's surface group,
+	// once found ([renderer.surfaceLevels]); surfaceY is the value
+	// dimension the plot drew the surface against.
+	levels   []float64
+	surfaceY *dim
 }

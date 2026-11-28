@@ -43,15 +43,20 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Kind = chart.Radar
 		g.Filled = childVal(e, "radarStyle") == "filled"
 	case "surfaceChart", "surface3DChart":
-		p.warn(warn.ContentUnsupported, warn.Omitted, "a surface chart is not drawn")
+		g.Kind = chart.Surface
+		g.Rows = true
+		g.Wireframe = boolVal(e, "wireframe", false)
+		g.Bands = p.bands(e.Child(NSChart, "bandFmts"))
 		p.c.Surface = true
-		return nil
 	default:
 		return nil
 	}
-	if strings.HasSuffix(e.Local, "3DChart") {
+	if strings.HasSuffix(e.Local, "3DChart") && g.Kind != chart.Surface {
 		g.ThreeD = true
 		p.read3D(e, g)
+	}
+	if e.Local == "surface3DChart" {
+		g.ThreeD = true
 	}
 	if e.Local == "stockChart" {
 		g.Stock = true
@@ -97,7 +102,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 			g.YAxis = i
 		}
 	}
-	if len(ids) >= 3 && g.ThreeD {
+	if len(ids) >= 3 && (g.ThreeD || g.Kind == chart.Surface) {
 		if i, ok := p.axes[ids[2]]; ok {
 			g.ZAxis = i
 		}
@@ -296,7 +301,33 @@ func sortSeries(ss []*chart.Series, idx []int) {
 
 // filled reports a kind whose series are areas rather than lines.
 func filled(g *chart.Group) bool {
-	return g.Kind == chart.Bar || g.Kind == chart.Area || g.Kind == chart.Pie || g.Kind == chart.Doughnut || g.Kind == chart.Bubble || g.Kind == chart.Radar && g.Filled
+	return g.Kind == chart.Bar || g.Kind == chart.Area || g.Kind == chart.Pie || g.Kind == chart.Doughnut || g.Kind == chart.Bubble || g.Kind == chart.Surface || g.Kind == chart.Radar && g.Filled
+}
+
+// maxBands caps the band formats of a surface group. Anti-DoS guard, not
+// spec-mandated: a surface's bands are the major intervals of its value
+// axis, which Office keeps to a few dozen.
+const maxBands = 256
+
+// bands reads a surface group's band formats (ECMA-376 Part 1, 21.2.2.14
+// bandFmts): each c:bandFmt's frame at its c:idx, the bands it skips
+// automatic.
+func (p *chartReader) bands(e *Element) []chart.Frame {
+	var out []chart.Frame
+	for _, b := range e.Kids() {
+		if !b.Is(NSChart, "bandFmt") {
+			continue
+		}
+		i, ok := Int(childVal(b, "idx"))
+		if !ok || i < 0 || i >= maxBands {
+			continue
+		}
+		for len(out) <= i {
+			out = append(out, chart.Frame{})
+		}
+		out[i] = p.frame(b.Child(NSChart, "spPr"), chart.Frame{})
+	}
+	return out
 }
 
 // series reads one c:ser (ECMA-376 Part 1, 21.2.2.167 and its kind's
@@ -315,7 +346,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 		s.Categories = p.data(e.Child(NSChart, "xVal"), "x values")
 		s.Values = p.data(e.Child(NSChart, "yVal"), "y values")
 		s.Sizes = p.data(e.Child(NSChart, "bubbleSize"), "bubble sizes")
-	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar, chart.Unsupported, chart.Waterfall, chart.BoxWhisker, chart.Funnel, chart.Treemap, chart.Sunburst:
+	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar, chart.Unsupported, chart.Waterfall, chart.BoxWhisker, chart.Funnel, chart.Treemap, chart.Sunburst, chart.Surface:
 		s.Categories = p.data(e.Child(NSChart, "cat"), "categories")
 		s.Values = p.data(e.Child(NSChart, "val"), "values")
 	}
