@@ -18,7 +18,8 @@ type Warp struct {
 	Lanes []shape.WarpLane
 	// Fit scales the lines that follow a path so that the widest of them
 	// spans its path, as a body converted from WordArt asks (ECMA-376 Part
-	// 1, 21.1.2.1.1 bodyPr fromWordArt); false keeps the text's size.
+	// 1, 21.1.2.1.1 bodyPr fromWordArt); false keeps the text's size, but
+	// shrinks lines wider than their path until the widest spans it.
 	Fit bool
 	// Block is the width the body's lines were laid out in, in the text's
 	// own coordinates, from 0: a line that follows a path keeps its place
@@ -97,8 +98,10 @@ const pathOffset = 0.154
 //     invisible, at its unwarped place.
 //   - libreoffice/pptx sd/tdf116350-texteffects: a body not from WordArt
 //     follows textArchUp at its 18 point size from the path's start, each
-//     glyph text with its own turned matrix; oox/tdf125582_TextOnCircle
-//     sets its second line inside the first, at its line distance.
+//     glyph text with its own turned matrix; on the arcs shorter than its
+//     line, at 18.94, 13.58, 9.76 and 8.37 points, the sizes at which the
+//     line spans the arc; oox/tdf125582_TextOnCircle sets its second line
+//     inside the first, at its line distance.
 //   - libreoffice/pptx sd/tdf125573_FontWorkScaleX: a body from WordArt
 //     of two lines on textArchDown prints both at 47.3 points, the scale
 //     at which the longer one spans the path.
@@ -284,7 +287,8 @@ type pathGlyph struct {
 
 // placeOnPath sets the glyphs of lane i on its path: the line scaled by
 // k (the path's length over the widest line's advance when the warp
-// fits, 1 otherwise), each glyph upright at its advance's middle, which
+// fits or the widest line is longer than the path, 1 otherwise), each
+// glyph upright at its advance's middle, which
 // lies at its place along the line times k from where the line starts on
 // the path, the line's start, middle or end on the path's as it lies in
 // the block; the first line's baseline pathOffset ems below the path, the
@@ -322,7 +326,7 @@ func (wp *warper) placeOnPath(i int) {
 		widest = max(widest, pl.x1-pl.x0)
 	}
 	k := 1.0
-	if wp.w.Fit && numeric.Positive(widest) {
+	if numeric.Positive(widest) && (wp.w.Fit || widest > length) {
 		k = length / widest
 	}
 	first := lines[0]

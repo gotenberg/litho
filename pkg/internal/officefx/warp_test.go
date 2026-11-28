@@ -150,3 +150,19 @@ func TestWarpText_LeavesEffectBitmapsOutAndStopsWithTheContext(t *testing.T) {
 		t.Error("a cancelled context warped the text")
 	}
 }
+
+func TestWarpText_ShrinksALineLongerThanItsPath(t *testing.T) {
+	run := twoGlyphs(10)
+	// The run advances 12 points: on a 6-point path it shrinks by half,
+	// on a 120-point path it keeps its size.
+	for _, c := range []struct{ width, k float64 }{{6, 0.5}, {120, 1}} {
+		w := &Warp{Lanes: lanesOf(typeset.Rect{Width: c.width, Height: 60}, "vc"), Block: 12}
+		out, _, err := WarpText(context.Background(), []typeset.Fragment{run}, typeset.Matrix{A: 1, D: 1, E: -10, F: -100}, w, &text.Outlines{})
+		if err != nil || len(out) != 2 {
+			t.Fatalf("path %v: %d fragments, err %v", c.width, len(out), err)
+		}
+		if a := out[0].(*typeset.Group).Transform.A; math.Abs(a-c.k) > 1e-9 {
+			t.Errorf("path %v: scale %v, want %v", c.width, a, c.k)
+		}
+	}
+}
