@@ -251,6 +251,16 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("body %+v", b)
 			}
 		}},
+		{"a warped text set on one line a paragraph", `<a:bodyPr wrap="square"><a:prstTxWarp prst="textArchUp"><a:avLst/></a:prstTxWarp></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
+			if b.Wrap || b.Warp == nil {
+				t.Errorf("wrap %v, warp %+v; want a warp that does not wrap", b.Wrap, b.Warp)
+			}
+		}},
+		{"an unwarped text keeps its wrap", `<a:bodyPr wrap="square"><a:prstTxWarp prst="textNoShape"><a:avLst/></a:prstTxWarp></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
+			if !b.Wrap {
+				t.Error("textNoShape stopped the lines wrapping")
+			}
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

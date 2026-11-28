@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/omml"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -236,11 +237,30 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 	}
 	body := bodyProps(bodies)
 	body.Warp = ooxml.TextWarpOf(bodies.child("prstTxWarp"))
+	if warpSetsOneLine(body.Warp) {
+		body.Wrap = false
+	}
 	if v, ok := bodies.attr("fromWordArt"); ok {
 		body.WarpFit = ooxml.OnOff(v, false)
 	}
 	body.Paragraphs = r.paragraphs(tb, ts)
 	return body
+}
+
+// warpSetsOneLine reports whether the text warp w (ECMA-376 Part 1,
+// 20.1.9.19 prstTxWarp) sets each paragraph of its body on one line,
+// whatever the body's wrap (21.1.2.1.1 bodyPr wrap) says: every preset
+// but textNoShape, which warps nothing, as PowerPoint prints them.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf116350-texteffects.pptx prints
+//     "FontEffectArcUp" in Calibri Bold 40 on one line of a box 135 points
+//     wide that wraps; oox/tdf125582_TextOnCircle.pptx prints "Fontwork
+//     40pt" and "type Circle curve" at 40 points, each on one line, in a
+//     text rectangle of 156 points that wraps.
+func warpSetsOneLine(w *shape.TextWarp) bool {
+	return w != nil && (w.Custom != nil || w.Preset != "textNoShape")
 }
 
 // bodyProps reads the body properties along a chain of bodyPr elements
