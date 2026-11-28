@@ -91,9 +91,9 @@ type reader struct {
 	// standardPrinted and standardScreen are the standard row height of
 	// the Normal font in printer and screen pixels ([standardRow]).
 	standardPrinted, standardScreen float64
-	// normalUnserved reports a Normal font no font serves, drawn in
-	// [substituteFamily]: its standard row is not the one Excel prints,
-	// and the rows keep the heights the book stores
+	// normalUnserved reports a Normal font no font serves, one that falls
+	// through to [substituteFamily]: Excel measures no row by it, and the
+	// rows keep the heights the book stores
 	// (sheet.Document.FitRows).
 	//
 	// # Corpus evidence
@@ -143,14 +143,9 @@ type tableArea struct {
 	totals int
 }
 
-// substituteFamily is the face LibreOffice measures and draws a family
-// with that no installed font and no metric alias serves, in the pinned
-// image (the sheet builder draws with it too).
-//
-// # Corpus evidence
-//
-//   - libreoffice/xlsx: sc/tdf165180_date1904.xlsx, whose Normal font is Aptos
-//     Narrow, prints in Noto Sans with columns of its digits.
+// substituteFamily is the face a family falls through to that no
+// installed font and no metric alias serves, in the pinned image: a Normal
+// font drawn in it is one no font serves.
 const substituteFamily = "Noto Sans"
 
 // read reads the workbook pkg holds into the sheet model, with the
@@ -293,7 +288,8 @@ func printerPixels(v float64) float64 {
 // screenDigit is the digit's width on Excel's 96 dpi screen, in pixels,
 // which the default column width counts in. A stylesheet without fonts
 // gives Excel no font to measure: the digits are then Calibri 11's. A
-// family no font serves is measured in LibreOffice's substitute.
+// family no font serves is measured in Excel's substitute
+// ([sheet.ExcelSubstitute]).
 //
 // # Corpus evidence
 //
@@ -324,9 +320,16 @@ func (r *reader) measureNormalFont() {
 		style.Weight = 700
 	}
 	if face := r.fonts.Match(style); face != nil {
-		r.standardPrinted, r.standardScreen = standardRow(face.Metrics(1), f.Size)
 		// A face no font serves gives no standard row Excel would print.
 		r.normalUnserved = len(f.Families) > 0 && face.Family() == substituteFamily && !strings.EqualFold(f.Families[0], substituteFamily)
+	}
+	if len(f.Families) > 0 {
+		if sub := sheet.ExcelSubstitute(f.Families[0]); sub != "" {
+			style.Families[len(style.Families)-1] = sub
+		}
+	}
+	if face := r.fonts.Match(style); face != nil {
+		r.standardPrinted, r.standardScreen = standardRow(face.Metrics(1), f.Size)
 	}
 	if len(f.Families) > 0 && !f.Bold && !f.Italic {
 		if row, ok := deviceStandardRows[deviceFace{strings.ToLower(f.Families[0]), f.Size}]; ok {

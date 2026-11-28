@@ -150,9 +150,36 @@ var fontconfigAliases = map[string]string{
 //     sc/tdf134392.xlsx (FreeSans) print in Noto Sans.
 const substituteFamily = "Noto Sans"
 
+// ExcelSubstitute returns the face Excel prints family in when no
+// installed font serves it: Arial for a family named in ASCII, and ""
+// for one named in another script, an East Asian system face that Excel
+// prints in itself and that falls back by script.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: fonts prints its cell of the family "No Such Font
+//     Family" in Arial, "The" 18.95 points wide at 11 points as in its
+//     Arial row.
+//   - libreoffice/xlsx: sc/tdf134392.xlsx prints its cells of FreeSans in
+//     Arial, the only face its reference embeds; poi/xlsx: 48495.xlsx,
+//     whose Normal font is HelveticaNeue LightExt 10, in Arial, its
+//     columns of 9.14 characters 56.26 points apart, Arial 10's digits of
+//     46 printer pixels.
+//   - poi/xlsx: 1_NoIden.xlsx prints its cells of 돋움 in Dotum, whose
+//     columns Arial's digits would narrow.
+func ExcelSubstitute(family string) string {
+	for i := 0; i < len(family); i++ {
+		if family[i] >= 0x80 {
+			return ""
+		}
+	}
+	return "Arial"
+}
+
 // cssFamilies returns f's family list with fontconfig's aliases resolved,
-// then the substitute of an unknown family.
-func (f font) cssFamilies() []string {
+// then the substitute of an unknown family: Excel's ([ExcelSubstitute])
+// when excel is set, LibreOffice's otherwise.
+func (f font) cssFamilies(excel bool) []string {
 	out := make([]string, 0, len(f.families)+1)
 	for _, fam := range f.families {
 		if g, ok := fontconfigAliases[strings.ToLower(strings.TrimSpace(fam))]; ok {
@@ -160,12 +187,17 @@ func (f font) cssFamilies() []string {
 		}
 		out = append(out, fam)
 	}
+	if excel && len(f.families) > 0 {
+		if sub := ExcelSubstitute(f.families[0]); sub != "" {
+			return append(out, sub)
+		}
+	}
 	return append(out, substituteFamily)
 }
 
 // apply sets the font of st.
 func (f font) apply(st *css.Style) {
-	st.FontFamilies = f.cssFamilies()
+	st.FontFamilies = f.cssFamilies(f.excel)
 	st.FontSize = f.size
 	st.FontWeight = 400
 	if f.bold {
@@ -219,7 +251,7 @@ func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 	scale, _ := f.scriptShape()
 	size := f.size * scale
 	ts := text.Style{
-		Families: text.BrowserFamilies(f.cssFamilies(), ""),
+		Families: text.BrowserFamilies(f.cssFamilies(f.excel || fallback == text.FallbackFontconfig), ""),
 		Weight:   w,
 		Italic:   f.italic,
 		Size:     size,
@@ -471,11 +503,12 @@ func (m *measurer) screenLine(f font) float64 {
 	return h
 }
 
-// served reports a font a face serves: one drawn in [substituteFamily]
-// that does not ask for it is not, and its measures are not the ones of
-// the face the book names.
+// served reports a font a face serves: one that falls through to
+// [substituteFamily] without asking for it is not, and its measures are
+// not the ones of the face the book names, whatever face draws it.
 func (m *measurer) served(f font) bool {
 	ts := f.textStyle(m.lang, m.fallback)
+	ts.Families = text.BrowserFamilies(f.cssFamilies(false), "")
 	fc := m.fonts.Match(ts)
 	return fc != nil && (fc.Family() != substituteFamily || (len(f.families) > 0 && strings.EqualFold(strings.TrimSpace(f.families[0]), substituteFamily)))
 }

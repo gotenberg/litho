@@ -185,6 +185,7 @@ const (
 //     writes for older versions to read.
 func (b *builder) excelNotes(sp *sheetPlan, notes []Note) *layout.Node {
 	f := resolveFont(b.doc.Default.Font, Font{})
+	f.excel = true
 	bold := f
 	bold.bold = true
 	h := sp.g.sh.DefaultRowHeight

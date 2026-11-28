@@ -285,7 +285,7 @@ func TestRead_SchemeFontsTakeTheThemeFace(t *testing.T) {
 }
 
 // TestRead_SubstituteFamily checks that a Normal font no installed face
-// serves measures its columns in Noto Sans, LibreOffice's substitute.
+// serves measures its columns in Arial, Excel's substitute.
 func TestRead_SubstituteFamily(t *testing.T) {
 	t.Parallel()
 	fonts := pinnedFonts(t)
@@ -298,8 +298,8 @@ func TestRead_SubstituteFamily(t *testing.T) {
 		}
 		return doc.Sheets[0].DefaultColumnWidth
 	}
-	if unknown, noto := width("Aptos Narrow"), width("Noto Sans"); unknown != noto {
-		t.Errorf("an unknown family's columns are %v points, Noto Sans's %v", unknown, noto)
+	if unknown, arial := width("Aptos Narrow"), width("Arial"); unknown != arial {
+		t.Errorf("an unknown family's columns are %v points, Arial's %v", unknown, arial)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 // TestOptimalHeights_FallbackFaces locks the optimal height of a row
@@ -68,26 +69,43 @@ func TestOptimalHeights_ExcelRules(t *testing.T) {
 
 // TestFont_Substitute locks the family list a cell font draws with: its
 // families, fontconfig's generic aliases resolved, then Noto Sans, the
-// face LibreOffice substitutes for a family nothing serves.
+// face LibreOffice substitutes for a family nothing serves, or Arial,
+// Excel's; such a family is not served under either rule.
 func TestFont_Substitute(t *testing.T) {
 	tests := []struct {
 		families []string
+		excel    bool
 		want     []string
 	}{
-		{[]string{"Aptos Narrow"}, []string{"Aptos Narrow", "Noto Sans"}},
-		{[]string{"Calibri", "sans"}, []string{"Calibri", "sans-serif", "Noto Sans"}},
+		{[]string{"Aptos Narrow"}, false, []string{"Aptos Narrow", "Noto Sans"}},
+		{[]string{"Calibri", "sans"}, false, []string{"Calibri", "sans-serif", "Noto Sans"}},
+		{[]string{"FreeSans"}, true, []string{"FreeSans", "Arial"}},
+		{[]string{"돋움"}, true, []string{"돋움", "Noto Sans"}},
 	}
 	for _, tc := range tests {
-		got := font{families: tc.families}.cssFamilies()
+		got := font{families: tc.families}.cssFamilies(tc.excel)
 		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 			t.Errorf("%v: %v, want %v", tc.families, got, tc.want)
 		}
 	}
 	m := newMeasurer(context.Background(), pinnedFonts(t), "")
-	unknown := m.width(font{families: []string{"Aptos Narrow"}, size: 11}, "Monday")
+	m.fallback = text.FallbackLibreOffice
+	unknown := font{families: []string{"Aptos Narrow"}, size: 11}
 	noto := m.width(font{families: []string{"Noto Sans"}, size: 11}, "Monday")
-	if !near(unknown, noto, 1e-9) {
-		t.Errorf("an unknown family measures %v, Noto Sans %v", unknown, noto)
+	if w := m.width(unknown, "Monday"); !near(w, noto, 1e-9) {
+		t.Errorf("an unknown family measures %v, Noto Sans %v", w, noto)
+	}
+	if m.served(unknown) {
+		t.Errorf("an unknown family is served")
+	}
+	xm := newMeasurer(context.Background(), pinnedFonts(t), "")
+	xm.fallback = text.FallbackFontconfig
+	arial := xm.width(font{families: []string{"Arial"}, size: 11}, "Monday")
+	if w := xm.width(unknown, "Monday"); !near(w, arial, 1e-9) || near(w, noto, 1e-6) {
+		t.Errorf("an unknown family measures %v under Excel's rules, Arial %v", w, arial)
+	}
+	if xm.served(unknown) {
+		t.Errorf("an unknown family is served under Excel's rules")
 	}
 }
 
