@@ -108,6 +108,9 @@ type mutationPlan struct {
 	// droppedSignatures are the input's signatures the write left out (see
 	// [pdf.Writer.DroppedSignatures]), which the write fills.
 	droppedSignatures []models.DroppedSignature
+	// cutLinks counts the Link annotations of page 1 that open another
+	// page, which a copy of page 1 alone leaves out (see [cutLinksRemove]).
+	cutLinks int
 	// release frees what the mutation holds until the write, a second Reader.
 	release func()
 	// signField names the unsigned signature field mutate-sign signs in, ""
@@ -417,8 +420,9 @@ var mutationSpecs = []mutationSpec{
 			// only they failed stays failed and no rule may go on their
 			// account. The repeat adds none: its copy carries elements of its
 			// own. A rewrite drops the input's signatures (see
-			// [droppedSignaturesRemove]).
-			a.anyRemove = droppedSignaturesRemove(rc)
+			// [droppedSignaturesRemove]), and each copy the links of page 1
+			// into the other pages (see [cutLinksRemove]).
+			a.anyRemove = droppedSignaturesRemove(rc) || cutLinksRemove(rc)
 			return a
 		},
 	},
@@ -534,6 +538,22 @@ var mutationSpecs = []mutationSpec{
 //     test 1, all of which its widget failed.
 func droppedSignaturesRemove(rc ruleContext) bool {
 	return len(rc.plan.droppedSignatures) > 0
+}
+
+// cutLinksRemove reports whether the copies of page 1 left links out. A copy
+// keeps no link into a page it does not carry, and mutate-pages copies page 1
+// alone before it deletes the original, so every link of page 1 into another
+// page goes. A rule only those links failed goes with them.
+//
+// # Corpus evidence
+//
+//   - litho/pdf destforms_ua2: page 1 carries two links, into pages 2 and 3,
+//     their appearance streams stroking in DeviceRGB, and no other content of
+//     the file does. mutate-pages leaves both out of each copy, and 6.2.3.3 test 1
+//     passes at PDF/A-1a and 1b, 6.2.4.3 test 2 at the nine PDF/A-2, 3 and 4
+//     profiles.
+func cutLinksRemove(rc ruleContext) bool {
+	return rc.plan.cutLinks > 0
 }
 
 // concatRules joins rule lists into a new slice.
@@ -702,6 +722,15 @@ func applyPages(ctx context.Context, _ *mutationFeature, in *mutationInput, w *p
 		return mutationPlan{}, fmt.Errorf("opening the copy source: %w", err)
 	}
 	plan := mutationPlan{release: func() { copySrc.Close() }}
+	annots, err := copySrc.ExtractAnnotations(ctx, 1)
+	if err != nil {
+		return plan, fmt.Errorf("reading the annotations of page 1: %w", err)
+	}
+	for _, a := range annots {
+		if a.Subtype == "Link" && a.DestPage > 1 {
+			plan.cutLinks++
+		}
+	}
 	if err := w.InsertPages(in.pages, copySrc, 1, 1); err != nil {
 		return plan, fmt.Errorf("inserting page 1 twice: %w", err)
 	}
