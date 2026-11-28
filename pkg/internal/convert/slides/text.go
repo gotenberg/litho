@@ -375,7 +375,7 @@ func (b *builder) warpText(body *TextBody, box typeset.Rect, m typeset.Matrix, b
 		b.warn(warn.ContentUnsupported, warn.Approximated, "warped vertical text is drawn unwarped")
 		return nil, false
 	}
-	out, notes, err := officefx.WarpText(b.ctx, frags, m, &officefx.Warp{Lanes: lanes, Fit: body.WarpFit, Block: block}, &b.outlines)
+	out, notes, err := officefx.WarpText(b.ctx, frags, m, &officefx.Warp{Lanes: lanes, Fit: body.WarpFit, Block: block, LinesOutside: powerPointLinesOutside(b.doc)}, &b.outlines)
 	if err != nil {
 		return nil, false
 	}
@@ -1579,6 +1579,23 @@ func powerPointFloorsAdvances(doc *Document) bool {
 //     band of twice that, 0.67, 1.32, 2.66 and 3.2 points below the
 //     baseline.
 func powerPointZigzagWave(doc *Document) bool {
+	return doc != nil && doc.Fallback != text.FallbackLibreOffice
+}
+
+// powerPointLinesOutside reports whether the lines of doc that follow a
+// text warp's path stand on its outer side, each on its own curve
+// ([officefx.Warp.LinesOutside]): under PowerPoint's rules; Impress sets
+// every line on the path's points.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: oox/tdf125582_TextOnCircle.pptx prints its two
+//     lines on textCircle with the second on the circle and the first
+//     43.6 points outside it, its glyphs 0.91 to 0.94 of their advances
+//     apart on both baselines; sd/tdf125573_FontWorkScaleX.pptx prints
+//     its first line on textArchDown and its second below it, the glyphs
+//     of each about their advances apart.
+func powerPointLinesOutside(doc *Document) bool {
 	return doc != nil && doc.Fallback != text.FallbackLibreOffice
 }
 

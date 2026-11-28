@@ -5,6 +5,7 @@ package shape
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -208,6 +209,87 @@ func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 		}
 	}
 	return nil
+}
+
+// Offset returns the curve moved by d along its normal, the direction
+// that turns its unit direction (x, y) into (−y, x): each vertex moved
+// along the mean of the normals of the segments it joins, an end along
+// its segment's normal turned by half the bend at the next vertex, as
+// the tangent of the curve the segments are chords of runs there.
+func (c *WarpCurve) Offset(d float64) WarpCurve {
+	var out WarpCurve
+	n := len(c.pts)
+	if n < 2 {
+		out.pts = append(out.pts, c.pts...)
+		out.cum = make([]float64, len(out.pts))
+		return out
+	}
+	out.pts = make([]typeset.Point, n)
+	out.cum = make([]float64, n)
+	normal := func(i int) (float64, float64) {
+		dx, dy := c.pts[i+1].X-c.pts[i].X, c.pts[i+1].Y-c.pts[i].Y
+		l := math.Sqrt(float64(dx*dx) + float64(dy*dy))
+		if !numeric.Positive(l) {
+			return 0, 0
+		}
+		return -dy / l, dx / l
+	}
+	for i := range c.pts {
+		var nx, ny float64
+		if i > 0 {
+			ax, ay := normal(i - 1)
+			nx, ny = nx+ax, ny+ay
+		}
+		if i < n-1 {
+			ax, ay := normal(i)
+			nx, ny = nx+ax, ny+ay
+		}
+		if l := math.Sqrt(float64(nx*nx) + float64(ny*ny)); numeric.Positive(l) {
+			nx, ny = nx/l, ny/l
+		}
+		if n > 2 && (i == 0 || i == n-1) {
+			// The bend at the vertex next to the end, halved, turns the
+			// end's segment normal into the curve's.
+			j := 1
+			if i == n-1 {
+				j = n - 2
+			}
+			ax, ay := normal(j - 1)
+			bx, by := normal(j)
+			half := detmath.Atan2(float64(ax*by)-float64(ay*bx), float64(ax*bx)+float64(ay*by)) / 2
+			if i == 0 {
+				half = -half
+			}
+			sn, cs := detmath.Sin(half), detmath.Cos(half)
+			nx, ny = float64(nx*cs)-float64(ny*sn), float64(nx*sn)+float64(ny*cs)
+		}
+		out.pts[i] = typeset.Point{X: c.pts[i].X + float64(nx*d), Y: c.pts[i].Y + float64(ny*d)}
+		if i > 0 {
+			dx, dy := out.pts[i].X-out.pts[i-1].X, out.pts[i].Y-out.pts[i-1].Y
+			out.cum[i] = out.cum[i-1] + math.Sqrt(float64(dx*dx)+float64(dy*dy))
+		}
+	}
+	return out
+}
+
+// Turning returns how far the curve turns along its length, in radians:
+// positive when it bends towards its normal ([WarpCurve.Offset]),
+// negative when it bends away.
+func (c *WarpCurve) Turning() float64 {
+	t := 0.0
+	var px, py float64
+	have := false
+	for i := 1; i < len(c.pts); i++ {
+		dx, dy := c.pts[i].X-c.pts[i-1].X, c.pts[i].Y-c.pts[i-1].Y
+		if !numeric.Positive(math.Abs(dx) + math.Abs(dy)) {
+			continue
+		}
+		if have {
+			t += detmath.Atan2(float64(px*dy)-float64(py*dx), float64(px*dx)+float64(py*dy))
+		}
+		px, py, have = dx, dy, true
+	}
+	return t
 }
 
 // warpDefinition returns the geometry of w and whether its guides read

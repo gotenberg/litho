@@ -25,6 +25,14 @@ type Warp struct {
 	// own coordinates, from 0: a line that follows a path keeps its place
 	// in it, its start, middle or end on the path's.
 	Block float64
+	// LinesOutside sets the lines that follow a path on its outer side,
+	// as PowerPoint sets them: the line nearest the path's centre of
+	// curvature follows the path, and each other line follows the path
+	// moved by its distance from that line, its glyphs measured along its
+	// own curve. False sets the first line on the path and the others at
+	// their distance from it, at the places along the path their glyphs
+	// take on the first line's.
+	LinesOutside bool
 }
 
 // WarpNotes reports what [WarpText] left out.
@@ -101,7 +109,7 @@ const pathOffset = 0.154
 //     glyph text with its own turned matrix; on the arcs shorter than its
 //     line, at 18.94, 13.58, 9.76 and 8.37 points, the sizes at which the
 //     line spans the arc; oox/tdf125582_TextOnCircle sets its second line
-//     inside the first, at its line distance.
+//     on the circle and its first 43.6 points outside it.
 //   - libreoffice/pptx sd/tdf125573_FontWorkScaleX: a body from WordArt
 //     of two lines on textArchDown prints both at 47.3 points, the scale
 //     at which the longer one spans the path.
@@ -287,12 +295,12 @@ type pathGlyph struct {
 
 // placeOnPath sets the glyphs of lane i on its path: the line scaled by
 // k (the path's length over the widest line's advance when the warp
-// fits or the widest line is longer than the path, 1 otherwise), each
-// glyph upright at its advance's middle, which
-// lies at its place along the line times k from where the line starts on
-// the path, the line's start, middle or end on the path's as it lies in
-// the block; the first line's baseline pathOffset ems below the path, the
-// others their distance below it.
+// fits or the line is longer than the path, 1 otherwise), each glyph
+// upright at its advance's middle, which lies at its place along the
+// line times k from where the line starts on the path, the line's start,
+// middle or end on the path's as it lies in the block; the baseline of
+// the line on the path pathOffset ems below it, the others their distance
+// below it ([Warp.LinesOutside]).
 func (wp *warper) placeOnPath(i int) {
 	lt := &wp.lanes[i]
 	curve := &lt.lane.Top
@@ -329,8 +337,13 @@ func (wp *warper) placeOnPath(i int) {
 	if numeric.Positive(widest) && (wp.w.Fit || widest > length) {
 		k = length / widest
 	}
-	first := lines[0]
-	off := float64(pathOffset*k) * first.size
+	anchor := lines[0]
+	if wp.w.LinesOutside && curve.Turning() > 0 {
+		// The lines after the first stand on the side the path bends
+		// towards, inside it: the last line takes the path instead.
+		anchor = lines[len(lines)-1]
+	}
+	off := float64(pathOffset*k) * anchor.size
 	left, block := wp.blockSpan()
 	for _, pl := range lines {
 		width := pl.x1 - pl.x0
@@ -338,18 +351,26 @@ func (wp *warper) placeOnPath(i int) {
 		if room := block - width; room > 0.01 {
 			share = min(max((pl.x0-left)/room, 0), 1)
 		}
-		start := float64((length - float64(k*width)) * share)
+		on, base, span := curve, anchor.baseline, length
+		if wp.w.LinesOutside && pl != anchor {
+			moved := curve.Offset(float64(k * (pl.baseline - anchor.baseline)))
+			if l := moved.Length(); numeric.Positive(l) {
+				on, base, span = &moved, pl.baseline, l
+			}
+		}
+		start := float64((span - float64(k*width)) * share)
 		for _, g := range pl.glyphs {
 			mid := g.x + float64(g.adv/2)
 			s := start + float64(k*(mid-pl.x0))
-			p, dir := curve.At(s / length)
+			p, dir := on.At(s / span)
 			n := typeset.Point{X: -dir.Y, Y: dir.X}
 			// The glyph's point (x, y) of the box goes to p + k·(x − mid)·dir +
-			// (k·(y − baseline) + off)·n, baseline the first line's.
+			// (k·(y − base) + off)·n, base the baseline of the line whose
+			// curve p lies on.
 			m := typeset.Matrix{A: k * dir.X, B: k * dir.Y, C: k * n.X, D: k * n.Y}
 			ox, oy := p.X+float64(n.X*off), p.Y+float64(n.Y*off)
-			m.E = ox - float64(m.A*mid) - float64(m.C*first.baseline)
-			m.F = oy - float64(m.B*mid) - float64(m.D*first.baseline)
+			m.E = ox - float64(m.A*mid) - float64(m.C*base)
+			m.F = oy - float64(m.B*mid) - float64(m.D*base)
 			lt.cells = append(lt.cells, glyphCell{x0: g.x, x1: g.x + g.adv, baseline: pl.baseline, m: m})
 		}
 	}

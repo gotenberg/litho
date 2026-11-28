@@ -270,3 +270,29 @@ func TestWarpLanes_SetsAPresetArcAsOnACircle(t *testing.T) {
 		}
 	}
 }
+
+func TestWarpCurve_OffsetsAlongItsNormal(t *testing.T) {
+	// The top half of a circle of radius 50, run left to right in a y-down
+	// space, bends towards its normal, which points at the centre.
+	w := warpOf([][]string{{"m", "l", "vc"}, {"a", "wd2", "hd2", "cd2", "cd2"}})
+	l := WarpLanes(w, typeset.Rect{Width: 100, Height: 100})
+	if len(l) != 1 {
+		t.Fatalf("lanes = %d", len(l))
+	}
+	c := &l[0].Top
+	if turn := c.Turning(); math.Abs(turn-math.Pi) > 0.1 {
+		t.Errorf("turning = %v, want about π", turn)
+	}
+	for _, d := range []float64{10, -10} {
+		o := c.Offset(d)
+		if got, want := o.Length(), math.Pi*(50-d); math.Abs(got-want) > 0.01*want {
+			t.Errorf("offset %v: length %v, want %v", d, got, want)
+		}
+		if p, _ := o.At(0.5); math.Abs(p.X-50) > 0.01 || math.Abs(p.Y-d) > 0.01 {
+			t.Errorf("offset %v: middle at %v, want (50, %v)", d, p, d)
+		}
+	}
+	if turn := (&WarpCurve{}).Turning(); turn != 0 {
+		t.Errorf("an empty curve turns %v", turn)
+	}
+}

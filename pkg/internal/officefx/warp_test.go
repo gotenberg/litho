@@ -166,3 +166,50 @@ func TestWarpText_ShrinksALineLongerThanItsPath(t *testing.T) {
 		}
 	}
 }
+
+func TestWarpText_SetsLinesOutsideTheirPath(t *testing.T) {
+	// The top half of a circle of radius 50 about (50, 50), run left to
+	// right: it bends towards the lines that follow the first.
+	var d shape.DrawingML
+	d.Path(0, 0, shape.FillNorm, true)
+	d.Command(shape.CmdMove, "l", "vc")
+	d.Command(shape.CmdArc, "wd2", "hd2", "cd2", "cd2")
+	lanes := shape.WarpLanes(&shape.TextWarp{Custom: d.Custom()}, typeset.Rect{Width: 100, Height: 100})
+	first, second := twoGlyphs(10), twoGlyphs(10)
+	second.Origin.Y = 112
+	// radii returns the distance from the centre of each glyph's baseline
+	// middle, and the distance along the baseline between the two glyphs
+	// of each line.
+	radii := func(outside bool) (r [2]float64, gap [2]float64) {
+		w := &Warp{Lanes: lanes, Block: 12, LinesOutside: outside}
+		out, _, err := WarpText(context.Background(), []typeset.Fragment{first, second}, typeset.Identity, w, &text.Outlines{})
+		if err != nil || len(out) != 4 {
+			t.Fatalf("outside %v: %d fragments, err %v", outside, len(out), err)
+		}
+		for line := range 2 {
+			y := 100 + 12*float64(line)
+			a := mapPoint(out[2*line].(*typeset.Group).Transform, typeset.Point{X: 13, Y: y})
+			b := mapPoint(out[2*line+1].(*typeset.Group).Transform, typeset.Point{X: 19, Y: y})
+			r[line] = math.Hypot(a.X-50, a.Y-50)
+			gap[line] = math.Hypot(b.X-a.X, b.Y-a.Y)
+		}
+		return r, gap
+	}
+	off := pathOffset * 10
+	r, _ := radii(false)
+	if math.Abs(r[0]-(50-off)) > 0.1 || math.Abs(r[1]-(38-off)) > 0.1 {
+		t.Errorf("lines on the path: radii %v, want %v and %v", r, 50-off, 38-off)
+	}
+	r, gap := radii(true)
+	if math.Abs(r[0]-(62-off)) > 0.1 || math.Abs(r[1]-(50-off)) > 0.1 {
+		t.Errorf("lines outside: radii %v, want %v and %v", r, 62-off, 50-off)
+	}
+	// Each line is measured along its own curve: its glyphs stand their
+	// advance apart where the curve runs, a little less on the baseline
+	// inside it.
+	for line, rc := range []float64{62, 50} {
+		if want := 6 * (rc - off) / rc; math.Abs(gap[line]-want) > 0.05 {
+			t.Errorf("lines outside: line %d glyphs %v apart, want %v", line, gap[line], want)
+		}
+	}
+}
