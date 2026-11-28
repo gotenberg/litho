@@ -280,3 +280,31 @@ func TestWritingMode_HorizontalRootFitsItsVerticalContainersWidth(t *testing.T) 
 		GGGGGG____
 		__________`)
 }
+
+// TestWritingMode_GradientPointsAlongThePage draws the gradient of a box
+// inside a vertical flow in the page's directions: its angle is physical
+// (CSS Images 3, 3.1.1), so "to right" runs left to right on the page
+// whatever the writing mode, as a background image stands upright.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 paints a
+//     "to right" gradient of a box in a vertical-lr and in a vertical-rl
+//     flow, and of a horizontal box in a vertical-lr flow, red on the left
+//     half of the box.
+func TestWritingMode_GradientPointsAlongThePage(t *testing.T) {
+	t.Parallel()
+	for name, wm := range map[string]css.WritingMode{"vertical-rl": css.VerticalRL, "vertical-lr": css.VerticalLR, "sideways-lr": css.SidewaysLR} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			grad := func(s *css.Style) {
+				s.BackgroundGradient = &css.Gradient{Angle: 90, Stops: gstops(red, 2.0, blue, 2.0)}
+			}
+			flow := func(s *css.Style) { s.WritingMode = wm }
+			root := doc(el(sty(flow, width(4), height(2)), el(sty(width(4), height(2), grad))))
+			assertPixels(t, runWith(t, root, Options{Page: page(4, 2), BrowserRules: true}), 1, `
+				RRBB
+				RRBB`)
+		})
+	}
+}

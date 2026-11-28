@@ -480,6 +480,27 @@ func (e *engine) uprightLayer(l *css.BackgroundLayer, pic *Picture, sl bgSlice, 
 	return &typeset.Group{Transform: uprightTurn(wm, cx, cy), Opacity: 1, Content: frags}
 }
 
+// uprightGradient returns the fragment that paints the gradient of the
+// background layer l over the slice sl of a box in a flow of the writing
+// mode wm, standing upright on the page: a gradient's direction, like the
+// rest of the background's geometry, is physical (CSS Images 3, 3.1.1:
+// "to right" points to the right of the page whatever the writing mode),
+// so its tiles are laid out in the area as the page shows it and turned
+// the other way about the area's centre, as [engine.uprightLayer] places
+// an image.
+func (e *engine) uprightGradient(l *css.BackgroundLayer, sl bgSlice, wm css.WritingMode, y float64) typeset.Fragment {
+	cx, cy := sl.area.X+float64(sl.area.Width/2), sl.area.Y+float64(sl.area.Height/2)
+	tiles := e.gradientTiles(l, uprightRect(wm, cx, cy, sl.area), uprightRect(wm, cx, cy, sl.clip), y)
+	if len(tiles) == 0 {
+		return nil
+	}
+	frags := make([]typeset.Fragment, len(tiles))
+	for i, pa := range tiles {
+		frags[i] = pa
+	}
+	return &typeset.Group{Transform: uprightTurn(wm, cx, cy), Opacity: 1, Content: frags}
+}
+
 // turnedRect returns the rectangle r drawn upright about (cx, cy) as
 // [uprightTurn] places it in a flow of the writing mode wm: the inverse
 // of [uprightRect].

@@ -335,6 +335,16 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 	g := &ditem{group: true, fx: &groupFx{opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}}
 	for _, sl := range p.attachedSlices(b, l.Attachment, area, clipR) {
 		if l.Gradient != nil {
+			if wm := p.e.frameOf(b); wm != css.HorizontalTB {
+				if f := p.e.uprightGradient(l, sl, wm, r.Y); f != nil {
+					k := &ditem{frag: f, y0: sl.clip.Y, y1: sl.clip.Y + sl.clip.Height, page: -1}
+					if p.e.chargeDrawn(itemCost(k)); p.e.err != nil {
+						return
+					}
+					g.kids = append(g.kids, k)
+				}
+				continue
+			}
 			for _, pa := range p.e.gradientTiles(l, sl.area, sl.clip, r.Y) {
 				t := pa.Ops[0].P[0]
 				k := &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1}
