@@ -62,9 +62,53 @@ func (r *reader) chartOf(part string) *chart.Chart {
 		r.warn(w.Code, w.Effect, w.Message)
 	}
 	c.Resolver = r.rangeValues
+	visible := c.VisibleOnly
+	c.Cells = func(ref string) []chart.Value { return r.cellValues(ref, visible) }
 	c.FormatResolver = r.rangeFormat
 	c.Locale = r.locale
 	return c
+}
+
+// cellValues returns the values of the cells the formula ref names, as
+// Excel draws a chart from them whatever its cache holds, without the
+// cells of hidden rows and columns when visible is set (ECMA-376 Part 1,
+// 21.2.2.143 plotVisOnly); nil when an area names no sheet of the
+// workbook, or spans rows and columns both, as the categories of several
+// levels do, whose cache holds the innermost level alone.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/hidden_cells.xlsx, plotVisOnly 0, caches
+//     the two visible rows of four; Excel plots the four.
+//   - libreoffice/xlsx: chart2/barchart_totalsrow.xlsx's first chart
+//     caches values its cells do not hold; Excel draws the cells'.
+func (r *reader) cellValues(ref string, visible bool) []chart.Value {
+	names, areas := sheetAreas(ref)
+	var out []chart.Value
+	for i, area := range areas {
+		if area.LastRow > area.FirstRow && area.LastColumn > area.FirstColumn {
+			return nil
+		}
+		var sh *sheet.Sheet
+		for _, cand := range r.doc.Sheets {
+			if cand.Name == names[i] && names[i] != "" {
+				sh = cand
+				break
+			}
+		}
+		if sh == nil {
+			return nil
+		}
+		if visible {
+			out = append(out, sheet.ChartVisibleValues(sh, area)...)
+		} else {
+			out = append(out, sheet.ChartValues(sh, area)...)
+		}
+	}
+	if out == nil && len(areas) > 0 {
+		out = []chart.Value{}
+	}
+	return out
 }
 
 // rangeFormat returns the number format of the first cell the formula ref

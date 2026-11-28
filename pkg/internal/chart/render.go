@@ -94,7 +94,7 @@ func render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect, sh
 	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil
 	}
-	rd := &renderer{ctx: ctx, fonts: fonts, c: boxed(arranged(binned(c))), page: r, shown: shown}
+	rd := &renderer{ctx: ctx, fonts: fonts, c: boxed(arranged(binned(live(c)))), page: r, shown: shown}
 	rd.render(r)
 	var border *typeset.Path
 	if rd.borderOnTop() {

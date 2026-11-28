@@ -68,6 +68,7 @@ func AltText(c *Chart) string {
 	if c == nil {
 		return ""
 	}
+	c = live(c)
 	var b strings.Builder
 	if c.Title != nil && !c.Title.Auto {
 		if t := cut(collapse(c.Title.Text), maxAltTitleRunes); t != "" {

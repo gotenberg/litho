@@ -12,6 +12,20 @@ import (
 // an absent cell as an empty point. At most chart.MaxPoints values are
 // returned.
 func ChartValues(sh *Sheet, rg Range) []chart.Value {
+	return chartValues(sh, rg, false)
+}
+
+// ChartVisibleValues returns the values of the cells of sh in the range
+// rg as [ChartValues] does, leaving out the cells of hidden rows and
+// columns: the points of a chart that plots visible cells alone
+// (ECMA-376 Part 1, 21.2.2.143 plotVisOnly).
+func ChartVisibleValues(sh *Sheet, rg Range) []chart.Value {
+	return chartValues(sh, rg, true)
+}
+
+// chartValues returns the values of the cells of sh in rg, row by row,
+// without those of hidden rows and columns when visible is set.
+func chartValues(sh *Sheet, rg Range, visible bool) []chart.Value {
 	var out []chart.Value
 	next := 0
 	for ri := rg.FirstRow; ri <= rg.LastRow; ri++ {
@@ -22,14 +36,31 @@ func ChartValues(sh *Sheet, rg Range) []chart.Value {
 		if next < len(sh.Rows) && sh.Rows[next].Index == ri {
 			row = &sh.Rows[next]
 		}
-		for col := rg.FirstColumn; col <= rg.LastColumn; col++ {
+		if visible && row != nil && row.Hidden {
+			continue
+		}
+		col := 0
+		for c := rg.FirstColumn; c <= rg.LastColumn; c++ {
+			if visible && columnHidden(sh.Columns, c, &col) {
+				continue
+			}
 			if len(out) >= chart.MaxPoints {
 				return out
 			}
-			out = append(out, chartValue(rowCell(row, col)))
+			out = append(out, chartValue(rowCell(row, c)))
 		}
 	}
 	return out
+}
+
+// columnHidden reports whether column c lies in a hidden range of cols,
+// sorted by First; *at is where the search starts and is moved forward,
+// so rising columns walk the ranges once.
+func columnHidden(cols []Column, c int, at *int) bool {
+	for *at < len(cols) && cols[*at].Last < c {
+		*at++
+	}
+	return *at < len(cols) && cols[*at].First <= c && cols[*at].Hidden
 }
 
 // ChartFormat returns the number format of the first cell of rg in sh,

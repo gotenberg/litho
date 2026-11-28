@@ -56,6 +56,19 @@ type Chart struct {
 	// Resolver, when set, supplies the values of a series whose file holds
 	// no cache, from its range reference.
 	Resolver Resolver
+	// Cells, when set, reads the values of a range from the cells of the
+	// document the chart is drawn in, ahead of the file's cache: a
+	// spreadsheet application draws a chart from its book's cells, the
+	// cache being what it last saw. A range Cells returns nil for keeps
+	// its cache.
+	Cells Resolver
+	// VisibleOnly reports a chart that plots the visible cells of its
+	// ranges alone (ECMA-376 Part 1, 21.2.2.143 plotVisOnly).
+	VisibleOnly bool
+	// Pivot reports a chart drawn from a pivot table (ECMA-376 Part 1,
+	// 21.2.2.142 pivotSource), whose data are the table's, not the cells
+	// its ranges name.
+	Pivot bool
 	// FormatResolver, when set, returns the number format code of the
 	// first cell of a range reference, "" for General, and false when it
 	// cannot: the source format of an axis linked to its source.

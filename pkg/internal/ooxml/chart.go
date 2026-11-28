@@ -290,6 +290,10 @@ func toTypeset(c css.Color) typeset.Color {
 func (p *chartReader) read(root *Element) {
 	c := p.c
 	ch := root.Child(NSChart, "chart")
+	// An absent plotVisOnly sets nothing: hidden cells are plotted
+	// (21.2.2.143).
+	c.VisibleOnly = boolVal(ch, "plotVisOnly", false)
+	c.Pivot = root.Child(NSChart, "pivotSource") != nil
 	c.Area = p.frame(root.Child(NSChart, "spPr"), p.autoFrame(true))
 	accents := []string{"accent1", "accent2", "accent3", "accent4", "accent5", "accent6"}
 	c.Palette, c.PaletteCycleTint = p.palette(accents), true
