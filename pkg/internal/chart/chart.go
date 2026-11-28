@@ -912,6 +912,10 @@ type Labels struct {
 	// parts the flags choose (ECMA-376 Part 1, 21.2.2.47 dLbl's tx; ODF
 	// 1.3 Part 3, loext:data-label's text:p).
 	Custom []LabelField
+	// Deleted marks labels a series turns off (ECMA-376 Part 1, 21.2.2.40
+	// delete in a series' c:dLbls): the series shows none, whatever its
+	// group's labels show.
+	Deleted bool
 }
 
 // LabelLayout is where a file moves a data label, along each axis in one

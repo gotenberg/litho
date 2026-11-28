@@ -34,3 +34,18 @@ func TestLive_ReadsCellsOverTheCache(t *testing.T) {
 		t.Errorf("pivot chart values %v, want the cache", v)
 	}
 }
+
+// TestLabelsAt_SeriesDeletesGroupLabels locks that a series that deletes
+// its labels shows none of its group's, and one that sets none shows
+// them.
+func TestLabelsAt_SeriesDeletesGroupLabels(t *testing.T) {
+	off, plain := &Series{Labels: Labels{Deleted: true}}, &Series{}
+	g := &Group{Kind: Bar, Labels: Labels{ShowValue: true}, Series: []*Series{off, plain}}
+	rd := &renderer{c: &Chart{Groups: []*Group{g}}}
+	if rd.labelsAt(g, off, 0).Any() {
+		t.Error("a series that deletes its labels shows its group's")
+	}
+	if !rd.labelsAt(g, plain, 0).Any() {
+		t.Error("a series without labels of its own does not show its group's")
+	}
+}

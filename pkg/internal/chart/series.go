@@ -268,9 +268,20 @@ func (rd *renderer) labelsAt(g *Group, s *Series, j int) Labels {
 	return mergeLabels(g.Labels, s.Labels)
 }
 
-// mergeLabels returns s, or the group's labels when the series sets none.
+// mergeLabels returns s, or the group's labels when the series sets none
+// and does not turn its labels off.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/DataTable-MultipleLegendEntriesForOneDataSeries.xlsx
+//     shows values in its column group's c:dLbls and deletes them in its
+//     one series' c:dLbls; Excel prints no value over the columns.
+//   - openxmlsdk/xlsx: O14ISOStrict/Excel/xl8galry.xlsx's first chart
+//     shows values in its group's c:dLbls and deletes those of its series
+//     Pacific; Excel prints the values of the nine other series and not
+//     Pacific's 1981.738082.
 func mergeLabels(group, s Labels) Labels {
-	if s.Any() {
+	if s.Any() || s.Deleted {
 		return s
 	}
 	if group.Any() {

@@ -456,8 +456,9 @@ func (p *chartReader) labels(e *Element, inherit chart.Labels) chart.Labels {
 		return l
 	}
 	if boolVal(e, "delete", false) {
-		return chart.Labels{}
+		return chart.Labels{Deleted: true}
 	}
+	l.Deleted = false
 	p.labelFlags(e, &l)
 	if e.Child(NSChart, "showLeaderLines") != nil {
 		l.Leaders = boolVal(e, "showLeaderLines", false)
@@ -531,6 +532,7 @@ func (p *chartReader) pointLabels(e *Element, s *chart.Series) {
 		if boolVal(d, "delete", false) {
 			l = chart.Labels{}
 		} else {
+			l.Deleted = false
 			p.labelFlags(d, &l)
 			l.Layout = labelLayout(d)
 			l.Width = labelWidth(d)

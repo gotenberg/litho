@@ -870,3 +870,18 @@ func TestChartFromElement_OfPie(t *testing.T) {
 		t.Errorf("split by position = %+v", pos)
 	}
 }
+
+// TestChartFromElement_SeriesDeletesLabels locks that a series whose
+// c:dLbls deletes its labels shows none under a group that shows values,
+// while a series without its own c:dLbls shows the group's.
+func TestChartFromElement_SeriesDeletesLabels(t *testing.T) {
+	plot := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", `<c:dLbls><c:delete val="1"/></c:dLbls>`, "1", "2") + ser(1, "B", "", "3", "4") +
+		`<c:dLbls><c:showVal val="1"/></c:dLbls><c:axId val="1"/><c:axId val="2"/></c:barChart>` + axes
+	g := readChart(t, chartXML("", "", plot), false).Groups[0]
+	if l := g.Series[0].Labels; !l.Deleted || l.Any() {
+		t.Errorf("series A labels = %+v, want deleted", l)
+	}
+	if l := g.Series[1].Labels; l.Deleted {
+		t.Errorf("series B labels = %+v, want the group's", l)
+	}
+}
