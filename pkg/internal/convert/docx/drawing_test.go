@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -1023,5 +1024,50 @@ func TestInline_EffectExtent(t *testing.T) {
 	}
 	if m := shapes[0].Style.Margin; m != [4]css.Dimension{css.Pts(20), css.Pts(0), css.Pts(30), css.Pts(10)} {
 		t.Errorf("margins %v, want 20 top, 30 bottom, 10 left", m)
+	}
+}
+
+// TestVectorShape_LineOfNoHeight checks that a line shape of no height or
+// no width is drawn level or upright, its box's least size the layout's
+// alone.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo77117.docx: Word strokes a line of
+//     cy 0 from (330.55, 242.25) to (552.55, 242.25) and one of cx 0 at x
+//     327.0 from 194.25 to 250.5.
+func TestVectorShape_LineOfNoHeight(t *testing.T) {
+	t.Parallel()
+	g := &shape.Geometry{Preset: "line"}
+	black := css.Color{A: 1}
+	ss := ooxml.ShapeStyle{Line: &black, LineWidth: 1}
+	for _, tc := range []struct {
+		name string
+		w, h float64
+	}{
+		{"level", 100, 0},
+		{"upright", 0, 100},
+	} {
+		n := vectorShape(&css.Style{}, g, ss, tc.w, tc.h)
+		frags := n.Picture.Vector(t.Context(), typeset.Rect{X: 10, Y: 20, Width: max(tc.w, 0.1), Height: max(tc.h, 0.1)})
+		var pts []typeset.Point
+		for _, f := range frags {
+			if p, ok := f.(*typeset.Path); ok && p.Stroke != nil {
+				for _, op := range p.Ops {
+					if op.Kind != typeset.ClosePath {
+						pts = append(pts, op.P[0])
+					}
+				}
+			}
+		}
+		if len(pts) < 2 {
+			t.Fatalf("%s: %d points stroked", tc.name, len(pts))
+		}
+		for _, p := range pts[1:] {
+			if tc.h == 0 && p.Y != pts[0].Y || tc.w == 0 && p.X != pts[0].X {
+				t.Errorf("%s: points %v, want a straight line", tc.name, pts)
+				break
+			}
+		}
 	}
 }

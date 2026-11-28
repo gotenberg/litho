@@ -652,6 +652,14 @@ func vectorShape(st *css.Style, g *shape.Geometry, ss ooxml.ShapeStyle, w, h flo
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
 	pic := &layout.Picture{Width: max(w, 0.1), Height: max(h, 0.1)}
 	pic.Vector = func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		// The box's least size is the layout's: a line of no height or
+		// no width is drawn level or upright.
+		if w < 0.1 {
+			r.Width = max(w, 0)
+		}
+		if h < 0.1 {
+			r.Height = max(h, 0)
+		}
 		return ss.Paint(g, r)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic}
