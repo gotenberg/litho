@@ -357,3 +357,35 @@ func TestRender_TurnedSeriesAxisTitle(t *testing.T) {
 		t.Errorf("bars end at %.2f with the title, %.2f without: the title takes no room", withTitle, without)
 	}
 }
+
+// TestRender_TurnedSeriesAxisTitleFrame fills the box of the series axis
+// title of a turned view with the title's frame, as Excel fills it, the
+// title's text inside the box.
+func TestRender_TurnedSeriesAxisTitleFrame(t *testing.T) {
+	c := turned3D()
+	nan := math.NaN()
+	c.Axes = append(c.Axes, &Axis{
+		Kind: SeriesAxis, Labels: LabelNextTo, Min: nan, Max: nan, MajorUnit: nan, MinorUnit: nan, Style: TextStyle{Size: 10},
+		Title: &Title{Text: "Depth", Style: TextStyle{Size: 10}, Frame: Frame{Fill: &Paint{Color: green}}},
+	})
+	c.Groups[0].ZAxis = 2
+	c.Groups[0].Series[0].Name = "Row"
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	boxes := paths(frags, green)
+	if len(boxes) != 1 {
+		t.Fatalf("%d boxes filled with the title's frame, want 1", len(boxes))
+	}
+	b := bounds(boxes[0])
+	found := false
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if tx, ok := fr.(*typeset.Text); ok && len(tx.Glyphs) > 0 && tx.Glyphs[0].Text == "D" {
+			found = true
+			if tx.Origin.X < b.X || tx.Origin.X > b.X+b.Width {
+				t.Errorf("title at x %.2f, outside its box %v", tx.Origin.X, b)
+			}
+		}
+	})
+	if !found {
+		t.Error("no title drawn")
+	}
+}

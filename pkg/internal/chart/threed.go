@@ -1066,10 +1066,16 @@ func (rd *renderer) rowTitle(p *projection, a *Axis) *block {
 // rowLabels draws the names of the rows of g along the floor's side edge,
 // as the series axis labels them: the edge across from the side wall. The
 // turned view marks the rows' bounds and parts the names from the edge as
-// Office parts the labels of an axis beside the plot area.
+// Office parts the labels of an axis beside the plot area, and sets the
+// axis's title beyond them in its box, filled and outlined as the title's
+// frame states.
 //
 // # Corpus evidence
 //
+//   - openxmlsdk/xlsx: O14ISOStrict/Graphics/Axis_Title-O12-XL-ChartProperties.xlsx:
+//     Excel fills the 15.2 by 52.2 pt box of the turned series axis
+//     title "Texture Fill" with its picture fill, as it fills the box of
+//     the value axis title "Gradient Fill".
 //   - openxmlsdk/pptx: v2FxTestFiles/presentation/Chart_3D_Column_.pptx:
 //     PowerPoint draws tick marks at the rows' bounds and sets each name
 //     16.9 pt right of the edge, centred on its row, as it sets the value
@@ -1108,9 +1114,10 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 		rd.out = append(rd.out, b.draw(pt.X+float64(dir*(gap+float64(w/2))), pt.Y, al)...)
 	}
 	if b := rd.rowTitle(p, a); b != nil {
-		w, _ := b.rotated()
+		w, h := b.rotated()
 		mid := p.at(edge, f.Y+f.Height, float64(p.depth/2))
 		x := edge + float64(dir*(reach+officeRowTitleGap+float64(w/2)))
+		rd.frame(typeset.Rect{X: x - float64(w/2), Y: mid.Y - float64(h/2), Width: w, Height: h}, a.Title.Frame)
 		rd.out = append(rd.out, b.draw(x, mid.Y, alignCenter)...)
 	}
 }
