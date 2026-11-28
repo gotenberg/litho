@@ -400,7 +400,9 @@ func (mc *marginState) commitFloats(y float64) {
 // of b that adjoin its top margin (CSS 2.1, 8.3.1): they collapse with it,
 // so they take part in the hypothetical position clearance is computed
 // from (9.5.2). The walk stops at a top border or padding, at a box that
-// establishes a block formatting context, and at inline content.
+// establishes a block formatting context, and at inline content; it passes
+// over boxes out of flow and anonymous blocks of collapsible white space,
+// which make no line box (9.4.2) and so separate no margins.
 func leadingMargins(b *box, cbw float64) strut {
 	var s strut
 	for depth := range maxTreeDepth {
@@ -410,7 +412,7 @@ func leadingMargins(b *box, cbw float64) strut {
 		}
 		var first *box
 		for _, k := range b.kids {
-			if k.float == css.FloatNone && !k.inline {
+			if k.float == css.FloatNone && !k.inline && !k.abs && !blankAnon(k) {
 				first = k
 				break
 			}

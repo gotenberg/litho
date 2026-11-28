@@ -23,6 +23,21 @@ func TestClearance_AbsorbsChildMargins(t *testing.T) {
 	}
 }
 
+func TestClearance_MarginsPastWhiteSpace(t *testing.T) {
+	// CSS 2.1, 9.5.2 and 8.3.1: white space before the cleared box's first
+	// child makes no line box, so the child's margin still collapses with
+	// the cleared box's and places it below the float: no clearance.
+	clear := sty(clearing(css.ClearLeft))
+	rb := boxes(t, doc(el(sty(padding(1, 0, 0, 0)),
+		el(sty(float(css.FloatLeft), width(50), height(100))),
+		el(clear, txt(clear, " "), el(sty(height(10), margin(140, 0, 0, 0)))),
+	)), page(100, 300))
+	cleared := kid(t, rb, 0, 0, 1)
+	if got := rect(cleared.kids[len(cleared.kids)-1]); got[1] != 141 {
+		t.Errorf("child top %v, want 141: its margin below the parent's padding", got[1])
+	}
+}
+
 func TestFloats_PlacementRules(t *testing.T) {
 	tests := []struct {
 		name string
