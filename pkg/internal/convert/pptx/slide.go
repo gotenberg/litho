@@ -54,6 +54,7 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 	if err := r.shapeList(&s.Shapes, sc, sl.tree, 0); err != nil {
 		return nil, err
 	}
+	s.Shapes = append(s.Shapes, r.inkStrokes(part)...)
 	s.Title = sc.title
 	s.Name = s.Title
 	if s.Name == "" {
