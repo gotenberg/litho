@@ -129,8 +129,9 @@ func fillRectCrop(fr *ooxml.Element) [4]float64 {
 	return [4]float64{css.Top: -in[css.Top] / fh, css.Right: -in[css.Right] / fw, css.Bottom: -in[css.Bottom] / fh, css.Left: -in[css.Left] / fw}
 }
 
-// gradient reads a gradFill (20.1.8.33): its stops by position, and
-// blended as PowerPoint blends them ([officeRamp]), its
+// gradient reads a gradFill (20.1.8.33): its stops by position, and,
+// for a gradient the file states with two stops, blended as PowerPoint
+// blends them ([officeRamp], [statedTwo]), its
 // linear angle (20.1.8.41 lin ang, 60,000ths of a degree clockwise from
 // pointing right) or its path, drawn radial (20.1.8.46 path). A gradient
 // of one stop is that colour at both ends; nil for none.
@@ -157,8 +158,11 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	if len(g.Stops) == 1 {
 		g.Stops = []slides.Stop{{Position: 0, Color: g.Stops[0].Color}, {Position: 1, Color: g.Stops[0].Color}}
 	}
+	eased := statedTwo(len(g.Stops))
 	g.Stops = sharedStops(g.Stops)
-	g.Blend = officeRamp(g.Stops)
+	if eased {
+		g.Blend = officeRamp(g.Stops)
+	}
 	if lin := k.Child(ooxml.NSA, "lin"); lin != nil {
 		a, _ := intAttr(lin, "ang")
 		g.Angle = float64(a) / 60000
@@ -227,6 +231,20 @@ func sharedStops(stops []slides.Stop) []slides.Stop {
 		out[0].Position = 0
 	}
 	return out
+}
+
+// statedTwo reports whether a gradient of n stops, as the file states
+// them, takes PowerPoint's eased blend ([officeRamp]): two stops. Stops
+// that share a position and leave two ([sharedStops]) blend straight.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: red and blue both at 0, green at 100% print blue, then
+//     a straight blend to green (009088 halfway, the mean of 0070C0 and
+//     00B050), where blue at 0 and green at 100% alone take the eased
+//     curve.
+func statedTwo(n int) bool {
+	return n == 2
 }
 
 // officeRamp returns stops that paint a gradient as PowerPoint blends

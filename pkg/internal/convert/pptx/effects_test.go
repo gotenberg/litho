@@ -371,6 +371,11 @@ func TestEffects_RunPaint(t *testing.T) {
 				t.Errorf("paint %+v, want red to blue at 45 degrees", p)
 			}
 		}, ""},
+		{"gradient of three stops", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="50000"><a:srgbClr val="00FF00"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || len(p.Gradient) != 3 || p.Gradient[1].Pos != 0.5 || p.Gradient[1].Color.G != 1 {
+				t.Errorf("paint %+v, want red, green at the middle, blue", p)
+			}
+		}, ""},
 		{"path gradient", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="C00000"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
 			if p == nil || len(p.Gradient) < 3 || p.Angle != 90 {
 				t.Errorf("paint %+v, want a gradient top to bottom", p)

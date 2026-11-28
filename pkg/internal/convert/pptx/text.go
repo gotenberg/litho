@@ -853,7 +853,11 @@ func (r *reader) runPaint(c chain, sc scope) *css.OfficeTextPaint {
 				p.Angle = 90
 				r.warn(warn.ContentUnsupported, warn.Approximated, "a path gradient filling text is drawn linear, top to bottom")
 			}
-			for _, st := range g.Blend {
+			stops := g.Blend
+			if stops == nil {
+				stops = g.Stops
+			}
+			for _, st := range stops {
 				p.Gradient = append(p.Gradient, css.OfficeStop{Pos: st.Position, Color: st.Color})
 			}
 			set = true
