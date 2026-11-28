@@ -964,6 +964,8 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					// An empty first line takes the ::first-line's strut.
 					v := s.newVbox(first1.root, nil)
 					l.h, l.baseline = v.above+v.below, v.above
+				case e.opts.BrowserRules && p.brk != nil && !p.sizeless:
+					l.h, l.baseline = s.breakLine(p.brk)
 				}
 				if emptyChanged(p, s.root) {
 					l.changed = s.root
@@ -1753,6 +1755,34 @@ func (e *engine) alignShift(va css.VerticalAlign, parent *vbox, above, below, lh
 //     far as one of the parent's size.
 func blinkScriptShift(size, part float64) float64 {
 	return float64((float64(math.Floor(size/css.Pt/part*64)/64) + 1) * css.Pt)
+}
+
+// breakLine returns the height and baseline of a line that holds the line
+// break brk alone: the root's strut and every inline box the break sits
+// in, aligned as on any line (CSS 2.1, 10.8). A line ended by a forced
+// break is no phantom line box (CSS Inline 3, 2.3), so the boxes around
+// the break are on it; the break's own line height counts for nothing,
+// as Blink lays it out. A box aligned top or bottom is left out.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 makes the line
+//     of a <br> inside a span of line-height: 100px 100px tall, with a
+//     line-height: 200px on the <br> itself or the span raised by 30px,
+//     and places a float that follows the break 100px down.
+//   - wpt: css/CSS2/abspos/static-inside-float-inside-inline places a
+//     float and its absolute box below such a line.
+func (s *inlineState) breakLine(brk *box) (h, baseline float64) {
+	s.vboxes = map[*box]*vbox{}
+	top, bottom := -s.rootV.above, s.rootV.below
+	for b := brk.parent; b != nil && b != s.root; b = b.parent {
+		v := s.vboxOf(b)
+		if v.aligned || v.inAligned {
+			continue
+		}
+		top, bottom = min(top, v.shift-v.above), max(bottom, v.shift+v.below)
+	}
+	return bottom - top, -top
 }
 
 // vboxOf returns the vertical alignment record of inline box b, creating

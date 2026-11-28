@@ -160,3 +160,30 @@ func TestTextStyle_InitialFamilyIsTheStandardFont(t *testing.T) {
 		t.Errorf("serif in ja = %q, want Noto Serif CJK JP first", got)
 	}
 }
+
+// A line that holds a forced break alone takes the line heights of the
+// inline boxes the break sits in (CSS 2.1, 10.8; CSS Inline 3, 2.3): a
+// <br> in a span of line-height 50px makes a line 50px tall, whatever
+// the break's own line height, as Chromium lays it out.
+func TestLineHeight_BreakAloneTakesItsInlineBoxes(t *testing.T) {
+	block := sty()
+	span := inlineSty(func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 5} })
+	brSt := inlineSty(func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 20} })
+	pb := page(200, 300)
+	e := newEngine(context.Background(), ahem(t), Options{Page: pb, BrowserRules: true}, pb.Width, pb.Height)
+	rb := e.generate(doc(el(block, el(span, br(brSt)), txt(block, "X"))))
+	e.layoutRoot(rb)
+	if e.err != nil {
+		t.Fatal(e.err)
+	}
+	lines := kid(t, rb, 0, 0).lines
+	if len(lines) != 2 {
+		t.Fatalf("%d lines, want 2", len(lines))
+	}
+	if got := lines[0].h; !near(got, px(50)) {
+		t.Errorf("line of the break %v, want %v", got, px(50))
+	}
+	if got := lines[1].y - lines[0].y; !near(got, px(50)) {
+		t.Errorf("second line %v below the first, want %v", got, px(50))
+	}
+}
