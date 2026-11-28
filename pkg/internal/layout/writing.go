@@ -131,9 +131,12 @@ type orthoFormatter struct{}
 func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float64, _ *marginState) float64 {
 	in := b.kids[0]
 	l := e.orthoInline(b, cb)
-	if len(in.kids) == 1 && in.kids[0].tpart == partWrapper && cb.w > 0 && !e.contentBlockSize(b) {
-		// A table rooting the flow fills the root's given block size
-		// (genOrthoTable): its turned height.
+	if cb.w > 0 && !e.contentBlockSize(b) {
+		// The root's given block size is definite: the turned flow is
+		// that tall, and its content resolves percentages of its height
+		// and fits an orthogonal flow of its own in it (CSS Writing
+		// Modes 4, 7.3.1; CSS Sizing 3, 3.1). A table rooting the flow
+		// fills it (genOrthoTable).
 		in.st.Height = css.Pts(cb.w)
 	}
 	hc := e.layoutOrtho(b, in, cb, cursor, l)

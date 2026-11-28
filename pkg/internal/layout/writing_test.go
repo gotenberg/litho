@@ -255,3 +255,28 @@ func TestWritingMode_OrthogonalRootFitsItsContainingBlockHeight(t *testing.T) {
 		______
 		______`)
 }
+
+// TestWritingMode_HorizontalRootFitsItsVerticalContainersWidth fits the
+// lines of a horizontal block inside a vertical-lr block of definite width
+// in that width: the vertical flow's block size is definite, and so is the
+// containing block's height in it, the horizontal root's available inline
+// space (CSS Writing Modes 4, 7.3.1), not the initial containing block's.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 breaks the lines
+//     of a horizontal block with 10% margins in a vertical-lr block 500px
+//     wide and 200px tall at 460px, and at 100px in one 200px wide and
+//     500px tall.
+func TestWritingMode_HorizontalRootFitsItsVerticalContainersWidth(t *testing.T) {
+	t.Parallel()
+	h := func(s *css.Style) { s.WritingMode = css.HorizontalTB }
+	v := func(s *css.Style) { s.WritingMode = css.VerticalLR }
+	st := sty(font(1), h, fg(red))
+	root := doc(el(sty(v, width(6), height(3), bg(lime)), el(st, txt(st, "X X X X X X"))))
+	assertPixels(t, runWith(t, root, Options{Page: page(10, 4), BrowserRules: true}), 1, `
+		RGRGRG____
+		RGRGRG____
+		GGGGGG____
+		__________`)
+}
