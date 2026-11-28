@@ -1135,8 +1135,10 @@ func (d *document) anchorTable(tbl *layout.Node, f *ooxml.Element, outdent float
 	}
 	d.placeWord(p, tbl)
 	// A table taller than its page runs on across the pages it reaches,
-	// where a drawing stays on its anchor's page.
+	// where a drawing stays on its anchor's page; one offset from the
+	// text breaks where it passes the bottom of its page's area.
 	st.PageClamp = false
+	st.WordAnchor.BreakPastArea = p.relV == "paragraph"
 	switch {
 	case p.alignH == "center" && st.Width.Kind != css.Points:
 		st.WordAnchor.AlignX = 0.5

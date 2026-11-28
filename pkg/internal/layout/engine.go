@@ -56,8 +56,12 @@ type engine struct {
 	// noPaginate counts the monolithic layouts in progress: inside one,
 	// nothing moves to a next page.
 	noPaginate int
-	images     map[string]*Picture
-	metrics    map[spaceKey]text.Metrics
+	// floatCut ends the first page of the rows of the breaking float of
+	// css.Office.WordAnchor being laid out ([engine.layoutWordFloat])
+	// above that page's area bottom; its wrapper is nil otherwise.
+	floatCut floatCut
+	images   map[string]*Picture
+	metrics  map[spaceKey]text.Metrics
 	// fallbacks holds the font fallback rule of each style, under
 	// LibreOffice's rule, nil before the first.
 	fallbacks map[*css.Style]text.Fallback

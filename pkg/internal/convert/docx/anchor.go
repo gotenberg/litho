@@ -483,7 +483,7 @@ func (a pendingAnchor) resolveWord(s *section) {
 	p, st := a.p, a.st
 	left := s.margin[css.Left] + s.gutter
 	top := math.Abs(s.margin[css.Top])
-	ax, ay := st.WordAnchor.AlignX, st.WordAnchor.AlignY
+	ax, ay, brk := st.WordAnchor.AlignX, st.WordAnchor.AlignY, st.WordAnchor.BreakPastArea
 	switch {
 	case p.simple:
 		st.WordAnchor = css.WordAnchor{Set: true, X: p.simpleX - left, Y: p.simpleY - top, FromPage: true, NoOverlap: p.noOverlap}
@@ -492,7 +492,7 @@ func (a pendingAnchor) resolveWord(s *section) {
 	default:
 		st.WordAnchor = css.WordAnchor{Set: true, X: hPos(s, p) - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
 	}
-	st.WordAnchor.AlignX, st.WordAnchor.AlignY = ax, ay
+	st.WordAnchor.AlignX, st.WordAnchor.AlignY, st.WordAnchor.BreakPastArea = ax, ay, brk
 	if !p.simple && (p.alignH == "inside" || p.alignH == "outside") {
 		// Inside is the left edge of an odd page's area and the right
 		// edge of an even one's, outside the other (17.18.107 ST_XAlign,

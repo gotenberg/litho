@@ -679,3 +679,71 @@ func TestTables_GridBefore(t *testing.T) {
 		t.Errorf("second row: %d cells, want 1", len(rows[1].Children))
 	}
 }
+
+// TestTables_FloatingBreaks locks where a floating table breaks across
+// pages (17.4.58 tblpPr): its first page holds the rows it would hold in
+// the flow, raised by as far as the table stands above its place there;
+// one of several rows offset from the text that starts above the bottom
+// margin and ends below it breaks there, its first row staying past the
+// margin.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints 45 rows of a 60-row table of tblpY 1440
+//     from the page, after a one-line paragraph, on page 1, as many as
+//     the table in the flow, where a 46th fits above the margin; a
+//     4-row table of vertAnchor text whose top lies a point above the
+//     bottom margin keeps its first row there, past the margin, and sets
+//     the others at the top of page 2, the text after the table beside
+//     them.
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/O12_templates/RoomForRentFlyer_TP10220233.dotx:
+//     Word prints a one-row table of vertAnchor text across the bottom
+//     margin whole on its page.
+func TestTables_FloatingBreaks(t *testing.T) {
+	t.Parallel()
+	const styles = `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault>` +
+		`<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>`
+	table := func(tblpPr string, rows int) string {
+		var b strings.Builder
+		b.WriteString(`<w:tbl><w:tblPr>` + tblpPr + `<w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="2400"/></w:tblGrid>`)
+		for r := range rows {
+			b.WriteString(`<w:tr><w:tc><w:p><w:r><w:t>Row ` + strconv.Itoa(r) + `</w:t></w:r></w:p></w:tc></w:tr>`)
+		}
+		b.WriteString(`</w:tbl>`)
+		return b.String()
+	}
+	places := func(body string) map[string][2]float64 {
+		return textPlaces(convertBytes(t, docx(t, body, map[string]string{"word/styles.xml": styles}), office.Options{}))
+	}
+	onFirstPage := func(body string) int {
+		at := places(body)
+		n := 0
+		for r := range 200 {
+			if p, ok := at["Row "+strconv.Itoa(r)]; ok && p[0] == 0 {
+				n++
+			}
+		}
+		return n
+	}
+	const first = `<w:p><w:r><w:t>First</w:t></w:r></w:p>`
+	inFlow := onFirstPage(first + table(``, 80) + `<w:p/>`)
+	floating := onFirstPage(first + table(`<w:tblpPr w:vertAnchor="page" w:horzAnchor="margin" w:tblpY="1440"/>`, 80) + `<w:p/>`)
+	if inFlow == 0 || floating != inFlow {
+		t.Errorf("floating table from the top margin: %d rows on page 1, want %d as in the flow", floating, inFlow)
+	}
+	for _, tc := range []struct {
+		name        string
+		tblpY, rows int
+		want        int
+		after       float64
+	}{
+		{"above the margin", 10000, 4, 4, 0},
+		{"across the margin", 12940, 4, 1, 1},
+		{"one row across the margin", 12940, 1, 1, 0},
+	} {
+		body := table(`<w:tblpPr w:vertAnchor="text" w:horzAnchor="margin" w:tblpY="`+strconv.Itoa(tc.tblpY)+`"/>`, tc.rows) + `<w:p><w:r><w:t>After</w:t></w:r></w:p>`
+		if got, after := onFirstPage(body), places(body)["After"][0]; got != tc.want || after != tc.after {
+			t.Errorf("%s: %d rows on page 1, the text after on page %v; want %d and page %v", tc.name, got, after+1, tc.want, tc.after+1)
+		}
+	}
+}

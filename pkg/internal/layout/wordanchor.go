@@ -180,8 +180,11 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 	if breaks {
 		// A float that may break, a floating table, taller than its page
 		// runs on across the pages it reaches, laid out where it stands.
+		prev := e.floatCut
+		e.floatCut = e.firstPageCut(f, page, top)
 		f.x, f.y = x, y
 		e.layoutOwnContext(f, cb)
+		e.floatCut = prev
 	}
 	switch {
 	case breaks:
@@ -205,9 +208,82 @@ func (e *engine) layoutWordFloat(f *box, cb cblock, bc *bfc, top float64) int {
 
 // wordBreaks reports whether the float f of css.Office.WordAnchor,
 // anchored on page, breaks across the pages it reaches: one that may
-// break, a floating table, taller than its page box.
+// break, a floating table, taller than its page box, or, of
+// css.WordAnchor.BreakPastArea, one of more than one row that starts
+// inside the page's area and ends below it.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a 4-row floating table of vertAnchor text
+//     whose top lies 1 point above the bottom margin with its first row
+//     there, past the margin, and the other three at the top of the next
+//     page; the same table 70 points higher, ending above the margin,
+//     stays whole where it stands.
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/O12_templates/RoomForRentFlyer_TP10220233.dotx:
+//     Word prints a one-row table of vertAnchor text from 674.5 to 782.5
+//     points down its page, past the bottom margin at 756, whole there.
 func (e *engine) wordBreaks(f *box, page int) bool {
-	return !f.st.PageClamp && f.kind != kindReplaced && e.paginating() && f.borderH() > e.box(page).Height
+	if f.st.PageClamp || f.kind == kindReplaced || !e.paginating() {
+		return false
+	}
+	if f.borderH() > e.box(page).Height {
+		return true
+	}
+	if !f.st.WordAnchor.BreakPastArea || e.cols != nil || f.tdata == nil || len(f.tdata.rows) < 2 {
+		// A table of one row has no row to move on: it stays whole.
+		return false
+	}
+	bottom := e.pageTop(page) + e.areaH(page)
+	return f.y < bottom-eps && f.y+f.borderH() > bottom+eps
+}
+
+// floatCut is the first page of a breaking float of css.Office.WordAnchor
+// ([engine.firstPageCut]): the rows of the table that wrapper holds end
+// that page at bottom.
+type floatCut struct {
+	wrapper *box
+	page    int
+	bottom  float64
+}
+
+// firstPageCut returns where the rows of the breaking float f, anchored on
+// page, whose paragraph's first line starts at top, end its first page:
+// at the bottom of the page's area, raised by as far as f stands above
+// top, as Word lays a floating table's rows out at its place in the flow
+// and moves them by its offset.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a 60-row floating table of tblpY 1440 from
+//     the page, after a one-line paragraph 13.4 points tall, with 45 rows
+//     on page 1, the last ending at 699.5, 20.5 points above the bottom
+//     margin, where the 46th, 13.9 points tall, would end 6.5 points
+//     above it; the table in the flow takes the same 45 rows. Its
+//     bottomFromText, 0 or 1440, changes nothing.
+//   - libreoffice/docx ooxmlimport/tdf109053.docx: Word ends page 1 of a
+//     floating table of tblpY -345 from the top of the text two lines
+//     above the bottom margin, where the lines it holds there would reach
+//     past the margin raised by 17.25 points.
+func (e *engine) firstPageCut(f *box, page int, top float64) floatCut {
+	return floatCut{wrapper: f, page: page, bottom: e.pageTop(page) + e.areaH(page) + min(0, f.y-top)}
+}
+
+// rowsBottom returns where the rows of td end page: the top of the next
+// page, or the cut of the breaking float td is the table of
+// ([engine.firstPageCut]).
+func (e *engine) rowsBottom(td *tableData, page int) float64 {
+	b := e.pageTop(page + 1)
+	if c := e.floatCut; c.wrapper != nil && c.page == page && td.wrapper == c.wrapper {
+		b = min(b, c.bottom)
+	}
+	return b
+}
+
+// keepsFirstRow reports whether the first rows of td stay on the page
+// where td starts whatever their height: those of a breaking float
+// ([engine.firstPageCut]).
+func (e *engine) keepsFirstRow(td *tableData) bool {
+	return e.floatCut.wrapper != nil && td.wrapper == e.floatCut.wrapper
 }
 
 // wordFloatResume returns the top of the last page the float f of

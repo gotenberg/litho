@@ -1514,7 +1514,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 		}
 		pieceTop, cutTop, first := rowTop, false, true
 		for e.err == nil {
-			pb := e.pageTop(page + 1)
+			pb := e.rowsBottom(td, page)
 			if rowTop+bottom()+footNeed(u) <= pb+eps {
 				break
 			}
@@ -1573,10 +1573,22 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 		if paginate {
 			page = max(page, e.pageOf(lastTop))
 			need := u.h + footNeed(u)
-			pb := e.pageTop(page + 1)
+			pb := e.rowsBottom(td, page)
 			canBreak := onPage > 0 || k == 0 && (headN > 0 || !e.atPageTop(td.table.y))
 			single := u.hi-u.lo == 1
 			fits := y+need <= pb+eps
+			if k == 0 && headN == 0 && !fits && !u.forced && e.keepsFirstRow(td) {
+				// The first rows of a breaking float stay where it stands,
+				// past the end of the page, and the next ones start the
+				// next page.
+				place(u.lo, u.hi)
+				endPage(y, false, false)
+				if k+1 < len(units) {
+					y = e.pageTop(page) + contStart(units[k+1], false)
+				}
+				onPage = 0
+				continue
+			}
 			// A forced break before the first body row is the table's own
 			// unless a header group precedes it: then it falls between
 			// the header group and the body (CSS 2.1, 13.3.1).
@@ -1622,7 +1634,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 				onPage = 0
 				td.breakSpans(u.lo, p, y, rowH, gap)
 			}
-			if single && y+u.h+footNeed(u) > e.pageTop(page+1)+eps {
+			if single && y+u.h+footNeed(u) > e.rowsBottom(td, page)+eps {
 				split(u, true)
 				continue
 			}

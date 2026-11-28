@@ -418,7 +418,11 @@ type Office struct {
 // past it; one without [Office.PageClamp] that is taller than its page
 // box, a floating table (17.4.58), breaks across the pages it reaches
 // instead, and the box in flow after it starts no higher than the top of
-// the last of those pages.
+// the last of those pages. With BreakPastArea, such a float also breaks
+// when it starts inside its page's area and ends below it. A float that
+// breaks keeps on its first page the rows that fit above the area's
+// bottom, raised by as far as the float stands above where it is in the
+// flow; its first row stays there whatever its height.
 //
 // AlignX and AlignY move the float left and up by those fractions of its
 // own border box's width and height, laid out: 1 sets its right or bottom
@@ -457,6 +461,7 @@ type WordAnchor struct {
 	Rise            float64
 	FromFirstColumn bool
 	Mirror          bool
+	BreakPastArea   bool
 	MirrorX         float64
 }
 
