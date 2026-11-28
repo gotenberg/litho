@@ -99,6 +99,7 @@ func (r *reader) cellValues(ref string, visible bool) []chart.Value {
 		if sh == nil {
 			return nil
 		}
+		area = r.withoutTotals(sh, area)
 		if visible {
 			out = append(out, sheet.ChartVisibleValues(sh, area)...)
 		} else {
@@ -109,6 +110,36 @@ func (r *reader) cellValues(ref string, visible bool) []chart.Value {
 		out = []chart.Value{}
 	}
 	return out
+}
+
+// withoutTotals returns the area of sheet sh a chart draws from area: a
+// column of a table's data rows that ends on the table's totals rows
+// stands for the column's data alone, and loses those rows. Excel reads
+// such a range as the table column it covers, whose totals a chart leaves
+// out; a range that runs past the table keeps every row.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/barchart_totalsrow.xlsx: a table A1:D9 with
+//     one totals row; Excel plots seven values for the range D2:D9 of the
+//     first sheet's chart, rows 2 to 8, and nine for D2:D10 of the second
+//     sheet's, the totals row 9 among them.
+func (r *reader) withoutTotals(sh *sheet.Sheet, area sheet.Range) sheet.Range {
+	if area.FirstColumn != area.LastColumn {
+		return area
+	}
+	for _, t := range r.tableAreas {
+		ta := t.area
+		if t.sh != sh || t.totals <= 0 || area.FirstColumn < ta.FirstColumn || area.FirstColumn > ta.LastColumn {
+			continue
+		}
+		last := ta.LastRow - t.totals
+		if area.LastRow == ta.LastRow && area.FirstRow > ta.FirstRow && area.FirstRow <= last {
+			area.LastRow = last
+		}
+		return area
+	}
+	return area
 }
 
 // rangeFormat returns the number format of the first cell the formula ref
@@ -139,7 +170,7 @@ func (r *reader) rangeValues(ref string) []chart.Value {
 			if sh.Name != names[i] || names[i] == "" {
 				continue
 			}
-			out = append(out, sheet.ChartValues(sh, area)...)
+			out = append(out, sheet.ChartValues(sh, r.withoutTotals(sh, area))...)
 			break
 		}
 	}

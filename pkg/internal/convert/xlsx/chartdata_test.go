@@ -75,3 +75,35 @@ func TestCellValues_ReadsCellsAsExcelDraws(t *testing.T) {
 		}
 	}
 }
+
+// TestCellValues_LeavesATableColumnsTotalsOut locks that a range covering
+// a table column's data rows and ending on its totals row draws the data
+// rows alone, as Excel draws it, and that a range running past the table
+// or starting on its header keeps every row.
+func TestCellValues_LeavesATableColumnsTotalsOut(t *testing.T) {
+	var rows []sheet.Row
+	for i := range 5 {
+		rows = append(rows, sheet.Row{Index: i, Cells: []sheet.Cell{{Column: 0, Value: sheet.Value{Kind: sheet.Number, Number: float64(i)}}}})
+	}
+	sh := &sheet.Sheet{Name: "S", Rows: rows}
+	r := &reader{
+		doc:        &sheet.Document{Sheets: []*sheet.Sheet{sh}},
+		tableAreas: []tableArea{{name: "T", sh: sh, area: sheet.Range{FirstRow: 0, LastRow: 3, LastColumn: 1}, totals: 1}},
+	}
+	for _, tc := range []struct {
+		ref  string
+		want []float64
+	}{
+		{"S!$A$2:$A$4", []float64{1, 2}},
+		{"S!$A$2:$A$5", []float64{1, 2, 3, 4}},
+		{"S!$A$1:$A$4", []float64{0, 1, 2, 3}},
+	} {
+		var got []float64
+		for _, v := range r.cellValues(tc.ref, false) {
+			got = append(got, v.Number)
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %v, want %v", tc.ref, got, tc.want)
+		}
+	}
+}
