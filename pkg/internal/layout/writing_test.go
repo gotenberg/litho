@@ -339,3 +339,30 @@ func TestWritingMode_OrthogonalCellAlignsInItsOwnBlockAxis(t *testing.T) {
 		_
 		R`)
 }
+
+// TestWritingMode_TwoToneBordersLitFromThePage shades the outset border of
+// a box inside a vertical flow by the page side each border lies on: light
+// on the top and the left of the page, dark on the bottom and the right,
+// as on a horizontal page.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws the outset
+//     border of a box and of a table in vertical-lr, vertical-rl and
+//     sideways-lr flows light on the top and left of the page.
+func TestWritingMode_TwoToneBordersLitFromThePage(t *testing.T) {
+	t.Parallel()
+	for name, wm := range map[string]css.WritingMode{"vertical-rl": css.VerticalRL, "vertical-lr": css.VerticalLR, "sideways-lr": css.SidewaysLR} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			flow := func(s *css.Style) { s.WritingMode = wm }
+			root := doc(el(sty(flow, width(16), height(16)), el(sty(width(8), height(8), border(4, css.Outset, blue)))))
+			img := render(t, runWith(t, root, Options{Page: page(16, 16), BrowserRules: true}), 1)
+			light := func(c color.NRGBA) int { return int(c.R) + int(c.G) + int(c.B) }
+			top, right, bottom, left := at(img, 8, 0), at(img, 15, 8), at(img, 8, 15), at(img, 0, 8)
+			if light(top) <= light(bottom) || light(left) <= light(right) || !similar(top, left) || !similar(bottom, right) {
+				t.Errorf("top %v, left %v, bottom %v, right %v: want top and left light, bottom and right dark", top, left, bottom, right)
+			}
+		})
+	}
+}

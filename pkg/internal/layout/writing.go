@@ -639,3 +639,38 @@ func mirrorRun(t *typeset.Text) {
 	}
 	t.Glyphs, t.Mirror = glyphs, true
 }
+
+// litSide reports whether the side s of the box b, a side of the flow b is
+// laid out in, lies on the top or the left of the page: the sides the
+// two-tone border styles shade as lit. CSS Backgrounds 3, 4.2 leaves the
+// colours to the user agent; Chromium shades a side by where it lies on
+// the page whatever the writing mode, so the side of a turned flow is
+// turned onto the page first.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws an outset
+//     border of a box in a vertical-rl flow light on its left and dark on
+//     its right, as in a horizontal one.
+func (e *engine) litSide(b *box, s css.Side) bool {
+	if wm := e.frameOf(b); wm != css.HorizontalTB {
+		s = turnSides(wm)[s]
+	}
+	return s == css.Top || s == css.Left
+}
+
+// sideOrder returns the sides of the box b, sides of the flow b is laid
+// out in, in the order their borders are painted: the page's top, right,
+// bottom and left, whatever the writing mode, so that two sides meeting
+// at a corner blend on its diagonal as they do on a horizontal page.
+func (e *engine) sideOrder(b *box) [4]css.Side {
+	order := [4]css.Side{css.Top, css.Right, css.Bottom, css.Left}
+	wm := e.frameOf(b)
+	if wm == css.HorizontalTB {
+		return order
+	}
+	for s, on := range turnSides(wm) {
+		order[on] = css.Side(s)
+	}
+	return order
+}

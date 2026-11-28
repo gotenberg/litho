@@ -820,7 +820,7 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 		// shared diagonal, as Chromium fills them.
 
 		g := &ditem{}
-		p.side(g, css.Side(ref), st.Border[ref], quirkShades(b, st, css.Side(ref)), r, radii, inner, iradii, bd)
+		p.side(g, css.Side(ref), st.Border[ref], quirkShades(b, st, css.Side(ref)), p.e.litSide(b, css.Side(ref)), r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
 			p.emit(b, false, k.frag, r.Y, r.Y+r.Height, -1)
 		}
@@ -842,16 +842,16 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 		p.emit(b, false, &typeset.Path{Ops: ops, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
 		return
 	}
-	for s := range 4 {
+	for _, s := range p.e.sideOrder(b) {
 		if !visible[s] {
 			continue
 		}
-		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: sideClip(css.Side(s), r, inner), Fill: &typeset.Fill{}}}}
+		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: sideClip(s, r, inner), Fill: &typeset.Fill{}}}}
 		if bs := st.Border[s].Style; bs == css.Dashed || bs == css.Dotted {
 			// A stroke along the side stays inside it: no clip.
 			g = &ditem{group: true}
 		}
-		p.side(g, css.Side(s), st.Border[s], quirkShades(b, st, css.Side(s)), r, radii, inner, iradii, bd)
+		p.side(g, s, st.Border[s], quirkShades(b, st, s), p.e.litSide(b, s), r, radii, inner, iradii, bd)
 		if len(g.kids) == 0 {
 			continue
 		}
@@ -1240,8 +1240,9 @@ func sideClip(s css.Side, r, in typeset.Rect) []typeset.PathOp {
 
 // side draws one border side of style bdr into g, which clips it to the
 // side's trapezoid; current reports a side whose two-tone styles paint as
-// [currentShades] say ([quirkShades]).
-func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typeset.Rect, radii [4][2]float64, inner typeset.Rect, iradii [4][2]float64, bd [4]float64) {
+// [currentShades] say ([quirkShades]), topLeft one that lies on the top or
+// the left of the page, lit as such ([engine.litSide]).
+func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current, topLeft bool, r typeset.Rect, radii [4][2]float64, inner typeset.Rect, iradii [4][2]float64, bd [4]float64) {
 	c, _ := colorOf(bdr.Color)
 	fill := func(ops []typeset.PathOp, col typeset.Color) {
 		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: col, Rule: typeset.EvenOdd}}})
@@ -1257,7 +1258,6 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 	if current && p.blink() {
 		dark, light = currentShades(c.A)
 	}
-	topLeft := s == css.Top || s == css.Left
 	switch bdr.Style {
 	case css.Double:
 		o1, o1r := frac(1.0 / 3)
