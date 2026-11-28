@@ -62,14 +62,17 @@ var roles = map[atom.Atom]string{
 }
 
 // skipped are the elements that draw nothing in a static rendering
-// whatever their style, with their content: void metadata, inert
-// templates, and noscript, which a browser running scripts hides (HTML
-// Standard, 4.12.2). litho runs no script and reports a document that holds
-// one ([scriptWarning]); the noscript content stays out all the same, since
-// the page's own layout expects its scripts to have run. head, title, style, script and datalist are not
-// among them: the user agent sheet hides them with display: none (HTML
-// Standard, 15.3.1), and an author who displays them sees their text, as
-// Chromium draws it. Immutable lookup table.
+// whatever their style, with their content: inert templates, param,
+// which an object's fallback content does not show, and noscript, which a
+// browser running scripts hides (HTML Standard, 4.12.2). litho runs
+// no script and reports a document that holds one ([scriptWarning]); the
+// noscript content stays out all the same, since the page's own layout
+// expects its scripts to have run. head, title, style, script, datalist and
+// the other void elements (meta, link, base, area, source, track) are not
+// among them: the user agent sheet hides the first and the metadata ones
+// with display: none (HTML Standard, 15.3.1), and an author who displays
+// them sees their text, their box and their generated content, as Chromium
+// draws them. Immutable lookup table.
 //
 // # Corpus evidence
 //
@@ -77,9 +80,14 @@ var roles = map[atom.Atom]string{
 //     head, title, style and script under display: block, and of
 //     datalist under display: contents; template and noscript stay
 //     hidden.
+//   - probe, html: it draws the ::before of meta, link, base, area,
+//     source and track under display: block, the border of a displayed
+//     meta, none of a param inside an object, and none of the content of
+//     a template or noscript.
+//   - wpt: css/CSS2/generated-content/content-085 draws the attr() of a
+//     displayed meta.
 var skipped = map[atom.Atom]bool{
-	atom.Template: true, atom.Noscript: true, atom.Meta: true, atom.Link: true, atom.Base: true,
-	atom.Source: true, atom.Track: true, atom.Param: true, atom.Area: true,
+	atom.Template: true, atom.Noscript: true, atom.Param: true,
 }
 
 // unsupported are the elements whose content is not drawn, with a

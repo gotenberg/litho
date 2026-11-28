@@ -165,6 +165,29 @@ func TestPrepare_PrunesWhatDrawsNothing(t *testing.T) {
 	}
 }
 
+// TestPrepare_DisplayedVoidElementsDraw locks that a void element the
+// author displays draws its generated content, as Chromium draws it: the
+// user agent sheet hides meta, link, base and area, nothing hides them
+// whatever their style. A param, in an object's fallback, stays out.
+func TestPrepare_DisplayedVoidElementsDraw(t *testing.T) {
+	t.Parallel()
+	src := `<head><meta http-equiv="M1"><link rel=x href="#" title="L1"><base title="B1">` +
+		`<style>head, meta, link, base, area, source, track, param { display: block }` +
+		` meta::before { content: attr(http-equiv) } link::before, base::before, area::before,` +
+		` source::before, track::before, param::before { content: attr(title) }</style></head>` +
+		`<body><map name=m><area title="A1"></map><div><source title="S1"><track title="T1"></div>` +
+		`<object><param title="P1"></object></body>`
+	got := treeText(prep(t, src, Options{}).root)
+	for _, want := range []string{"M1", "L1", "B1", "A1", "S1", "T1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("text %q lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got, "P1") {
+		t.Errorf("text %q holds the param's %q", got, "P1")
+	}
+}
+
 // TestPrepare_ImageWithoutPictureKeepsItsBox locks that an <img> that
 // draws no picture and has no alt text to show is a replaced box without
 // content, which its style sizes and paints, as Chromium draws it
