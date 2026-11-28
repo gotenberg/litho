@@ -138,6 +138,13 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 		// Modes 4, 7.3.1; CSS Sizing 3, 3.1). A table rooting the flow
 		// fills it (genOrthoTable).
 		in.st.Height = css.Pts(cb.w)
+		if b.tpart == partCell {
+			// A table cell aligns its content in its own block axis (CSS
+			// Writing Modes 4, 7.5; CSS Align 3, 5.1 maps vertical-align
+			// on a cell to align-content): the turned flow's, which the
+			// table's flow does not see.
+			in.st.AlignContent = cellAlignContent(b.st)
+		}
 	}
 	hc := e.layoutOrtho(b, in, cb, cursor, l)
 	w := cb.w
@@ -178,6 +185,20 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 		}
 	}
 	return cursor + l
+}
+
+// cellAlignContent returns the align-content a table cell of style st
+// gives the content it lays out in an orthogonal flow: middle centres it,
+// bottom puts it at the end, every other value at the start, a baseline
+// shared with no row of the turned flow (CSS 2.1, 17.5.3).
+func cellAlignContent(st *css.Style) css.BoxAlign {
+	switch vaKind(st) { //nolint:exhaustive // the other values align at the start
+	case css.Middle:
+		return css.BoxCenter
+	case css.AlignBottom:
+		return css.BoxEnd
+	}
+	return css.BoxNormal
 }
 
 // contentBlockSize reports an orthogonal flow root b whose width, its

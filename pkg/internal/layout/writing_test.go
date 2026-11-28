@@ -308,3 +308,34 @@ func TestWritingMode_GradientPointsAlongThePage(t *testing.T) {
 		})
 	}
 }
+
+// TestWritingMode_OrthogonalCellAlignsInItsOwnBlockAxis aligns the content
+// of a horizontal cell in a vertical-lr table by vertical-align along the
+// cell's own block axis, down the page (CSS Writing Modes 4, 7.5; CSS
+// Align 3, 5.1): top, middle and bottom put a 1px line at the top, the
+// middle and the bottom of a cell 3px tall.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 puts the content
+//     of horizontal cells 100px tall in a vertical-lr table at the top,
+//     35px down and 70px down for 30px of content, by vertical-align top,
+//     middle and bottom.
+func TestWritingMode_OrthogonalCellAlignsInItsOwnBlockAxis(t *testing.T) {
+	t.Parallel()
+	v := func(s *css.Style) { s.WritingMode = css.VerticalLR }
+	cell := func(k css.AlignKind) *Node {
+		return td(mods(font(1), fg(red), func(s *css.Style) { s.WritingMode = css.HorizontalTB }, height(3), valign(k)), "X")
+	}
+	root := doc(table(mods(v, font(1)), tr(nil, cell(css.AlignTop), cell(css.Middle), cell(css.AlignBottom))))
+	assertPixels(t, runWith(t, root, Options{Page: page(1, 9), BrowserRules: true}), 1, `
+		R
+		_
+		_
+		_
+		R
+		_
+		_
+		_
+		R`)
+}
