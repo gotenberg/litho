@@ -399,3 +399,37 @@ func TestCharacterBorder(t *testing.T) {
 		t.Errorf("next line lowered by %.2f, want %.2f", d, 2*(0.2*cm+1)+0.1*cm)
 	}
 }
+
+// TestPageFrameRelations locks the area a frame anchored to the page
+// measures svg:x from (see [pageAnchorWholePage], which holds the
+// measurements): the page box under the relations to the paragraph, the
+// frame and the character, the content area under their -content forms.
+func TestPageFrameRelations(t *testing.T) {
+	for _, tc := range []struct {
+		rel  string
+		want float64
+	}{
+		{"", 85.04}, {"paragraph", 85.04}, {"frame", 85.04}, {"char", 85.04}, {"paragraph-start-margin", 85.04},
+		{"paragraph-content", 141.73}, {"frame-content", 141.73}, {"page-content", 141.73}, {"page", 85.04},
+	} {
+		rel := ""
+		if tc.rel != "" {
+			rel = ` style:horizontal-rel="` + tc.rel + `"`
+		}
+		auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties fo:margin="0cm" fo:padding="0cm" fo:border="none" style:wrap="none" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left"` + rel + `/></style:style>`
+		body := `<draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="page" text:anchor-page-number="1" svg:x="3cm" svg:y="10cm" svg:width="8cm" svg:height="1cm"><draw:text-box><text:p>FRAME</text:p></draw:text-box></draw:frame><text:p>Body</text:p>`
+		d := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+		found := false
+		for _, r := range runs(d.Pages[0]) {
+			if strings.TrimSpace(r.text) == "FRAME" {
+				found = true
+				if !near(r.x, tc.want, 0.2) {
+					t.Errorf("rel %q: FRAME at x %.2f, want %.2f", tc.rel, r.x, tc.want)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("rel %q: no FRAME", tc.rel)
+		}
+	}
+}

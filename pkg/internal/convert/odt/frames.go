@@ -954,7 +954,7 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 			x0 = right
 		}
 	default:
-		if g.hrel == "" && g.anchor == "page" {
+		if g.anchor == "page" && pageAnchorWholePage(g.hrel) {
 			x0, x1 = 0, pw
 		} else {
 			x0, x1 = left, right
@@ -988,6 +988,30 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 		y = y1 - h
 	}
 	return x, y
+}
+
+// pageAnchorWholePage reports a style:horizontal-rel that Writer
+// measures from the page box for a frame anchored to the page (ODF 1.3,
+// Part 3, 20.291): none, and the relations to the paragraph, the frame
+// and the character, which such a frame has none of; their -content
+// forms measure from the content area.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a frame anchored to
+//     the page at svg:x 3 cm on a page of 2 cm margins prints at 3 cm
+//     under no relation and under paragraph, frame, char and
+//     paragraph-start-margin, and at 5 cm under paragraph-content,
+//     frame-content and page-content.
+//   - libreoffice/odt: layout/stable-at-page-anchored-fly-position.odt
+//     prints its page-anchored frame of relation paragraph at svg:x 0.6
+//     cm from the page's edge.
+func pageAnchorWholePage(rel string) bool {
+	switch rel {
+	case "", "paragraph", "frame", "char", "paragraph-start-margin":
+		return true
+	}
+	return false
 }
 
 // heightFrame is a frame positioned from the page at a height that
