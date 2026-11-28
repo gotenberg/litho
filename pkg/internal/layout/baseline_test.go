@@ -57,6 +57,65 @@ func TestBaseline_ClipKeepsTheLine(t *testing.T) {
 	}
 }
 
+// TestBaseline_ScrollChildEndsTheSearch sets an inline-block on the bottom
+// margin edge of a block child that is a scroll container, empty or
+// holding a line, and not on that line (CSS Align 3, 9.1): its baseline
+// is 30px down, under a 30px child with a 10px bottom margin 40px down.
+func TestBaseline_ScrollChildEndsTheSearch(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		margin float64
+		kids   []*Node
+		want   float64
+	}{
+		{"empty", 0, nil, 30},
+		{"a line", 0, []*Node{txt(sty(), "a")}, 30},
+		{"a bottom margin", 10, []*Node{txt(sty(), "a")}, 40},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := sty(width(20), height(30), margin(0, 0, tc.margin, 0), func(s *css.Style) { s.Overflow = css.OverflowHidden })
+			ib := el(sty(display(css.InlineBlock), padding(0, 0, 20, 0)), el(inner, tc.kids...))
+			rb := boxes(t, doc(el(sty(), txt(sty(), "x"), ib)), page(200, 200))
+			a := ofNode(rb, ib)
+			if !a.hasBaseline || !near(a.baseline, px(tc.want)) {
+				t.Errorf("baseline %v down the inline-block, want %v", a.baseline, px(tc.want))
+			}
+		})
+	}
+}
+
+// TestBaseline_ControlPlaceholderKeepsItsLine keeps a text field on the
+// line of its placeholder, a block of overflow: hidden as the user agent
+// sheet makes it: a control's own blocks stand for its inner editor.
+func TestBaseline_ControlPlaceholderKeepsItsLine(t *testing.T) {
+	st := sty(display(css.InlineBlock), width(100), height(30))
+	ps := sty(display(css.Block), func(s *css.Style) { s.Overflow = css.OverflowHidden })
+	ph := el(ps, txt(ps, "a"))
+	n := &Node{Kind: Element, Style: st, Control: &Control{Kind: ControlTextField, Placeholder: true}, Children: []*Node{ph}}
+	rb := boxes(t, doc(el(sty(), txt(sty(), "x"), n)), page(200, 100))
+	a, p := ofNode(rb, n), ofNode(rb, ph)
+	want, _ := lastBaseline(p)
+	if !a.hasBaseline || !near(a.baseline+a.y, want) {
+		t.Errorf("field baseline at %v, want its placeholder's line at %v", a.baseline+a.y, want)
+	}
+}
+
+// TestBaseline_OrthogonalScrollChildGivesNone keeps an inline-block on its
+// line when a vertical scroll container follows it (CSS Align 3, 9.1): an
+// orthogonal flow root gives no baseline in its parent's axis.
+func TestBaseline_OrthogonalScrollChildGivesNone(t *testing.T) {
+	vert := sty(func(s *css.Style) {
+		s.WritingMode = css.VerticalRL
+		s.Overflow = css.OverflowHidden
+	})
+	ib := el(sty(display(css.InlineBlock)), txt(sty(), "a"), el(vert, txt(vert, "v")))
+	rb := boxes(t, doc(el(sty(), txt(sty(), "x"), ib)), page(200, 200))
+	a := ofNode(rb, ib)
+	if !a.hasBaseline || !near(a.baseline, px(8)) {
+		t.Errorf("baseline %v down the inline-block, want %v: its line's", a.baseline, px(8))
+	}
+}
+
 // computedStyle returns the computed style of a div whose style attribute
 // is decls.
 func computedStyle(t *testing.T, decls string) *css.Style {

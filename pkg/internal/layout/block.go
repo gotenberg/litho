@@ -2141,11 +2141,45 @@ func lastBaselineFlow(b *box) (float64, bool) {
 		if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
 			continue
 		}
+		if k.ortho {
+			// An orthogonal flow root gives no baseline in its parent's
+			// axis (CSS Align 3, 9.1).
+			continue
+		}
+		if legacyScrollBaseline(k) && !isControl(b) {
+			// A form control's own blocks (the placeholder of a text
+			// field) stand for its inner editor, whose line the control
+			// sits on.
+			return k.y + k.borderH() + k.m[css.Bottom], true
+		}
 		if y, ok := lastBaseline(k); ok {
 			return y, true
 		}
 	}
 	return 0, false
+}
+
+// legacyScrollBaseline reports a block-level block container k whose last
+// baseline is its block-end margin edge, whatever it holds: a scroll
+// container under baseline-source: auto (CSS Align 3, 9.1, for legacy
+// reasons). An inline-block's baseline found through its block children
+// stops there.
+//
+// # Corpus evidence
+//
+//   - wpt: css/CSS2/linebox/baseline-block-with-overflow-001, where
+//     Chromium sets an inline-block holding a 30px block of
+//     overflow: hidden on the line 30px down whether that block is
+//     empty or holds a line, and 60px down under its 30px bottom margin;
+//     its PDF draws the text beside it on those baselines.
+//   - wpt: css/css-writing-modes/baseline-with-orthogonal-flow-001, where
+//     Chromium's PDF sets "aaa" and inline-blocks ending in a vertical-rl
+//     block, scrolling or not, on one baseline.
+//   - litho/html: forms-controls, where Chromium's reference sets an email
+//     field showing its placeholder on the line of the text around it.
+//   - wpt: css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.
+func legacyScrollBaseline(k *box) bool {
+	return scrollContainer(k.st) && k.st.BaselineSource == css.BaselineAuto && k.flex == nil && k.grid == nil && k.tpart == partNone
 }
 
 // firstBaseline returns the baseline of the first line box in flow inside
