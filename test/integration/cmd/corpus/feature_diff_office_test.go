@@ -90,7 +90,10 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 // source that names an expected text is scored against it, not against
 // the reference's text, and carries one because its reference does not hold
 // the page's text: its reference must stay under the text bar, else the
-// expected text is not needed. The
+// expected text is not needed. A source whose reference litho reads whole,
+// where PDF.js reads it in pieces, carries one to correct the goldens: its
+// reference stays under the bar against the goldens and clears it against
+// the expected text. The
 // libreoffice corpora are left to a corpus run: drawing all of them takes a
 // minute.
 //
@@ -111,6 +114,10 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //     0.85 on rtl_sheet (0.407).
 //   - litho/pptx: of the 116 references, 115 clear both bars; text F1 is under
 //     0.85 on text-rtl (0.384).
+//   - litho/pptx text-warp-wordart: litho reads the glyphs the reference sets
+//     one by one along its arch, circle and button warps as words, where
+//     PDF.js reads one a line ("W o r d A r t"), so text F1 against the
+//     goldens is 0.793.
 func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +125,9 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "para-alignment": true, "tables-rtl": true},
 		"xlsx": {"rtl_sheet": true},
 		"pptx": {"text-rtl": true},
+	}
+	pdfjsParts := map[string]map[string]bool{
+		"pptx": {"text-warp-wordart": true},
 	}
 	for _, format := range []string{"docx", "xlsx", "pptx"} {
 		corpus := "litho/" + format
@@ -159,6 +169,9 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
 				}
 				under := underBars[format][fx.ID] || judged.ExpectedText
+				if pdfjsParts[format][fx.ID] {
+					under = !judged.ExpectedText
+				}
 				clears := s[scoreText] >= diffTextBar && s[scoreLayout] >= diffLayoutBar
 				if clears == under {
 					t.Errorf("%s %s: text %.3f, layout %.3f; listed under the bars: %v, expected text: %v", corpus, fx.ID, s[scoreText], s[scoreLayout], underBars[format][fx.ID], judged.ExpectedText)
