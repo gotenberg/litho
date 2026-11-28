@@ -579,6 +579,18 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if tp.width != nil && tp.width.kind == "pct" && tp.width.v > 0 {
 		tableSt.Width = css.Dimension{Kind: css.Percent, Value: tp.width.v}
 	}
+	cells := make([][]*cellRef, len(placed))
+	for i, r := range placed {
+		cells[i] = r.cells
+	}
+	sized := contentSized(&tp, cells)
+	if sized {
+		tableSt.TableLayout = css.TableAuto
+		tableSt.Width = css.Dimension{Kind: css.Auto}
+		if tp.width != nil && tp.width.kind == "dxa" && tp.width.v > 0 {
+			tableSt.Width = css.Pts(tp.width.v)
+		}
+	}
 	cellMar := map[string]float64{"left": defaultCellMargin, "right": defaultCellMargin, "top": 0, "bottom": 0}
 	maps.Copy(cellMar, tp.cellMar)
 	indent := 0.0
@@ -655,7 +667,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	for _, g := range grid {
 		cs := d.blockOf()
 		cs.Display = css.TableColumn
-		cs.Width = css.Pts(g)
+		if !sized {
+			cs.Width = css.Pts(g)
+		}
 		tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: d.share(&cs)})
 	}
 	rowBand, colBand := 1, 1
@@ -868,6 +882,39 @@ func endsWithTableMark(tc *ooxml.Element) bool {
 		prev, last = last, k
 	}
 	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// contentSized reports whether the table of properties tp, whose rows
+// hold rows, takes its columns' widths from its content, as Word sizes a
+// table none of whose cells states a width (17.4.72 tcW), each one's
+// absent or auto, and whose layout is not fixed (17.4.53 tblLayout): its
+// grid (17.4.48 tblGrid) is left unread, the table as wide as its content, or as its tblW in points,
+// the room past the content shared in proportion to the columns'
+// content.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word prints a table of a grid of two 120-point
+//     columns and no widths with columns 40.3 and 46.3 points wide, its
+//     two cells' text and their margins; with a tblW of 7200 the same
+//     table is 360 points wide, its columns 167.6 and 192.1.
+//   - poi/docx document/Bug66263-table.docx: Word prints a table of no
+//     grid and no widths with each cell's text on one line.
+//   - litho/docx tables-widths-layout: Word prints a table of tcW auto
+//     with its columns as wide as their text, and one of tblW and tcW
+//     nil on its grid.
+func contentSized(tp *tableProps, rows [][]*cellRef) bool {
+	if boolOf(tp.layoutFixed) || tp.width != nil && tp.width.kind == "pct" {
+		return false
+	}
+	for _, r := range rows {
+		for _, c := range r {
+			if w := c.props.width; w != nil && w.kind != "auto" {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // cellsShading returns the shading that fills the cells of the table of

@@ -198,7 +198,7 @@ func TestHeaders_FloatingTableArea(t *testing.T) {
 	t.Parallel()
 	footer := func(anchor string) map[string]string {
 		return map[string]string{"word/footer1.xml": `<w:ftr ` + nsDecl + `><w:tbl><w:tblPr><w:tblpPr w:leftFromText="180" w:rightFromText="180" w:bottomFromText="100" ` + anchor + ` w:horzAnchor="margin" w:tblpY="14000"/></w:tblPr>` +
-			`<w:tblGrid><w:gridCol w:w="2880"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:hRule="exact" w:val="720"/></w:trPr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:ftr>`}
+			`<w:tblGrid><w:gridCol w:w="2880"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:hRule="exact" w:val="720"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="2880" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:ftr>`}
 	}
 	body := `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:sectPr><w:footerReference w:type="default" r:id="rIdfooter1"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440" w:header="720" w:footer="720"/></w:sectPr>`
 	b := build(t, body, footer(`w:vertAnchor="page"`))

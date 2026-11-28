@@ -23,7 +23,7 @@ func TestTables(t *testing.T) {
 	}
 	body := `<w:tbl><w:tblPr><w:tblStyle w:val="Grid"/><w:tblInd w:w="144" w:type="dxa"/><w:tblLook w:firstRow="1" w:noVBand="1"/></w:tblPr>` +
 		`<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="1000"/><w:gridCol w:w="3000"/></w:tblGrid>` +
-		`<w:tr><w:trPr><w:tblHeader/></w:trPr>` + tc("H1", "") + tc("H2", "") + tc("H3", "") + `</w:tr>` +
+		`<w:tr><w:trPr><w:tblHeader/></w:trPr>` + tc("H1", `<w:tcW w:w="2000" w:type="dxa"/>`) + tc("H2", "") + tc("H3", "") + `</w:tr>` +
 		`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="600"/></w:trPr>` + tc("wide", `<w:gridSpan w:val="2"/>`) + tc("tall", `<w:vMerge w:val="restart"/><w:vAlign w:val="center"/>`) + `</w:tr>` +
 		`<w:tr>` + tc("a", "") + tc("b", `<w:shd w:val="clear" w:fill="FF0000"/><w:tcMar><w:left w:w="400" w:type="dxa"/></w:tcMar>`) + tc("", `<w:vMerge/>`) + `</w:tr>` +
 		`</w:tbl>`
@@ -794,5 +794,38 @@ func TestTables_FloatingInACell(t *testing.T) {
 	st = nested(`<w:tblpPr w:leftFromText="187" w:horzAnchor="margin" w:vertAnchor="page" w:tblpY="174"/>`)
 	if l, top := st.Margin[css.Left], st.Margin[css.Top]; !near(l, 9.35) || !near(top, 0) {
 		t.Errorf("from the margins: margins left %v top %v; want 9.35 and 0", l, top)
+	}
+}
+
+// TestTables_SizedByContent locks that a table none of whose cells
+// states a width, absent or auto, takes its columns' widths from its content, its grid
+// unread, as wide as its content or as its tblW in points; a cell width
+// or a fixed layout keeps the grid.
+func TestTables_SizedByContent(t *testing.T) {
+	t.Parallel()
+	table := func(tblPr, tcPr string) string {
+		return `<w:tbl><w:tblPr>` + tblPr + `</w:tblPr><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid><w:tr>` +
+			`<w:tc><w:tcPr>` + tcPr + `</w:tcPr><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>b</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>`
+	}
+	for _, tc := range []struct {
+		name, tblPr, tcPr string
+		layout            css.TableLayout
+		width             css.Dimension
+		columns           css.Dimension
+	}{
+		{"no widths", ``, ``, css.TableAuto, css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}},
+		{"a table width", `<w:tblW w:w="7200" w:type="dxa"/>`, ``, css.TableAuto, css.Pts(360), css.Dimension{Kind: css.Auto}},
+		{"an auto cell width", ``, `<w:tcW w:w="0" w:type="auto"/>`, css.TableAuto, css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}},
+		{"a cell width", ``, `<w:tcW w:w="2400" w:type="dxa"/>`, css.TableFixed, css.Pts(240), css.Pts(120)},
+		{"a nil cell width", ``, `<w:tcW w:w="0" w:type="nil"/>`, css.TableFixed, css.Pts(240), css.Pts(120)},
+		{"a fixed layout", `<w:tblLayout w:type="fixed"/>`, ``, css.TableFixed, css.Pts(240), css.Pts(120)},
+	} {
+		b := build(t, table(tc.tblPr, tc.tcPr), nil)
+		tbl := role(b.root, "Table")[0]
+		st := tbl.Style
+		col := tbl.Children[0].Style
+		if st.TableLayout != tc.layout || st.Width != tc.width || col.Width != tc.columns {
+			t.Errorf("%s: layout %v width %v column %v; want %v, %v and %v", tc.name, st.TableLayout, st.Width, col.Width, tc.layout, tc.width, tc.columns)
+		}
 	}
 }
