@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -58,10 +59,15 @@ func hexColor(v uint32) css.Color {
 // Office 2013's chart style parts are ignored. A 3D chart keeps its view,
 // floor and walls; a 3D surface chart is not drawn.
 //
+// A picture fill (a:blipFill) paints the picture pictures loads for the
+// chart part and the relationship id, tiled at its natural size by the
+// tile's scale or stretched over the area; a nil pictures, or a picture it
+// does not give, fills nothing.
+//
 // It fails with [ErrNoPart] for a missing part and wraps the parse errors
 // of [Package.ParseXML]; a part whose root is not c:chartSpace fails with
 // office.ErrMalformed. ctx's error stops it.
-func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, error) {
+func ParseChart(ctx context.Context, pkg *Package, part string, pictures PictureLoader) (*chart.Chart, error) {
 	root, err := pkg.ParseXML(ctx, part, nil)
 	if err != nil {
 		return nil, err
@@ -79,6 +85,9 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 		}
 	}
 	theme = chartTheme(ctx, pkg, part, theme)
+	if pictures != nil {
+		opts.Pictures = func(id string) *layout.Picture { return pictures(part, id) }
+	}
 	c, err := ChartFromElement(root, theme, opts)
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
@@ -169,7 +178,15 @@ type ChartOptions struct {
 	// (MS-ODRAWXML, 2.8): the formats of what the chart part leaves
 	// automatic.
 	ChartStyle, ColorStyle *Element
+	// Pictures, when set, loads the picture of a picture fill by its
+	// relationship id from the chart part, nil when it cannot.
+	Pictures func(id string) *layout.Picture
 }
+
+// PictureLoader loads the picture the relationship id of the part names,
+// nil when it cannot, as a converter loads its pictures: its cache, its
+// limits and its warnings.
+type PictureLoader func(part, id string) *layout.Picture
 
 // ChartFromElement reads a parsed c:chartSpace element as [ParseChart]
 // does, with theme for the scheme colours (nil for Office's default) and
@@ -181,7 +198,7 @@ func ChartFromElement(root *Element, theme *Theme, opts ChartOptions) (*chart.Ch
 	if theme == nil || len(theme.Colors) == 0 {
 		theme = officeTheme
 	}
-	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{Rules: chart.OfficeRules, PowerPoint: opts.Presentation}, mso2007: opts.MSO2007, impress: opts.Presentation}
+	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{Rules: chart.OfficeRules, PowerPoint: opts.Presentation}, mso2007: opts.MSO2007, impress: opts.Presentation, pictures: opts.Pictures}
 	if v, ok := Int(childVal(root, "style")); ok && v >= 1 && v <= 48 {
 		p.style = v
 	}
@@ -200,6 +217,8 @@ type chartReader struct {
 	mso2007 bool
 	// impress reads a presentation's chart (ChartOptions.Presentation).
 	impress bool
+	// pictures loads a picture fill's picture (ChartOptions.Pictures).
+	pictures func(id string) *layout.Picture
 	// fixedInner marks a plot area the file places without its axis
 	// labels.
 	fixedInner bool
@@ -684,11 +703,45 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 				prst = "pct5"
 			}
 			return &chart.Paint{Color: fg, Shape: &shape.Paint{Kind: shape.PaintPattern, Pattern: prst, Color: fg, Background: bg}}, true
-		case "blipFill", "grpFill":
+		case "blipFill":
+			return p.pictureFill(e), true
+		case "grpFill":
 			return nil, true
 		}
 	}
 	return nil, false
+}
+
+// pictureFill returns the paint of a picture fill bf (ECMA-376 Part 1,
+// 20.1.8.14 blipFill): its picture tiled from the area's top left corner
+// at its natural size by the tile's scale (20.1.8.58 tile), or stretched
+// over the area; nil when the picture does not load.
+//
+// # Corpus evidence
+//
+//   - poi/pptx: slideshow/chart-texture-bg.pptx tiles its 128-pixel
+//     texture over the chart area from the area's top left corner in
+//     PowerPoint, a tile 123 points across: the picture's stated 75
+//     pixels an inch, where a decoded picture is sized at 96.
+//   - libreoffice/pptx: chart2/testChartTitlePropertiesBitmapFill.pptx
+//     fills its title's box with a tiled texture behind the text.
+func (p *chartReader) pictureFill(bf *Element) *chart.Paint {
+	if p.pictures == nil {
+		return nil
+	}
+	b := parseBlipFill(bf)
+	if b.Embed == "" {
+		return nil
+	}
+	pic := p.pictures(b.Embed)
+	if pic == nil || pic.Source == nil {
+		return nil
+	}
+	sp := &shape.Paint{Kind: shape.PaintPicture, Picture: pic.Source}
+	if b.Tile {
+		sp.TileWidth, sp.TileHeight = pic.Width*b.ScaleX, pic.Height*b.ScaleY
+	}
+	return &chart.Paint{Shape: sp}
 }
 
 // stroke reads an a:ln element over the automatic line def (ECMA-376

@@ -71,7 +71,9 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	parse := ooxml.ParseChart
+	parse := func(ctx context.Context, pkg *ooxml.Package, part string) (*chart.Chart, error) {
+		return ooxml.ParseChart(ctx, pkg, part, d.loadPicture)
+	}
 	if ex {
 		parse = ooxml.ParseChartEx
 	}

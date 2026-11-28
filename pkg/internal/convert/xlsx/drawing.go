@@ -50,7 +50,7 @@ const maxGroupDepth = limits.MaxSourceGroupDepth
 // become the document's, and its series read the sheets' cells through
 // [reader.rangeValues] when their part holds no cache.
 func (r *reader) chartOf(part string) *chart.Chart {
-	c, err := ooxml.ParseChart(r.ctx, r.pkg, part)
+	c, err := ooxml.ParseChart(r.ctx, r.pkg, part, r.loadPicture)
 	if err != nil {
 		if r.stop(err) {
 			return nil

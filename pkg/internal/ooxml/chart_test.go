@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -364,7 +365,7 @@ func TestParseChart_ThemeAndOffice2007(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := ParseChart(context.Background(), pkg, "word/charts/chart1.xml")
+	c, err := ParseChart(context.Background(), pkg, "word/charts/chart1.xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +378,7 @@ func TestParseChart_ThemeAndOffice2007(t *testing.T) {
 	if c.Groups[0].VaryColors {
 		t.Error("an Office 2007 pie without varyColors varies its colours")
 	}
-	if _, err := ParseChart(context.Background(), pkg, "word/charts/missing.xml"); !IsMissing(err) {
+	if _, err := ParseChart(context.Background(), pkg, "word/charts/missing.xml", nil); !IsMissing(err) {
 		t.Errorf("missing part: err = %v", err)
 	}
 }
@@ -642,7 +643,7 @@ func TestParseChart_ThemeOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := ParseChart(context.Background(), pkg, "word/charts/chart1.xml")
+	c, err := ParseChart(context.Background(), pkg, "word/charts/chart1.xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -883,5 +884,45 @@ func TestChartFromElement_SeriesDeletesLabels(t *testing.T) {
 	}
 	if l := g.Series[1].Labels; l.Deleted {
 		t.Errorf("series B labels = %+v, want the group's", l)
+	}
+}
+
+// TestChartFromElement_PictureFill locks that a picture fill paints the
+// picture its relationship loads, tiled at its size by the tile's scale
+// or stretched without a tile, and fills nothing when no picture loads.
+func TestChartFromElement_PictureFill(t *testing.T) {
+	src := &typeset.ImageSource{}
+	pictures := func(id string) *layout.Picture {
+		if id != "rId3" {
+			return nil
+		}
+		return &layout.Picture{Width: 96, Height: 48, Source: src}
+	}
+	area := func(blip string) string {
+		return `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+			`<c:chart><c:plotArea/></c:chart><c:spPr><a:blipFill>` + blip + `</a:blipFill></c:spPr></c:chartSpace>`
+	}
+	read := func(xml string, pics func(string) *layout.Picture) *chart.Paint {
+		root, err := Parse(context.Background(), []byte(xml), nil)
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		c, err := ChartFromElement(root, nil, ChartOptions{Pictures: pics})
+		if err != nil {
+			t.Fatalf("ChartFromElement: %v", err)
+		}
+		return c.Area.Fill
+	}
+	tiled := area(`<a:blip r:embed="rId3"/><a:tile sx="50000" sy="200000"/>`)
+	if f := read(tiled, pictures); f == nil || f.Shape == nil || f.Shape.Kind != shape.PaintPicture || f.Shape.Picture != src || f.Shape.TileWidth != 48 || f.Shape.TileHeight != 96 {
+		t.Errorf("tiled picture fill = %+v, want the picture in tiles 48 by 96", f)
+	}
+	if f := read(area(`<a:blip r:embed="rId3"/><a:stretch/>`), pictures); f == nil || f.Shape == nil || f.Shape.TileWidth != 0 {
+		t.Errorf("stretched picture fill = %+v, want the picture untiled", f)
+	}
+	for _, pics := range []func(string) *layout.Picture{nil, func(string) *layout.Picture { return nil }} {
+		if f := read(tiled, pics); f != nil {
+			t.Errorf("picture fill without a picture = %+v, want none", f)
+		}
 	}
 }

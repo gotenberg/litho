@@ -241,7 +241,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 			r.warn(warn.PartMalformed, warn.Omitted, "a chart whose part is missing is left out")
 			return nil, nil
 		}
-		ch, err := ooxml.ParseChart(r.ctx, r.pkg, rel.Target)
+		ch, err := ooxml.ParseChart(r.ctx, r.pkg, rel.Target, r.loadPicture)
 		if err != nil {
 			if limits.Stops(err) {
 				return nil, err
