@@ -20,12 +20,20 @@ import (
 )
 
 // understood lists the namespaces whose mc:Choice the converter reads
-// (ECMA-376 Part 3, 10.2): the Word 2010 shapes, groups and drawing
-// extensions, DrawingML, and the cx1 and cx2 namespaces an Office 2016
-// chart's Choice requires, whose chart the converter draws rather than
-// the Fallback picture, as Word does; any other Choice takes its Fallback.
+// (ECMA-376 Part 3, 10.2): the Word 2010 shapes, groups, drawing canvases
+// and drawing extensions, DrawingML, and the cx1 and cx2 namespaces an
+// Office 2016 chart's Choice requires, whose chart the converter draws
+// rather than the Fallback picture, as Word does; any other Choice takes
+// its Fallback.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo74401.docx: Word draws the triangle
+//     of a canvas's Choice, its text in the triangle's lower half, where
+//     the VML Fallback's text box sets the text at the top of the shape's
+//     box.
 var understood = []string{
-	ooxml.NSW, ooxml.NSWPS, ooxml.NSWPG, ooxml.NSWP14, ooxml.NSW14, ooxml.NSA, ooxml.NSPic, ooxml.NSWP,
+	ooxml.NSW, ooxml.NSWPS, ooxml.NSWPG, nsWPC, ooxml.NSWP14, ooxml.NSW14, ooxml.NSA, ooxml.NSPic, ooxml.NSWP,
 	"http://schemas.microsoft.com/office/drawing/2015/9/8/chartex",
 	"http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",
 }

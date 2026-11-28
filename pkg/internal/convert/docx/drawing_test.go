@@ -550,6 +550,23 @@ func TestCanvas(t *testing.T) {
 	}
 }
 
+// TestCanvas_Choice checks that a drawing canvas offered as the Choice of
+// an mc:AlternateContent requiring its namespace is drawn, not the
+// Fallback.
+func TestCanvas_Choice(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><mc:AlternateContent xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"><mc:Choice Requires="wpc"><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="1" name="c"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas">` +
+		`<wpc:wpc><wpc:bg><a:solidFill><a:srgbClr val="F2F2F2"/></a:solidFill></wpc:bg>` +
+		`<wps:wsp><wps:spPr><a:xfrm><a:off x="127000" y="254000"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="ellipse"/><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp>` +
+		`</wpc:wpc></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></mc:Choice>` +
+		`<mc:Fallback><w:r><w:t>fallback</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p>`
+	root := build(t, body, nil).root
+	pics := find(root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(pics) != 2 || strings.Contains(textOf(root), "fallback") {
+		t.Errorf("%d replaced boxes, text %q; want the canvas and its shape, no Fallback", len(pics), textOf(root))
+	}
+}
+
 // TestDrawings_WordAnchor positions a drawing that wraps the text as Word
 // does: a percentage of the margin box (MS-ODRAWXML, 2.3.2.3, 2.3.2.4),
 // simplePos from the page's corner (20.4.2.13), an alignment in the
