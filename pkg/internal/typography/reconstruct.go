@@ -130,6 +130,10 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		var newLine bool
 		switch {
 		case carriesNoPosition(el.Text) && (el.Vertical || isOrthogonalRotation(el.Angle) || isRotated(el.Angle)):
+		case followsOnPath(prev, el):
+			// A glyph set where the glyph before it ends, along a path
+			// both turn to, continues its line whatever its rotation.
+			runs.restart(i, el)
 		case quarterTurnLine(runs.last, el) && quarterTurnLine(prev, el):
 			// A line turned a quarter round keeps the runs of an upright
 			// one, across the page X axis ([acrossLine]), so a subscript
@@ -1737,7 +1741,12 @@ func beadContains(bead semantics.Bead, el models.TextElement) bool {
 // of the end of the previous one. PDF.js measures the same advance in the
 // text's own direction (src/core/evaluator.js, compareWithLastPosition,
 // which swaps and negates the coordinates for each orthogonal rotation and
-// negates both for a half turn).
+// negates both for a half turn). Two glyphs set one after the other along a
+// path that turns ([followsOnPath]) are measured along the chord between
+// their origins ([pathChord]), as a rotated line is, whatever the direction
+// of the second: the chord runs along the path, where a page axis, read for
+// a glyph that happens to sit upright or a quarter turn round on the path,
+// does not.
 //
 // A width of 0 is a glyph the font gives no advance (a /W or /Widths entry
 // of 0, ISO 32000-1, 9.6.2.1 and 9.7.4.3), so the gap is measured from its
@@ -1770,6 +1779,8 @@ func beadContains(bead semantics.Bead, el models.TextElement) bool {
 func computeLineGap(prev, curr models.TextElement) float64 {
 	var delta float64
 	switch {
+	case followsOnPath(prev, curr):
+		delta = pathChord(prev, curr)
 	case curr.Vertical:
 		delta = prev.Y - curr.Y
 	case isOrthogonalRotation(curr.Angle):
