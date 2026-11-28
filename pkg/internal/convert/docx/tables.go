@@ -512,6 +512,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			grid = append(grid, max(0, v))
 		}
 	}
+	stated := len(grid)
 	rows := tableRows(t, depth)
 	// Place every cell on the grid, extending the grid for rows wider than
 	// it.
@@ -538,6 +539,13 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	ncols := len(grid)
 	if ncols == 0 || len(placed) == 0 {
 		return nil
+	}
+	cells := make([][]*cellRef, len(placed))
+	for i, r := range placed {
+		cells[i] = r.cells
+	}
+	if ncols > stated {
+		gridFromCells(grid, cells)
 	}
 	// Columns without a width share what the table's width leaves.
 	total := 0.0
@@ -578,10 +586,6 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	tableSt.Width = css.Pts(width)
 	if tp.width != nil && tp.width.kind == "pct" && tp.width.v > 0 {
 		tableSt.Width = css.Dimension{Kind: css.Percent, Value: tp.width.v}
-	}
-	cells := make([][]*cellRef, len(placed))
-	for i, r := range placed {
-		cells[i] = r.cells
 	}
 	sized := contentSized(&tp, cells)
 	if sized {
@@ -882,6 +886,63 @@ func endsWithTableMark(tc *ooxml.Element) bool {
 		prev, last = last, k
 	}
 	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// gridFromCells sets the columns of grid, a table's grid that its rows
+// outgrow (17.4.48 tblGrid), from the widths its cells state (17.4.72
+// tcW), as Word rebuilds such a grid: a column takes the width of the
+// first cell spanning it alone, and the columns a spanning cell covers
+// that none sets share what its width leaves of theirs. A column no cell
+// sets keeps its width.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo76586.docx: Word prints a row of
+//     cells of tcW 1602 and 7843 on a grid of one 9444-twip column with
+//     its columns 80.1 and 392.2 points wide.
+//   - libreoffice/docx ooxmlimport/n780645.docx: Word prints a table of
+//     no grid on its cells' widths, a row of five cells under one of two,
+//     the second spanning four.
+func gridFromCells(grid []float64, rows [][]*cellRef) {
+	set := make([]bool, len(grid))
+	stated := func(c *cellRef) float64 {
+		if w := c.props.width; w != nil && w.kind == "dxa" && w.v > 0 && c.col >= 0 && c.col+c.span <= len(grid) {
+			return w.v
+		}
+		return 0
+	}
+	for _, r := range rows {
+		for _, c := range r {
+			if v := stated(c); v > 0 && c.span == 1 && !set[c.col] {
+				grid[c.col], set[c.col] = v, true
+			}
+		}
+	}
+	for _, r := range rows {
+		for _, c := range r {
+			v := stated(c)
+			if v == 0 || c.span == 1 {
+				continue
+			}
+			known, open := 0.0, 0
+			for i := c.col; i < c.col+c.span; i++ {
+				if set[i] {
+					known += grid[i]
+				} else {
+					open++
+				}
+			}
+			if open == 0 || v <= known {
+				continue
+			}
+			share := (v - known) / float64(open)
+			for i := c.col; i < c.col+c.span; i++ {
+				if !set[i] {
+					grid[i], set[i] = share, true
+				}
+			}
+		}
+	}
 }
 
 // contentSized reports whether the table of properties tp, whose rows

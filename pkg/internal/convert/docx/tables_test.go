@@ -829,3 +829,40 @@ func TestTables_SizedByContent(t *testing.T) {
 		}
 	}
 }
+
+// TestTables_GridFromCells locks that a grid its rows outgrow takes its
+// columns from the widths the cells state: a cell spanning one column
+// sets it, a spanning cell shares what its width leaves among the
+// columns no other cell sets.
+func TestTables_GridFromCells(t *testing.T) {
+	t.Parallel()
+	tc := func(w, span int) string {
+		s := `<w:tc><w:tcPr><w:tcW w:w="` + strconv.Itoa(w) + `" w:type="dxa"/>`
+		if span > 1 {
+			s += `<w:gridSpan w:val="` + strconv.Itoa(span) + `"/>`
+		}
+		return s + `</w:tcPr><w:p/></w:tc>`
+	}
+	for _, c := range []struct {
+		name, body string
+		want       []float64
+	}{
+		{"a grid short of the row", `<w:tblGrid><w:gridCol w:w="9444"/></w:tblGrid><w:tr>` + tc(1602, 1) + tc(7843, 1) + `</w:tr>`, []float64{80.1, 392.15}},
+		{"no grid", `<w:tr>` + tc(2000, 1) + tc(6000, 3) + `</w:tr><w:tr>` + tc(2000, 1) + tc(2000, 1) + tc(1000, 1) + tc(1000, 1) + `</w:tr>`, []float64{100, 100, 50, 50}},
+		{"a spanning cell alone", `<w:tr>` + tc(2000, 1) + tc(6000, 3) + `</w:tr>`, []float64{100, 100, 100, 100}},
+	} {
+		b := build(t, `<w:tbl><w:tblPr/>`+c.body+`</w:tbl><w:p/>`, nil)
+		cols := find(role(b.root, "Table")[0], func(n *layout.Node) bool { return n.Style != nil && n.Style.Display == css.TableColumn })
+		var got []float64
+		for _, col := range cols {
+			got = append(got, col.Style.Width.Value)
+		}
+		ok := len(got) == len(c.want)
+		for i := range got {
+			ok = ok && math.Abs(got[i]-c.want[i]) < 1e-9
+		}
+		if !ok {
+			t.Errorf("%s: columns %v, want %v", c.name, got, c.want)
+		}
+	}
+}
