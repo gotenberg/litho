@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -259,7 +260,10 @@ type runState struct {
 	// its font size, 0 for none.
 	scale                 float64
 	latin, asian, complex string
-	lang, country         string
+	// latinFixed marks a Western family of fixed pitch (ODF 1.3, Part 3,
+	// 19.511 style:font-pitch).
+	latinFixed    bool
+	lang, country string
 	// scripts are the size, weight, posture and language of Asian and
 	// complex text, which a style sets apart from the Western text's.
 	scripts [2]scriptText
@@ -322,6 +326,16 @@ func (r *reader) fontFamily(name, family string) string {
 	return name
 }
 
+// fixedPitch reports a family of fixed pitch: the style:font-pitch of the
+// font-face declaration a style:font-name names (ODF 1.3, Part 3, 16.23),
+// else the one given beside fo:font-family.
+func (r *reader) fixedPitch(name, pitch string) bool {
+	if ff, ok := r.styles.Fonts[name]; ok && name != "" {
+		return ff.Pitch == "fixed"
+	}
+	return pitch == "fixed"
+}
+
 // applyText lays the text properties p over rs. A font size in percent,
 // which ODF 1.3, Part 3, 20.190 lets a common style give relative to its
 // parent, leaves the size below as it is, as Impress reads one in any
@@ -353,6 +367,9 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 	} {
 		if v := r.fontFamily(p.Get(f.name), p.Get(f.family)); v != "" {
 			*f.dst = v
+			if f.dst == &rs.latin {
+				rs.latinFixed = r.fixedPitch(p.Get(f.name), p.Get("style:font-pitch"))
+			}
 		}
 	}
 	if l, ok := odf.Length(p.Get("fo:font-size")); ok && l > 0 {
@@ -491,8 +508,18 @@ func textPosition(v string) (slides.Script, float64, float64) {
 // luminance of at most 87 out of 255).
 func (rs runState) final(bg css.Color) slides.RunStyle {
 	st := rs.style
-	st.Families = nil
-	for _, f := range []string{rs.latin, rs.asian, rs.complex} {
+	st.Families = make([]string, 0, 4)
+	sub := ""
+	if rs.latin != "" {
+		// Impress reads no style:font-family-generic for the face it
+		// substitutes. The slides end every list with their fallback
+		// face, so that one is not listed twice.
+		sub = text.LibreOfficeSubstitute(rs.latin, rs.latinFixed, "")
+		if sub == slides.FallbackFamily {
+			sub = ""
+		}
+	}
+	for _, f := range []string{rs.latin, rs.asian, rs.complex, sub} {
 		if f != "" && !slices.Contains(st.Families, f) {
 			st.Families = append(st.Families, f)
 		}

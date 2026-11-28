@@ -706,7 +706,11 @@ func TestFamilies_GenericBeforeAsian(t *testing.T) {
 	}{
 		{textState{family: [3]string{"Missing", "EA Face", "CTL Face"}, generic: "roman"}, "Missing Noto Serif serif EA Face CTL Face"},
 		{textState{family: [3]string{"Missing", "", ""}}, "Missing Noto Sans"},
-		{textState{family: [3]string{"Mono", "", ""}, generic: "modern"}, "Mono monospace"},
+		// Writer draws a missing family declared modern as undeclared, and
+		// one of fixed pitch in the first monospace face.
+		{textState{family: [3]string{"Mono", "", ""}, generic: "modern"}, "Mono Noto Sans monospace"},
+		{textState{family: [3]string{"Mono", "", ""}, generic: "modern", fixed: true}, "Mono DejaVu Sans Mono monospace"},
+		{textState{family: [3]string{"Comic Sans MS", "", ""}}, "Comic Sans MS Z003"},
 		{textState{family: [3]string{"", "EA Face", ""}, generic: "roman"}, "EA Face serif"},
 		{textState{family: [3]string{"Face", "Face", ""}}, "Face Noto Sans"},
 		{textState{}, "serif"},

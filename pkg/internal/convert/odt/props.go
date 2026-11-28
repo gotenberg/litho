@@ -24,10 +24,12 @@ type decoLine struct {
 // then the span styles from the outermost (ODF 1.3, Part 3, 16.2 and
 // 6.1.7, a span's text properties inherit from the paragraph's).
 type textState struct {
-	// family holds the western, asian and complex family names and
-	// generic the western family's style:font-family-generic.
+	// family holds the western, asian and complex family names, generic
+	// the western family's style:font-family-generic and fixed whether
+	// its style:font-pitch is fixed.
 	family  [3]string
 	generic string
+	fixed   bool
 	// lead is the family listed before the others: the family of the
 	// script a part of a run is drawn in ([textState.forScript]), "" for
 	// Western text.
@@ -240,13 +242,6 @@ func (t textState) forScript(sc odf.Script) textState {
 // 12pt, the size of its default paragraph style.
 const defaultFontSize = 12
 
-// genericFamilies maps style:font-family-generic (ODF 1.3, Part 3,
-// 19.512) to the CSS generic family the text stack resolves.
-var genericFamilies = map[string]string{
-	"roman": "serif", "swiss": "sans-serif", "modern": "monospace",
-	"decorative": "fantasy", "script": "cursive",
-}
-
 // escapements maps the keyword of style:text-position (ODF 1.3, Part 3,
 // 20.374) to [textState]'s auto: +1 for super, -1 for sub, 0 for a
 // percentage.
@@ -269,7 +264,7 @@ func (b *builder) foldText(t textState, layer odf.Props, pct percentRule) textSt
 			if ff, ok := b.styles.Fonts[name]; ok {
 				t.family[i] = ff.Family
 				if i == 0 {
-					t.generic = ff.Generic
+					t.generic, t.fixed = ff.Generic, ff.Pitch == "fixed"
 				}
 			} else {
 				t.family[i] = name
@@ -277,7 +272,7 @@ func (b *builder) foldText(t textState, layer odf.Props, pct percentRule) textSt
 		} else if fam, ok := layer.Lookup(fontFamilyKey(suffix)); ok {
 			t.family[i] = odf.Unquote(fam)
 			if i == 0 {
-				t.generic = layer.Get("style:font-family-generic")
+				t.generic, t.fixed = layer.Get("style:font-family-generic"), layer.Get("style:font-pitch") == "fixed"
 			}
 		}
 	}

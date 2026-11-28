@@ -25,13 +25,15 @@ const maxFontSize = 1638
 // font is a resolved cell font.
 type font struct {
 	families []string
-	size     float64
-	bold     bool
-	italic   bool
-	under    Underline
-	strike   bool
-	color    css.Color
-	script   Script
+	// substitute is [Font.Substitute].
+	substitute string
+	size       float64
+	bold       bool
+	italic     bool
+	under      Underline
+	strike     bool
+	color      css.Color
+	script     Script
 	// excel sets a superscript or subscript as Excel does
 	// ([font.scriptShape]).
 	excel bool
@@ -52,11 +54,11 @@ func resolveFont(f, def Font) font {
 		f = def
 	}
 	out := font{
-		families: f.Families, size: f.Size, bold: f.Bold, italic: f.Italic, under: f.Underline,
+		families: f.Families, substitute: f.Substitute, size: f.Size, bold: f.Bold, italic: f.Italic, under: f.Underline,
 		strike: f.Strike, color: f.Color, script: f.Script, theme: f.Theme,
 	}
 	if len(out.families) == 0 {
-		out.families = def.Families
+		out.families, out.substitute = def.Families, def.Substitute
 	}
 	if len(out.families) == 0 {
 		out.families = []string{defaultFamily}
@@ -85,7 +87,7 @@ func overlay(base font, r *Font) font {
 	}
 	out := base
 	if len(r.Families) > 0 {
-		out.families, out.theme = r.Families, r.Theme
+		out.families, out.substitute, out.theme = r.Families, r.Substitute, r.Theme
 	}
 	if r.Size > 0 {
 		out.size = min(r.Size, maxFontSize)
@@ -178,9 +180,10 @@ func ExcelSubstitute(family string) string {
 
 // cssFamilies returns f's family list with fontconfig's aliases resolved,
 // then the substitute of an unknown family: Excel's ([ExcelSubstitute])
-// when excel is set, LibreOffice's otherwise.
+// when excel is set, LibreOffice's otherwise, the face the style names
+// ([Font.Substitute]) before [substituteFamily].
 func (f font) cssFamilies(excel bool) []string {
-	out := make([]string, 0, len(f.families)+1)
+	out := make([]string, 0, len(f.families)+2)
 	for _, fam := range f.families {
 		if g, ok := fontconfigAliases[strings.ToLower(strings.TrimSpace(fam))]; ok {
 			fam = g
@@ -191,6 +194,9 @@ func (f font) cssFamilies(excel bool) []string {
 		if sub := ExcelSubstitute(f.families[0]); sub != "" {
 			return append(out, sub)
 		}
+	}
+	if f.substitute != "" {
+		out = append(out, f.substitute)
 	}
 	return append(out, substituteFamily)
 }
@@ -330,6 +336,10 @@ func (m *measurer) key(f font) string {
 func (f font) key() string {
 	var b strings.Builder
 	b.WriteString(strings.Join(f.families, ","))
+	if f.substitute != "" {
+		b.WriteByte(',')
+		b.WriteString(f.substitute)
+	}
 	b.WriteByte('|')
 	b.WriteString(strings.TrimRight(strings.TrimRight(formatSize(f.size), "0"), "."))
 	if f.bold {
@@ -508,6 +518,7 @@ func (m *measurer) screenLine(f font) float64 {
 // not the ones of the face the book names, whatever face draws it.
 func (m *measurer) served(f font) bool {
 	ts := f.textStyle(m.lang, m.fallback)
+	f.substitute = ""
 	ts.Families = text.BrowserFamilies(f.cssFamilies(false), "")
 	fc := m.fonts.Match(ts)
 	return fc != nil && (fc.Family() != substituteFamily || (len(f.families) > 0 && strings.EqualFold(strings.TrimSpace(f.families[0]), substituteFamily)))

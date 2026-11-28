@@ -48,11 +48,19 @@ const defaultTabDistance = 1.25 * 72 / 2.54
 
 // families returns the font family list of t: for a part of a run in
 // Asian or complex text, the family of its script first; then the
-// western family, the Noto face of its generic family and the generic
-// family, then the asian and complex families, so Latin text in a
-// missing western face takes the face LibreOffice substitutes for it,
-// never the asian face, while the text stack's per-character fallback
-// still finds the asian face for CJK text.
+// western family, the face LibreOffice substitutes for it when no font
+// serves it ([text.LibreOfficeSubstitute], from its pitch and its
+// generic family) and the generic family, then the asian and complex
+// families, so Latin text in a missing western face takes the face
+// LibreOffice substitutes for it, never the asian face, while the text
+// stack's per-character fallback still finds the asian face for CJK text.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/abi11870-2.odt (Linux Libertine G, no
+//     generic) prints in Noto Sans.
+//   - libreoffice/docx: ooxmlexport/fdo73550.docx (Segoe UI, roman)
+//     prints in Noto Serif.
 func (t textState) families() []string {
 	var out []string
 	seen := map[string]bool{}
@@ -66,36 +74,15 @@ func (t textState) families() []string {
 	for i, f := range t.family {
 		add(f)
 		if i == 0 && f != "" {
-			add(notoFallback(t.generic))
-			add(genericFamilies[t.generic])
+			add(text.LibreOfficeSubstitute(f, t.fixed, odf.GenericFamily(t.generic)))
+			add(odf.GenericFamily(t.generic))
 		}
 	}
-	add(genericFamilies[t.generic])
+	add(odf.GenericFamily(t.generic))
 	if len(out) == 0 {
 		out = []string{"serif"}
 	}
 	return out
-}
-
-// notoFallback returns the face the pinned LibreOffice draws a missing
-// family of the style:font-family-generic generic with: Noto Serif for a
-// roman one, none for a monospace one, Noto Sans for any other, a
-// family without a generic included.
-//
-// # Corpus evidence
-//
-//   - libreoffice/odt: layout/abi11870-2.odt (Linux Libertine G, no
-//     generic) prints in Noto Sans.
-//   - libreoffice/docx: ooxmlexport/fdo73550.docx (Segoe UI, roman)
-//     prints in Noto Serif.
-func notoFallback(generic string) string {
-	switch generic {
-	case "roman":
-		return "Noto Serif"
-	case "modern":
-		return ""
-	}
-	return "Noto Sans"
 }
 
 // applyText sets the text properties t gives on st. inline adds what a

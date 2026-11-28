@@ -839,3 +839,31 @@ func TestRead_EmptyMerges(t *testing.T) {
 		t.Errorf("merges %+v, want A1:I1", ms)
 	}
 }
+
+func TestRead_FontSubstitute(t *testing.T) {
+	// Calc reads the declaration's generic family and pitch for the face
+	// it draws a family no font serves with.
+	f := flat{
+		fonts: `<style:font-face style:name="Comic" svg:font-family="'Comic Sans MS'"/>` +
+			`<style:font-face style:name="ComicRoman" svg:font-family="'Comic Sans MS'" style:font-family-generic="roman"/>` +
+			`<style:font-face style:name="AptosFixed" svg:font-family="Aptos" style:font-pitch="fixed"/>`,
+		auto: `<style:style style:name="ce1" style:family="table-cell"><style:text-properties style:font-name="Comic"/></style:style>` +
+			`<style:style style:name="ce2" style:family="table-cell"><style:text-properties style:font-name="ComicRoman"/></style:style>` +
+			`<style:style style:name="ce3" style:family="table-cell"><style:text-properties style:font-name="AptosFixed"/></style:style>`,
+		body: table("S", `<table:table-row>`+
+			`<table:table-cell table:style-name="ce1" office:value-type="string"><text:p>a</text:p></table:table-cell>`+
+			`<table:table-cell table:style-name="ce2" office:value-type="string"><text:p>b</text:p></table:table-cell>`+
+			`<table:table-cell table:style-name="ce3" office:value-type="string"><text:p>c</text:p></table:table-cell>`+
+			`</table:table-row>`),
+	}
+	doc, _ := read(t, f.bytes())
+	for col, want := range []string{"Z003", "Noto Serif", "DejaVu Sans Mono"} {
+		c := cellAt(doc.Sheets[0], 0, col)
+		if c == nil || c.Style == nil {
+			t.Fatalf("cell %d has no style", col)
+		}
+		if got := c.Style.Font.Substitute; got != want {
+			t.Errorf("cell %d substitute = %q, want %q", col, got, want)
+		}
+	}
+}

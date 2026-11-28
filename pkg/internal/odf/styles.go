@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 // Scope says which document's automatic styles a style name resolves in
@@ -279,6 +280,38 @@ func NewStyles(p *Package) *Styles {
 		s.autoLists[ScopeContent] = s.autoLists[ScopeStyles]
 	}
 	return s
+}
+
+// GenericFamily returns the CSS generic family a style:font-family-generic
+// (ODF 1.3, Part 3, 19.512) names: serif for roman, sans-serif for swiss,
+// monospace for modern, fantasy for decorative, cursive for script, ""
+// for system and any other value.
+func GenericFamily(generic string) string {
+	switch generic {
+	case "roman":
+		return "serif"
+	case "swiss":
+		return "sans-serif"
+	case "modern":
+		return "monospace"
+	case "decorative":
+		return "fantasy"
+	case "script":
+		return "cursive"
+	}
+	return ""
+}
+
+// Substitute returns the face LibreOffice draws f's family with when no
+// font serves it ([text.LibreOfficeSubstitute]); generic reports an
+// application that reads the declaration's generic family, as Writer and
+// Calc do and Impress does not.
+func (f FontFace) Substitute(generic bool) string {
+	g := ""
+	if generic {
+		g = GenericFamily(f.Generic)
+	}
+	return text.LibreOfficeSubstitute(f.Family, f.Pitch == "fixed", g)
 }
 
 // addFont records a style:font-face.

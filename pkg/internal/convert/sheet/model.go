@@ -435,6 +435,9 @@ type Font struct {
 	// then the Asian and complex script faces an ODF style names, or the
 	// one face a workbook font names; empty takes the document default's.
 	Families []string
+	// Substitute is the face Calc draws the Western family with when no
+	// font serves it, tried before Noto Sans; "" for none.
+	Substitute string
 	// Size is the font size in points, 0 for the document default's.
 	Size float64
 	// Bold and Italic select the face.

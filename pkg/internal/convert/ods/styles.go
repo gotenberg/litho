@@ -208,13 +208,19 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 		}
 		for i, suffix := range []string{"", "-asian", "-complex"} {
 			if name, ok := l.Lookup("style:font-name" + suffix); ok {
-				if ff, ok := r.styles.Fonts[name]; ok {
-					fam[i] = ff.Family
-				} else {
-					fam[i] = name
+				ff, ok := r.styles.Fonts[name]
+				if !ok {
+					ff = odf.FontFace{Family: name}
+				}
+				fam[i] = ff.Family
+				if i == 0 {
+					f.Substitute = ff.Substitute(true)
 				}
 			} else if v, ok := l.Lookup(familyKey(suffix)); ok {
 				fam[i] = odf.Unquote(v)
+				if i == 0 {
+					f.Substitute = odf.FontFace{Family: fam[i], Generic: l.Get("style:font-family-generic"), Pitch: l.Get("style:font-pitch")}.Substitute(true)
+				}
 			}
 		}
 		if v, ok := l.Lookup("fo:font-weight"); ok {

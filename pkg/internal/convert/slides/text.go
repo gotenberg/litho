@@ -36,7 +36,7 @@ const defaultFontSize = 18
 // ST_TextFontSize), the text stack at 1000.
 const maxFontSize = 1000
 
-// fallbackFamily is the face a run falls back to when none of its
+// FallbackFamily is the face a run falls back to when none of its
 // families is installed and no metric alias serves them, the face Impress
 // draws such a family with in the pinned image.
 //
@@ -45,7 +45,7 @@ const maxFontSize = 1000
 //   - libreoffice/pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans.
 //   - probe, odp: frames in NoSuchFont, Segoe UI and Tahoma print in Noto
 //     Sans.
-const fallbackFamily = "Noto Sans"
+const FallbackFamily = "Noto Sans"
 
 // defaultTab is the distance between the default tab stops of a
 // PresentationML text, in points: one inch, what PowerPoint's masters state
@@ -840,7 +840,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	root := css.Initial()
 	root.Display = css.Block
 	root.Width = css.Pts(w)
-	root.FontFamilies = []string{fallbackFamily}
+	root.FontFamilies = []string{FallbackFamily}
 	root.FontSize = defaultFontSize
 	if body.RightToLeft {
 		root.Direction = css.RTL
@@ -1301,7 +1301,7 @@ func families(fams []string) []string {
 		}
 		out = append(out, f)
 	}
-	return append(out, fallbackFamily)
+	return append(out, FallbackFamily)
 }
 
 // textStyle returns the text stack's style of rs at the font scale k.

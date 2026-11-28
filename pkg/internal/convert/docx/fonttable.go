@@ -17,7 +17,7 @@ import (
 //   - libreoffice/docx: ooxmlexport/fdo73550.docx (Segoe UI, roman in the font
 //     table) and ooxmlexport/FDO77715.docx (Georgia) print in Noto Serif;
 //     ooxmlexport/LinkedTextBoxes.docx (Candara, swiss) in Noto Sans, as
-//     the slides reader's fallbackFamily.
+//     the slides reader's FallbackFamily.
 const (
 	fallbackSerif = "Noto Serif"
 	fallbackSans  = "Noto Sans"
